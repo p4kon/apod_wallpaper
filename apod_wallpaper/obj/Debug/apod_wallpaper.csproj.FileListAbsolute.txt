@@ -1,0 +1,10 @@
+C:\Users\p4kon\source\repos\apod_wallpaper\apod_wallpaper\bin\Debug\apod_wallpaper.exe.config
+C:\Users\p4kon\source\repos\apod_wallpaper\apod_wallpaper\bin\Debug\apod_wallpaper.exe
+C:\Users\p4kon\source\repos\apod_wallpaper\apod_wallpaper\bin\Debug\apod_wallpaper.pdb
+C:\Users\p4kon\source\repos\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.Properties.Resources.resources
+C:\Users\p4kon\source\repos\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.csproj.GenerateResource.cache
+C:\Users\p4kon\source\repos\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.exe
+C:\Users\p4kon\source\repos\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.pdb
+C:\Users\p4kon\source\repos\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.csprojAssemblyReference.cache
+C:\Users\p4kon\source\repos\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.resources_apod.resources
+C:\Users\p4kon\source\repos\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.configurationForm.resources
