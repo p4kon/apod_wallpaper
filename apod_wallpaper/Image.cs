@@ -13,7 +13,7 @@ namespace apod_wallpaper
     {
         private static Bitmap bitmap;
         private string image_url;
-        public string image_path = @"images/";
+        public string image_path = @"images\";
         public readonly static string png_format = ".png";
         public readonly static string jpg_format = ".jpg";
         public ImageFormat format;
@@ -55,6 +55,5 @@ namespace apod_wallpaper
             }
             response.Close();
         }
-
     }
 }

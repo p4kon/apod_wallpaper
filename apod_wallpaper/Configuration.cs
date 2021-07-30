@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -7,11 +8,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Threading;
 
 namespace apod_wallpaper
 {
     public partial class configurationForm : Form
     {
+        private bool _progress = false;
         public configurationForm()
         {
             InitializeComponent();
@@ -54,13 +57,19 @@ namespace apod_wallpaper
             {
                 TodayUrl.SetDate(pictureDayDateTimePicker.Value);
 
-                LinkTextBox.Text = Parser.img_url;
                 var image = new Image(Parser.img_url, TodayUrl.GetName());
                 image.DownloadImage();
                 image.SaveImage(image.name, image.format);
-                
-                PreviewPictureBox.SizeMode = PictureBoxSizeMode.StretchImage;
-                PreviewPictureBox.Image = image.GetImage();
+                LinkTextBox.Invoke((MethodInvoker)delegate 
+                {
+                    LinkTextBox.Text = Parser.img_url;
+                });
+
+                PreviewPictureBox.Invoke((MethodInvoker)delegate 
+                {
+                    PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+                    PreviewPictureBox.Image = image.GetImage();
+                });
             }
             else
             {
@@ -70,24 +79,48 @@ namespace apod_wallpaper
 
         private void PictureDayDateTimePicker_ValueChanged(Object sender, EventArgs e)
         {
+            PictureShowPreview();
+        }
+
+        private void PictureShowPreview()
+        {
             Parser.ImgUrl = null;
             Parser.IsExistUrl = false;
 
             TodayUrl.SetDate(pictureDayDateTimePicker.Value);
-            try
+
+            var image = new Image(Parser.img_url, TodayUrl.GetName());
+
+            if (File.Exists(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name))
             {
-                var parser = new Parser(TodayUrl.GetUrl());
-                parser.GetUrl();
-                PreviewPictureBox.SizeMode = PictureBoxSizeMode.StretchImage;
-                PreviewPictureBox.ImageLocation = Parser.img_url;
+
+                PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+                PreviewPictureBox.ImageLocation = AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name;
+
             }
-            catch (System.ArgumentNullException ane)
+            else
             {
-                Console.WriteLine(ane.Message);
-                if (pictureDayDateTimePicker.Value > DateTime.UtcNow)
+                //_progress = true;
+                Thread thread = new Thread(setImageProgress);
+                thread.Start();
+                try
                 {
-                    LinkTextBox.Text = "You cannot choose a date from the future";
-                    pictureDayDateTimePicker.Value = DateTime.UtcNow;
+                    var parser = new Parser(TodayUrl.GetUrl());
+                    parser.GetUrl();
+                    PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+                    // Console.WriteLine(_progress);
+                    //_progress = false;
+                    //Console.WriteLine(_progress);
+                    PreviewPictureBox.ImageLocation = Parser.img_url;
+                }
+                catch (System.ArgumentNullException ane)
+                {
+                    Console.WriteLine(ane.Message);
+                    if (pictureDayDateTimePicker.Value > DateTime.UtcNow)
+                    {
+                        LinkTextBox.Text = "You cannot choose a date from the future";
+                        pictureDayDateTimePicker.Value = DateTime.UtcNow;
+                    }
                 }
             }
         }
@@ -99,7 +132,8 @@ namespace apod_wallpaper
 
         private void downloadButton_Click(object sender, EventArgs e)
         {
-            DownloadWallpaper();
+            Thread thread = new Thread(DownloadWallpaper);
+            thread.Start();
         }
 
         private void setButton_Click(object sender, EventArgs e)
@@ -108,6 +142,26 @@ namespace apod_wallpaper
             var image = new Image(Parser.img_url, TodayUrl.GetName());
 
             Wallpaper.SilentSet(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name, style);
+        }
+
+        private void setImageProgress()
+        {
+            
+            PreviewPictureBox.SizeMode = PictureBoxSizeMode.CenterImage;
+            PreviewPictureBox.ImageLocation = "C:/Users/p4kon/Desktop/p4kon/GitHub/apod_wallpaper/apod_wallpaper/Resources/download_image_progress.gif";
+            
+        }
+
+        private void PreviewPictureBox_LoadCompleted(object sender, AsyncCompletedEventArgs e)
+        {
+            _progress = false;
+            Console.WriteLine("load completed");
+        }
+
+        private void PreviewPictureBox_LoadProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            _progress = true;
+            Console.WriteLine("load progress");
         }
     }
 }

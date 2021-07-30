@@ -103,6 +103,8 @@
             this.PreviewPictureBox.Size = new System.Drawing.Size(274, 139);
             this.PreviewPictureBox.TabIndex = 0;
             this.PreviewPictureBox.TabStop = false;
+            this.PreviewPictureBox.LoadCompleted += new System.ComponentModel.AsyncCompletedEventHandler(this.PreviewPictureBox_LoadCompleted);
+            this.PreviewPictureBox.LoadProgressChanged += new System.ComponentModel.ProgressChangedEventHandler(this.PreviewPictureBox_LoadProgressChanged);
             // 
             // setButton
             // 
