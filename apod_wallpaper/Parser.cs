@@ -51,6 +51,12 @@ namespace apod_wallpaper
             return url;
         }
 
+        private static string DeleteTagFromEnd(string url)
+        {
+            url = url.Remove(url.Length - 2, 2);
+            return url;
+        }
+
         public void GetUrl()
         {
             string data = GetHtmlPageText(url);
@@ -61,7 +67,7 @@ namespace apod_wallpaper
                 MatchCollection matches = regex.Matches(data);
                 foreach (Match match in matches)
                 {
-                    if (DeleteTag(match.Value).StartsWith("image/"))
+                    if (DeleteTag(match.Value).StartsWith("image/") && DeleteTagFromEnd(match.Value).EndsWith("jpg"))
                     {
                         img_url = DeleteTag(match.Value);
                         img_url = TodayUrl.GetSiteString() + img_url.SubstringRange(0, img_url.IndexOf('"') - 1);

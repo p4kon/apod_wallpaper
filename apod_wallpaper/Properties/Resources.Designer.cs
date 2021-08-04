@@ -59,15 +59,5 @@ namespace apod_wallpaper.Properties {
                 resourceCulture = value;
             }
         }
-        
-        /// <summary>
-        ///   Looks up a localized resource of type System.Drawing.Bitmap.
-        /// </summary>
-        internal static System.Drawing.Bitmap download_image_progress {
-            get {
-                object obj = ResourceManager.GetObject("download_image_progress", resourceCulture);
-                return ((System.Drawing.Bitmap)(obj));
-            }
-        }
     }
 }

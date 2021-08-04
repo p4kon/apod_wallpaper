@@ -123,6 +123,8 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="apod_icon.ico" />
+    <None Include="Resources\image_not_found.png" />
+    <None Include="Resources\loading_image_progress.gif" />
     <None Include="Resources\download_image_progress.gif" />
   </ItemGroup>
   <ItemGroup>

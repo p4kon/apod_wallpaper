@@ -30,12 +30,11 @@
         {
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(configurationForm));
-            this.showMessageCheckBox = new System.Windows.Forms.CheckBox();
+            this.downloadSetCheckBox = new System.Windows.Forms.CheckBox();
             this.saveButton = new System.Windows.Forms.Button();
             this.cancelButton = new System.Windows.Forms.Button();
             this.trayIcon = new System.Windows.Forms.NotifyIcon(this.components);
             this.downloadButton = new System.Windows.Forms.Button();
-            this.LinkTextBox = new System.Windows.Forms.TextBox();
             this.PreviewPictureBox = new System.Windows.Forms.PictureBox();
             this.setButton = new System.Windows.Forms.Button();
             this.wallpaperStyleComboBox = new System.Windows.Forms.ComboBox();
@@ -44,17 +43,17 @@
             ((System.ComponentModel.ISupportInitialize)(this.PreviewPictureBox)).BeginInit();
             this.SuspendLayout();
             // 
-            // showMessageCheckBox
+            // downloadSetCheckBox
             // 
-            this.showMessageCheckBox.AutoSize = true;
-            this.showMessageCheckBox.Checked = true;
-            this.showMessageCheckBox.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.showMessageCheckBox.Location = new System.Drawing.Point(12, 12);
-            this.showMessageCheckBox.Name = "showMessageCheckBox";
-            this.showMessageCheckBox.Size = new System.Drawing.Size(179, 17);
-            this.showMessageCheckBox.TabIndex = 0;
-            this.showMessageCheckBox.Text = "Show Message On Double-Click";
-            this.showMessageCheckBox.UseVisualStyleBackColor = true;
+            this.downloadSetCheckBox.AutoSize = true;
+            this.downloadSetCheckBox.Checked = true;
+            this.downloadSetCheckBox.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.downloadSetCheckBox.Location = new System.Drawing.Point(12, 12);
+            this.downloadSetCheckBox.Name = "downloadSetCheckBox";
+            this.downloadSetCheckBox.Size = new System.Drawing.Size(258, 17);
+            this.downloadSetCheckBox.TabIndex = 0;
+            this.downloadSetCheckBox.Text = "Download and set today\'s picture on double-click";
+            this.downloadSetCheckBox.UseVisualStyleBackColor = true;
             // 
             // saveButton
             // 
@@ -89,22 +88,16 @@
             this.downloadButton.UseVisualStyleBackColor = true;
             this.downloadButton.Click += new System.EventHandler(this.downloadButton_Click);
             // 
-            // LinkTextBox
-            // 
-            this.LinkTextBox.Location = new System.Drawing.Point(12, 35);
-            this.LinkTextBox.Name = "LinkTextBox";
-            this.LinkTextBox.Size = new System.Drawing.Size(278, 20);
-            this.LinkTextBox.TabIndex = 4;
-            // 
             // PreviewPictureBox
             // 
+            this.PreviewPictureBox.InitialImage = global::apod_wallpaper.resources_apod.loading_image_progress;
             this.PreviewPictureBox.Location = new System.Drawing.Point(16, 61);
             this.PreviewPictureBox.Name = "PreviewPictureBox";
             this.PreviewPictureBox.Size = new System.Drawing.Size(274, 139);
             this.PreviewPictureBox.TabIndex = 0;
             this.PreviewPictureBox.TabStop = false;
-            this.PreviewPictureBox.LoadCompleted += new System.ComponentModel.AsyncCompletedEventHandler(this.PreviewPictureBox_LoadCompleted);
-            this.PreviewPictureBox.LoadProgressChanged += new System.ComponentModel.ProgressChangedEventHandler(this.PreviewPictureBox_LoadProgressChanged);
+            this.PreviewPictureBox.MouseClick += new System.Windows.Forms.MouseEventHandler(this.PreviewPictureBox_MouseClick);
+            this.PreviewPictureBox.MouseHover += new System.EventHandler(this.PreviewPictureBox_MouseHover);
             // 
             // setButton
             // 
@@ -152,11 +145,10 @@
             this.Controls.Add(this.wallpaperStyleComboBox);
             this.Controls.Add(this.setButton);
             this.Controls.Add(this.PreviewPictureBox);
-            this.Controls.Add(this.LinkTextBox);
             this.Controls.Add(this.downloadButton);
             this.Controls.Add(this.cancelButton);
             this.Controls.Add(this.saveButton);
-            this.Controls.Add(this.showMessageCheckBox);
+            this.Controls.Add(this.downloadSetCheckBox);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MaximizeBox = false;
@@ -172,12 +164,11 @@
 
         #endregion
 
-        private System.Windows.Forms.CheckBox showMessageCheckBox;
+        private System.Windows.Forms.CheckBox downloadSetCheckBox;
         private System.Windows.Forms.Button cancelButton;
         private System.Windows.Forms.Button saveButton;
         private System.Windows.Forms.NotifyIcon trayIcon;
         private System.Windows.Forms.Button downloadButton;
-        private System.Windows.Forms.TextBox LinkTextBox;
         private System.Windows.Forms.PictureBox PreviewPictureBox;
         private System.Windows.Forms.Button setButton;
         private System.Windows.Forms.ComboBox wallpaperStyleComboBox;
