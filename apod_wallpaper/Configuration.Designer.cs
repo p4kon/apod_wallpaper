@@ -36,7 +36,6 @@
             this.trayIcon = new System.Windows.Forms.NotifyIcon(this.components);
             this.downloadButton = new System.Windows.Forms.Button();
             this.PreviewPictureBox = new System.Windows.Forms.PictureBox();
-            this.setButton = new System.Windows.Forms.Button();
             this.wallpaperStyleComboBox = new System.Windows.Forms.ComboBox();
             this.pictureDayDateTimePicker = new System.Windows.Forms.DateTimePicker();
             this.setRefreshDateTimePicker = new System.Windows.Forms.DateTimePicker();
@@ -70,7 +69,7 @@
             // 
             this.cancelButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.cancelButton.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.cancelButton.Location = new System.Drawing.Point(215, 270);
+            this.cancelButton.Location = new System.Drawing.Point(97, 270);
             this.cancelButton.Name = "cancelButton";
             this.cancelButton.Size = new System.Drawing.Size(75, 23);
             this.cancelButton.TabIndex = 2;
@@ -82,37 +81,28 @@
             this.downloadButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.downloadButton.Location = new System.Drawing.Point(15, 232);
             this.downloadButton.Name = "downloadButton";
-            this.downloadButton.Size = new System.Drawing.Size(75, 23);
+            this.downloadButton.Size = new System.Drawing.Size(157, 23);
             this.downloadButton.TabIndex = 3;
-            this.downloadButton.Text = "Download";
+            this.downloadButton.Text = "Download and Set";
             this.downloadButton.UseVisualStyleBackColor = true;
             this.downloadButton.Click += new System.EventHandler(this.downloadButton_Click);
             // 
             // PreviewPictureBox
             // 
             this.PreviewPictureBox.InitialImage = global::apod_wallpaper.resources_apod.loading_image_progress;
-            this.PreviewPictureBox.Location = new System.Drawing.Point(16, 61);
+            this.PreviewPictureBox.Location = new System.Drawing.Point(16, 35);
             this.PreviewPictureBox.Name = "PreviewPictureBox";
-            this.PreviewPictureBox.Size = new System.Drawing.Size(274, 139);
+            this.PreviewPictureBox.Size = new System.Drawing.Size(274, 165);
             this.PreviewPictureBox.TabIndex = 0;
             this.PreviewPictureBox.TabStop = false;
+            this.PreviewPictureBox.LoadCompleted += new System.ComponentModel.AsyncCompletedEventHandler(this.PreviewPictureBox_LoadCompleted);
             this.PreviewPictureBox.MouseClick += new System.Windows.Forms.MouseEventHandler(this.PreviewPictureBox_MouseClick);
             this.PreviewPictureBox.MouseHover += new System.EventHandler(this.PreviewPictureBox_MouseHover);
-            // 
-            // setButton
-            // 
-            this.setButton.Location = new System.Drawing.Point(97, 269);
-            this.setButton.Name = "setButton";
-            this.setButton.Size = new System.Drawing.Size(75, 23);
-            this.setButton.TabIndex = 5;
-            this.setButton.Text = "Set";
-            this.setButton.UseVisualStyleBackColor = true;
-            this.setButton.Click += new System.EventHandler(this.setButton_Click);
             // 
             // wallpaperStyleComboBox
             // 
             this.wallpaperStyleComboBox.FormattingEnabled = true;
-            this.wallpaperStyleComboBox.Location = new System.Drawing.Point(97, 232);
+            this.wallpaperStyleComboBox.Location = new System.Drawing.Point(215, 232);
             this.wallpaperStyleComboBox.Name = "wallpaperStyleComboBox";
             this.wallpaperStyleComboBox.Size = new System.Drawing.Size(75, 21);
             this.wallpaperStyleComboBox.TabIndex = 6;
@@ -128,7 +118,7 @@
             // setRefreshDateTimePicker
             // 
             this.setRefreshDateTimePicker.Format = System.Windows.Forms.DateTimePickerFormat.Time;
-            this.setRefreshDateTimePicker.Location = new System.Drawing.Point(215, 235);
+            this.setRefreshDateTimePicker.Location = new System.Drawing.Point(215, 206);
             this.setRefreshDateTimePicker.Name = "setRefreshDateTimePicker";
             this.setRefreshDateTimePicker.ShowUpDown = true;
             this.setRefreshDateTimePicker.Size = new System.Drawing.Size(75, 20);
@@ -143,7 +133,6 @@
             this.Controls.Add(this.setRefreshDateTimePicker);
             this.Controls.Add(this.pictureDayDateTimePicker);
             this.Controls.Add(this.wallpaperStyleComboBox);
-            this.Controls.Add(this.setButton);
             this.Controls.Add(this.PreviewPictureBox);
             this.Controls.Add(this.downloadButton);
             this.Controls.Add(this.cancelButton);
@@ -170,7 +159,6 @@
         private System.Windows.Forms.NotifyIcon trayIcon;
         private System.Windows.Forms.Button downloadButton;
         private System.Windows.Forms.PictureBox PreviewPictureBox;
-        private System.Windows.Forms.Button setButton;
         private System.Windows.Forms.ComboBox wallpaperStyleComboBox;
         private System.Windows.Forms.DateTimePicker pictureDayDateTimePicker;
         private System.Windows.Forms.DateTimePicker setRefreshDateTimePicker;

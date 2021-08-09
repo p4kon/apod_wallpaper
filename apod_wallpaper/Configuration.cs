@@ -15,8 +15,9 @@ namespace apod_wallpaper
 {
     public partial class configurationForm : Form
     {
-        private bool _progress = false; 
+        private bool not_found = false; 
         private string full_path_image;
+        private ToolTip toolTip = new ToolTip();
 
         public configurationForm()
         {
@@ -56,28 +57,48 @@ namespace apod_wallpaper
 
         private void DownloadWallpaper()
         {
-            if (Parser.isExistUrl)
+            var image = new Image(Parser.img_url, TodayUrl.GetName());
+            if (Parser.isExistUrl || File.Exists(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name))
             {
                 TodayUrl.SetDate(pictureDayDateTimePicker.Value);
 
-                var image = new Image(Parser.img_url, TodayUrl.GetName());
-                image.DownloadImage();
-                image.SaveImage(image.name, image.format);
+                if (!File.Exists(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name))
+                {
+                    Application.UseWaitCursor = true;
+                    image.DownloadImage();
+                    image.SaveImage(image.name, image.format);
+                }
+                Application.UseWaitCursor = false;
 
                 PreviewPictureBox.Invoke((MethodInvoker)delegate 
                 {
                     PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-                    PreviewPictureBox.Image = image.GetImage();
+                    PreviewPictureBox.ImageLocation = AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name;
+                });
+
+                wallpaperStyleComboBox.Invoke((MethodInvoker)delegate
+                {
+                    WallpaperStyle style = (WallpaperStyle)wallpaperStyleComboBox.SelectedItem;
+                    Wallpaper.SilentSet(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name, style);
                 });
             }
             else
             {
                 PreviewPictureBox.Image = resources_apod.image_not_found;
+                not_found = true;
+                pictureDayDateTimePicker.Enabled = true;
+                downloadButton.Invoke((MethodInvoker)delegate
+                {
+                    downloadButton.Enabled = false;
+                });
             }
         }
 
         private void PictureDayDateTimePicker_ValueChanged(Object sender, EventArgs e)
         {
+            not_found = false;
+            pictureDayDateTimePicker.Enabled = false;
+            downloadButton.Enabled = false;
             PictureShowPreview();
         }
 
@@ -100,20 +121,18 @@ namespace apod_wallpaper
             {
                 try
                 {
-                    //if (!Parser.isExistUrl)
-                    //{
-                        PreviewPictureBox.Image = resources_apod.loading_image_progress;
-                    //}
-                    //else
-                    //{
-                    //    PreviewPictureBox.Image = resources_apod.image_not_found;
-                    //}
-
+                    PreviewPictureBox.Image = resources_apod.loading_image_progress;
                     var parser = new Parser(TodayUrl.GetUrl());
                     parser.GetUrl();
-                    Console.WriteLine(Parser.isExistUrl);
-                    Console.WriteLine(TodayUrl.GetUrl());
-                    Console.WriteLine(Parser.img_url);
+
+                    if (!Parser.isExistUrl)
+                    {
+                        PreviewPictureBox.Image = resources_apod.image_not_found;
+                        not_found = true;
+                        pictureDayDateTimePicker.Enabled = true;
+                        downloadButton.Enabled = false;
+                    }
+
                     PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
                     PreviewPictureBox.ImageLocation = Parser.img_url;
                 }
@@ -144,41 +163,51 @@ namespace apod_wallpaper
             thread.Start();
         }
 
-        private void setButton_Click(object sender, EventArgs e)
-        {
-            WallpaperStyle style = (WallpaperStyle)wallpaperStyleComboBox.SelectedItem;
-            var image = new Image(Parser.img_url, TodayUrl.GetName());
-
-            Wallpaper.SilentSet(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name, style);
-        }
-
         private void PreviewPictureBox_MouseClick(object sender, MouseEventArgs e)
         {
-            if (Control.ModifierKeys == Keys.Shift)
+            if (!not_found) 
             {
-                ProcessStartInfo processStartInfo = new ProcessStartInfo(TodayUrl.GetUrl());
-                Process.Start(processStartInfo);
-            }
-            else
-            {
-                Form fullScreenFrom = new Form();
-                PictureBox fullScreenPictureBox = new PictureBox();
-                fullScreenPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-                fullScreenPictureBox.Image = PreviewPictureBox.Image;
-                fullScreenPictureBox.Dock = DockStyle.Fill;
-                fullScreenFrom.Controls.Add(fullScreenPictureBox);
-                fullScreenFrom.Icon = resources_apod.apod_icon;
-                fullScreenFrom.WindowState = FormWindowState.Maximized;
-                fullScreenFrom.ShowDialog();
+                if (Control.ModifierKeys == Keys.Shift)
+                {
+                    ProcessStartInfo processStartInfo = new ProcessStartInfo(TodayUrl.GetUrl());
+                    Process.Start(processStartInfo);
+                }
+                else
+                {
+                    Form fullScreenFrom = new Form();
+                    PictureBox fullScreenPictureBox = new PictureBox();
+                    fullScreenPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+                    fullScreenPictureBox.Image = PreviewPictureBox.Image;
+                    fullScreenPictureBox.Dock = DockStyle.Fill;
+                    fullScreenFrom.Controls.Add(fullScreenPictureBox);
+                    fullScreenFrom.Icon = resources_apod.apod_icon;
+                    fullScreenFrom.WindowState = FormWindowState.Maximized;
+                    fullScreenFrom.ShowDialog();
+                }
             }
         }
 
         private void PreviewPictureBox_MouseHover(object sender, EventArgs e)
         {
-            PreviewPictureBox.Cursor = Cursors.Hand;
-            ToolTip toolTip = new ToolTip();
-            toolTip.SetToolTip(this.PreviewPictureBox, 
-                               "Click: open fullsize preview" + Environment.NewLine + "Shift+Click: open nasa post <Astronomy Picture of the Day>");
+            if (!not_found)
+            {
+                toolTip.Active = true;
+                PreviewPictureBox.Cursor = Cursors.Hand;
+                toolTip.SetToolTip(this.PreviewPictureBox,
+                                   "Click: open fullsize preview" + Environment.NewLine + "Shift+Click: open nasa post <Astronomy Picture of the Day>");
+            }
+            else
+            {
+                toolTip.Active = false;
+                PreviewPictureBox.Cursor = Cursors.Default;
+            }
+            
+        }
+
+        private void PreviewPictureBox_LoadCompleted(object sender, AsyncCompletedEventArgs e)
+        {
+            pictureDayDateTimePicker.Enabled = true;
+            downloadButton.Enabled = true;
         }
     }
 }
