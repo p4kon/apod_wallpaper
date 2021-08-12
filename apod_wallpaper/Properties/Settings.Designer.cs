@@ -26,12 +26,12 @@ namespace apod_wallpaper.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("True")]
-        public bool ShowMessage {
+        public bool TrayDoubleClickAction {
             get {
-                return ((bool)(this["ShowMessage"]));
+                return ((bool)(this["TrayDoubleClickAction"]));
             }
             set {
-                this["ShowMessage"] = value;
+                this["TrayDoubleClickAction"] = value;
             }
         }
         

@@ -32,7 +32,7 @@ namespace apod_wallpaper
 
         private void LoadSettings(object sender, EventArgs e)
         {
-            downloadSetCheckBox.Checked = apod_wallpaper.Properties.Settings.Default.ShowMessage;
+            downloadSetCheckBox.Checked = apod_wallpaper.Properties.Settings.Default.TrayDoubleClickAction;
             wallpaperStyleComboBox.SelectedIndex = apod_wallpaper.Properties.Settings.Default.StyleComboBox;
             setRefreshDateTimePicker.Value = apod_wallpaper.Properties.Settings.Default.TimeRefresh;
         }
@@ -41,7 +41,7 @@ namespace apod_wallpaper
         {
             if (this.DialogResult == DialogResult.OK)
             {
-                apod_wallpaper.Properties.Settings.Default.ShowMessage = downloadSetCheckBox.Checked;
+                apod_wallpaper.Properties.Settings.Default.TrayDoubleClickAction = downloadSetCheckBox.Checked;
                 apod_wallpaper.Properties.Settings.Default.StyleComboBox = wallpaperStyleComboBox.SelectedIndex;
                 apod_wallpaper.Properties.Settings.Default.TimeRefresh = setRefreshDateTimePicker.Value;
                 apod_wallpaper.Properties.Settings.Default.Save();
@@ -55,7 +55,7 @@ namespace apod_wallpaper
             Scheduler.EverySecond = setRefreshDateTimePicker.Value.Second;
         }
 
-        private void DownloadWallpaper()
+        public void DownloadWallpaper()
         {
             var image = new Image(Parser.img_url, TodayUrl.GetName());
             if (Parser.isExistUrl || File.Exists(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name))
@@ -70,27 +70,42 @@ namespace apod_wallpaper
                 }
                 Application.UseWaitCursor = false;
 
-                PreviewPictureBox.Invoke((MethodInvoker)delegate 
-                {
-                    PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-                    PreviewPictureBox.ImageLocation = AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name;
-                });
+                //if (this.InvokeRequired)
+                //    this.Invoke(new MethodInvoker(InvokedConnectionStateChange));
+                //else InvokedConnectionStateChange();
 
-                wallpaperStyleComboBox.Invoke((MethodInvoker)delegate
+                if (this.InvokeRequired)
                 {
-                    WallpaperStyle style = (WallpaperStyle)wallpaperStyleComboBox.SelectedItem;
+                    PreviewPictureBox.Invoke((MethodInvoker)delegate
+                    {
+                        PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+                        PreviewPictureBox.ImageLocation = AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name;
+                    });
+
+                    wallpaperStyleComboBox.Invoke((MethodInvoker)delegate
+                    {
+                        WallpaperStyle style = (WallpaperStyle)wallpaperStyleComboBox.SelectedItem;
+                        Wallpaper.SilentSet(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name, style);
+                    });
+                }
+                else
+                {
+                    WallpaperStyle style = (WallpaperStyle)apod_wallpaper.Properties.Settings.Default.StyleComboBox;
                     Wallpaper.SilentSet(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name, style);
-                });
+                }
             }
             else
             {
                 PreviewPictureBox.Image = resources_apod.image_not_found;
                 not_found = true;
                 pictureDayDateTimePicker.Enabled = true;
-                downloadButton.Invoke((MethodInvoker)delegate
+                if (this.InvokeRequired)
                 {
-                    downloadButton.Enabled = false;
-                });
+                    downloadButton.Invoke((MethodInvoker)delegate
+                    {
+                        downloadButton.Enabled = false;
+                    });
+                }
             }
         }
 

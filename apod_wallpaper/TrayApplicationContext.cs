@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Threading;
 
 namespace apod_wallpaper
 {
@@ -18,17 +19,20 @@ namespace apod_wallpaper
             Icon apod_icon = new Icon(resources_apod.apod_icon, 32, 32);
 
             trayIcon.Icon = apod_icon;
-            trayIcon.DoubleClick += new EventHandler(ShowMessage);
+            trayIcon.DoubleClick += new EventHandler(TrayDoubleClickAction);
             trayIcon.ContextMenu = new ContextMenu(new MenuItem[] { configMenuItem, exitMenuItem });
             trayIcon.Visible = true;
+            trayIcon.Text = "Astronomy Picture of the Day";
         }
 
-        void ShowMessage(object sender, EventArgs e)
+        void TrayDoubleClickAction(object sender, EventArgs e)
         {
-            // Only show the message if the settings say we can.
-            if (apod_wallpaper.Properties.Settings.Default.ShowMessage)
-                MessageBox.Show("Hello World");
+            TodayUrl.SetDate(DateTime.UtcNow);
+            configurationForm form = new configurationForm();
+            Thread thread = new Thread(form.DownloadWallpaper);
+            thread.Start();
         }
+
 
         void ShowConfig(object sender, EventArgs e)
         {
@@ -42,6 +46,7 @@ namespace apod_wallpaper
         void Exit(object sender, EventArgs e)
         {
             trayIcon.Visible = false;
+            trayIcon.Dispose();
             Application.Exit();
         }
     }
