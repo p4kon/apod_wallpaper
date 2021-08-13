@@ -15,14 +15,15 @@ namespace apod_wallpaper
 {
     public partial class configurationForm : Form
     {
-        private bool not_found = false; 
+        private bool not_found = false;
+        private bool loading_picture = false;
+        private bool download_only = false;
         private string full_path_image;
         private ToolTip toolTip = new ToolTip();
 
         public configurationForm()
         {
             InitializeComponent();
-
             SetTimeRefresh();
             Scheduler.Check();
             pictureDayDateTimePicker.Value = DateTime.UtcNow;
@@ -57,6 +58,15 @@ namespace apod_wallpaper
 
         public void DownloadWallpaper()
         {
+            if (Control.ModifierKeys == Keys.Shift)
+            {
+                download_only = true;
+            }
+            else
+            {
+                download_only = false;
+            }
+
             var image = new Image(Parser.img_url, TodayUrl.GetName());
             if (Parser.isExistUrl || File.Exists(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name))
             {
@@ -70,10 +80,6 @@ namespace apod_wallpaper
                 }
                 Application.UseWaitCursor = false;
 
-                //if (this.InvokeRequired)
-                //    this.Invoke(new MethodInvoker(InvokedConnectionStateChange));
-                //else InvokedConnectionStateChange();
-
                 if (this.InvokeRequired)
                 {
                     PreviewPictureBox.Invoke((MethodInvoker)delegate
@@ -85,13 +91,19 @@ namespace apod_wallpaper
                     wallpaperStyleComboBox.Invoke((MethodInvoker)delegate
                     {
                         WallpaperStyle style = (WallpaperStyle)wallpaperStyleComboBox.SelectedItem;
-                        Wallpaper.SilentSet(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name, style);
+                        if (!download_only) 
+                        {
+                            Wallpaper.SilentSet(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name, style);
+                        }
                     });
                 }
                 else
                 {
                     WallpaperStyle style = (WallpaperStyle)apod_wallpaper.Properties.Settings.Default.StyleComboBox;
-                    Wallpaper.SilentSet(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name, style);
+                    if (!download_only)
+                    {
+                        Wallpaper.SilentSet(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name, style);
+                    }
                 }
             }
             else
@@ -137,6 +149,7 @@ namespace apod_wallpaper
                 try
                 {
                     PreviewPictureBox.Image = resources_apod.loading_image_progress;
+                    loading_picture = true;
                     var parser = new Parser(TodayUrl.GetUrl());
                     parser.GetUrl();
 
@@ -176,11 +189,12 @@ namespace apod_wallpaper
         {
             Thread thread = new Thread(DownloadWallpaper);
             thread.Start();
+            PreviewPictureBox.Focus();
         }
 
         private void PreviewPictureBox_MouseClick(object sender, MouseEventArgs e)
         {
-            if (!not_found) 
+            if (!not_found && !loading_picture) 
             {
                 if (Control.ModifierKeys == Keys.Shift)
                 {
@@ -197,19 +211,48 @@ namespace apod_wallpaper
                     fullScreenFrom.Controls.Add(fullScreenPictureBox);
                     fullScreenFrom.Icon = resources_apod.apod_icon;
                     fullScreenFrom.WindowState = FormWindowState.Maximized;
+                    fullScreenFrom.KeyPreview = true;
+                    fullScreenFrom.KeyDown += new KeyEventHandler(FullScreenFrom_KeyDown);
                     fullScreenFrom.ShowDialog();
                 }
+            }
+            else if (not_found && Control.ModifierKeys == Keys.Shift)
+            {
+                ProcessStartInfo processStartInfo = new ProcessStartInfo(TodayUrl.GetUrl());
+                Process.Start(processStartInfo);
+            }
+        }
+
+        private void FullScreenFrom_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Escape)
+            {
+                Form.ActiveForm.Close();
             }
         }
 
         private void PreviewPictureBox_MouseHover(object sender, EventArgs e)
         {
-            if (!not_found)
+            if (!not_found && !loading_picture)
             {
                 toolTip.Active = true;
                 PreviewPictureBox.Cursor = Cursors.Hand;
                 toolTip.SetToolTip(this.PreviewPictureBox,
                                    "Click: open fullsize preview" + Environment.NewLine + "Shift+Click: open nasa post <Astronomy Picture of the Day>");
+            }
+            else if (!not_found && loading_picture)
+            {
+                toolTip.Active = true;
+                PreviewPictureBox.Cursor = Cursors.Default;
+                toolTip.SetToolTip(this.PreviewPictureBox,
+                                   "Loading may take some time");
+            }
+            else if (not_found)
+            {
+                toolTip.Active = true;
+                PreviewPictureBox.Cursor = Cursors.Hand;
+                toolTip.SetToolTip(this.PreviewPictureBox,
+                                   "Shift+Click: open nasa post <Astronomy Picture of the Day>");
             }
             else
             {
@@ -223,6 +266,19 @@ namespace apod_wallpaper
         {
             pictureDayDateTimePicker.Enabled = true;
             downloadButton.Enabled = true;
+            loading_picture = false;
+        }
+
+        private void wallpaperStyleComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            configurationForm.ActiveForm.Focus();
+        }
+
+        private void downloadButton_MouseHover(object sender, EventArgs e)
+        {
+            toolTip.Active = true;
+            toolTip.SetToolTip(this.downloadButton,
+                               "Shift+Click for only download picture");
         }
     }
 }
