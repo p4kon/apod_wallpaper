@@ -187,6 +187,7 @@ namespace apod_wallpaper
 
         private void downloadButton_Click(object sender, EventArgs e)
         {
+            MyExtensions.CheckFolder();
             Thread thread = new Thread(DownloadWallpaper);
             thread.Start();
             PreviewPictureBox.Focus();

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -17,5 +18,15 @@ namespace apod_wallpaper
 
             return str.Substring(startIndex, endIndex - startIndex + 1);
         }
-    }
+
+        public static void CheckFolder()
+        {
+            bool folder_exists = System.IO.Directory.Exists(@"images\");
+
+            if (!folder_exists)
+            {
+                Directory.CreateDirectory(@"images\");
+            }
+        }
+    }   
 }

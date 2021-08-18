@@ -9,7 +9,7 @@ namespace apod_wallpaper
 {
     public class TrayApplicationContext : ApplicationContext
     {
-        NotifyIcon trayIcon = new NotifyIcon();
+        static NotifyIcon trayIcon = new NotifyIcon();
         configurationForm configWindow = new configurationForm();
 
         public TrayApplicationContext()
@@ -48,6 +48,10 @@ namespace apod_wallpaper
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();
+        }
+        public static void TrayIconDispose()
+        {
+            trayIcon.Dispose();
         }
     }
 }

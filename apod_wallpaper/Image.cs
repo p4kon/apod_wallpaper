@@ -43,17 +43,17 @@ namespace apod_wallpaper
         {
             WebRequest request = WebRequest.Create(image_url);
             WebResponse response = request.GetResponse();
-            var client = new WebClient();
-            Network.SetCredentails(client);
-
-            using (Stream dataStream = response.GetResponseStream())
+            using (WebClient client = new WebClient())
             {
-                bitmap = new Bitmap(dataStream);
-                dataStream.Flush();
-                dataStream.Close();
-                client.Dispose();
+                Network.SetCredentails(client);
+                using (Stream dataStream = response.GetResponseStream())
+                {
+                    bitmap = new Bitmap(dataStream);
+                    dataStream.Flush();
+                    dataStream.Close();
+                }
+                response.Close();
             }
-            response.Close();
         }
     }
 }
