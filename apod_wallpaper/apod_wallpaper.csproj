@@ -53,10 +53,10 @@
     <ApplicationIcon>apod_icon.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>F3FA59AFF25192B78718E0556CF73135DAFEAFDE</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>2620DE228D50435D17573EF30ACD336746626A0E</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestKeyFile>apod_wallpaper_TemporaryKey.pfx</ManifestKeyFile>
+    <ManifestKeyFile>apod_wallpaper_1_TemporaryKey.pfx</ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
     <GenerateManifests>true</GenerateManifests>
@@ -119,6 +119,7 @@
       <LastGenOutput>resources_apod.Designer.cs</LastGenOutput>
       <SubType>Designer</SubType>
     </EmbeddedResource>
+    <None Include="apod_wallpaper_1_TemporaryKey.pfx" />
     <None Include="apod_wallpaper_TemporaryKey.pfx" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>

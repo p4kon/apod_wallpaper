@@ -22,3 +22,6 @@ C:\Users\p4kon\Desktop\p4kon\GitHub\apod_wallpaper\apod_wallpaper\bin\Debug\apod
 C:\Users\p4kon\Desktop\p4kon\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.exe.manifest
 C:\Users\p4kon\Desktop\p4kon\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.application
 C:\Users\p4kon\Desktop\p4kon\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.csprojAssemblyReference.cache
+C:\Users\p4kon\Desktop\p4kon\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.csproj.AssemblyReference.cache
+C:\Users\p4kon\Desktop\p4kon\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.csproj.SuggestedBindingRedirects.cache
+C:\Users\p4kon\Desktop\p4kon\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.csproj.CoreCompileInputs.cache
