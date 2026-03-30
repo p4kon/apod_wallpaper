@@ -1,9 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System;
 using System.Drawing;
-using System.Windows.Forms;
+using System.Net.Http;
 using System.Threading;
+using System.Windows.Forms;
 
 namespace apod_wallpaper
 {
@@ -27,16 +26,31 @@ namespace apod_wallpaper
 
         void TrayDoubleClickAction(object sender, EventArgs e)
         {
-            TodayUrl.SetDate(DateTime.UtcNow);
-            configurationForm form = new configurationForm();
-            Thread thread = new Thread(form.DownloadWallpaper);
+            if (!apod_wallpaper.Properties.Settings.Default.TrayDoubleClickAction)
+            {
+                ShowConfig(sender, e);
+                return;
+            }
+
+            Thread thread = new Thread(() =>
+            {
+                try
+                {
+                    var service = new ApodWallpaperService();
+                    var style = (WallpaperStyle)apod_wallpaper.Properties.Settings.Default.StyleComboBox;
+                    service.ApplyLatestAvailable(style);
+                }
+                catch (Exception ex)
+                {
+                    ShowTrayError(ex);
+                }
+            });
+            thread.IsBackground = true;
             thread.Start();
         }
 
-
         void ShowConfig(object sender, EventArgs e)
         {
-            // If we are already showing the window meerly focus it.
             if (configWindow.Visible)
                 configWindow.Focus();
             else
@@ -45,13 +59,26 @@ namespace apod_wallpaper
 
         void Exit(object sender, EventArgs e)
         {
+            Scheduler.Stop();
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();
         }
+
         public static void TrayIconDispose()
         {
             trayIcon.Dispose();
+        }
+
+        private static void ShowTrayError(Exception ex)
+        {
+            var message = ex is HttpRequestException
+                ? "Unable to reach NASA APOD right now."
+                : ApodErrorTranslator.ToUserMessage(ex);
+
+            trayIcon.BalloonTipTitle = "APOD Wallpaper";
+            trayIcon.BalloonTipText = message;
+            trayIcon.ShowBalloonTip(4000);
         }
     }
 }

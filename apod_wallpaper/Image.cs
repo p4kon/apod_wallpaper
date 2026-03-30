@@ -1,58 +1,82 @@
-﻿using System;
-using System.Net;
-//using System.Net.Http;
-using System.Web;
-using System.IO;
+using System;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.Globalization;
+using System.IO;
 
 namespace apod_wallpaper
 {
     class Image
     {
-        private static Bitmap bitmap;
-        private string image_url;
-        public string image_path = @"images\";
-        public readonly static string png_format = ".png";
+        private Bitmap bitmap;
+        private readonly string image_url;
         public readonly static string jpg_format = ".jpg";
         public ImageFormat format;
         public string name;
+        public string extension;
 
-        public Image(string image_url, string name)
+        public Image(string image_url, string baseName)
         {
             this.image_url = image_url;
-            this.format = System.Drawing.Imaging.ImageFormat.Jpeg;
-            this.name = name;
+            this.extension = ResolveExtension(image_url);
+            this.format = ResolveFormat(this.extension);
+            this.name = baseName + this.extension;
         }
 
-        public Bitmap GetImage()
+        public string FullPath
         {
-            return bitmap;
+            get
+            {
+                return FileStorage.GetImagePath(name);
+            }
         }
 
         public void SaveImage(string filename, ImageFormat format)
         {
             if (bitmap != null)
-            {   
-                bitmap.Save(image_path + filename, format);
+            {
+                var fullPath = FileStorage.GetImagePath(filename);
+                bitmap.Save(fullPath, format);
             }
+        }
+
+        public void SaveImage()
+        {
+            SaveImage(name, format);
         }
 
         public void DownloadImage()
         {
-            WebRequest request = WebRequest.Create(image_url);
-            WebResponse response = request.GetResponse();
-            using (WebClient client = new WebClient())
+            bitmap = Network.DownloadBitmap(image_url);
+        }
+
+        private static string ResolveExtension(string imageUrl)
+        {
+            Uri uri;
+            if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out uri))
+                return jpg_format;
+
+            var extension = Path.GetExtension(uri.AbsolutePath);
+            return FileStorage.NormalizeImageExtension(extension);
+        }
+
+        private static ImageFormat ResolveFormat(string extension)
+        {
+            switch (extension)
             {
-                Network.SetCredentails(client);
-                using (Stream dataStream = response.GetResponseStream())
-                {
-                    bitmap = new Bitmap(dataStream);
-                    dataStream.Flush();
-                    dataStream.Close();
-                }
-                response.Close();
+                case ".jpg":
+                case ".jpeg":
+                    return ImageFormat.Jpeg;
+                case ".png":
+                    return ImageFormat.Png;
+                case ".bmp":
+                    return ImageFormat.Bmp;
+                case ".gif":
+                    return ImageFormat.Gif;
+                case ".tif":
+                case ".tiff":
+                    return ImageFormat.Tiff;
+                default:
+                    return ImageFormat.Png;
             }
         }
     }
