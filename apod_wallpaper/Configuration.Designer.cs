@@ -1,6 +1,6 @@
 namespace apod_wallpaper
 {
-    partial class configurationForm
+    partial class ConfigurationForm
     {
         private System.ComponentModel.IContainer components = null;
 
@@ -18,7 +18,7 @@ namespace apod_wallpaper
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
-            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(configurationForm));
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ConfigurationForm));
             this.downloadSetCheckBox = new System.Windows.Forms.CheckBox();
             this.startWithWindowsCheckBox = new System.Windows.Forms.CheckBox();
             this.saveButton = new System.Windows.Forms.Button();
@@ -86,7 +86,7 @@ namespace apod_wallpaper
             this.downloadButton.UseVisualStyleBackColor = true;
             this.downloadButton.Click += new System.EventHandler(this.downloadButton_Click);
             this.downloadButton.MouseHover += new System.EventHandler(this.downloadButton_MouseHover);
-            this.PreviewPictureBox.InitialImage = global::apod_wallpaper.resources_apod.loading_image_progress;
+            this.PreviewPictureBox.InitialImage = global::apod_wallpaper.ApodResources.loading_image_progress;
             this.PreviewPictureBox.Location = new System.Drawing.Point(12, 58);
             this.PreviewPictureBox.Name = "PreviewPictureBox";
             this.PreviewPictureBox.Size = new System.Drawing.Size(291, 165);
@@ -199,7 +199,7 @@ namespace apod_wallpaper
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MaximizeBox = false;
-            this.Name = "configurationForm";
+            this.Name = "ConfigurationForm";
             this.Text = "Configuration";
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.SaveSettings);
             this.Shown += new System.EventHandler(this.LoadSettings);

@@ -113,7 +113,7 @@ namespace apod_wallpaper
 
                 foreach (var pair in _entriesByDate)
                 {
-                    var baseName = TodayUrl.GetBaseName(pair.Key);
+                    var baseName = ApodPageUrl.GetBaseName(pair.Key);
                     var discoveredPath = FileStorage.TryFindExistingImagePath(baseName);
                     var exists = !string.IsNullOrWhiteSpace(discoveredPath);
 

@@ -80,6 +80,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ApplicationController.cs" />
+    <Compile Include="ApplicationSettingsSnapshot.cs" />
     <Compile Include="Configuration.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -88,10 +90,10 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="resources_apod.Designer.cs">
+    <Compile Include="ApodResources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
-      <DependentUpon>resources_apod.resx</DependentUpon>
+      <DependentUpon>ApodResources.resx</DependentUpon>
     </Compile>
     <Compile Include="RuntimeSettingsSync.cs" />
     <Compile Include="Settings.cs" />
@@ -111,9 +113,9 @@
       <DependentUpon>Resources.resx</DependentUpon>
       <DesignTime>True</DesignTime>
     </Compile>
-    <EmbeddedResource Include="resources_apod.resx">
+    <EmbeddedResource Include="ApodResources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>resources_apod.Designer.cs</LastGenOutput>
+      <LastGenOutput>ApodResources.Designer.cs</LastGenOutput>
       <SubType>Designer</SubType>
     </EmbeddedResource>
     <None Include="Properties\Settings.settings">

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace apod_wallpaper
 {
@@ -24,12 +25,20 @@ namespace apod_wallpaper
 
         public ApodEntry GetEntry(DateTime date, bool forceRefresh = false)
         {
+            return GetEntryByDate(date, forceRefresh);
+        }
+
+        public ApodEntry GetEntryByDate(DateTime date, bool forceRefresh = false)
+        {
             var cached = !forceRefresh ? _cache.Get(date) : null;
             if (cached != null)
             {
                 var cachedEntry = cached.ToEntry();
                 if (cachedEntry.HasImage)
+                {
+                    cachedEntry.ResolvedFromSource = "cache";
                     return cachedEntry;
+                }
             }
 
             var entry = _client.GetEntry(date);
@@ -38,7 +47,32 @@ namespace apod_wallpaper
             return entry;
         }
 
+        public async Task<ApodEntry> GetEntryByDateAsync(DateTime date, bool forceRefresh = false)
+        {
+            var localImagePath = TryGetLocalImagePath(date);
+            var cached = !forceRefresh ? _cache.Get(date) : null;
+            if (cached != null)
+            {
+                var cachedEntry = cached.ToEntry();
+                if (cachedEntry.HasImage || !string.IsNullOrWhiteSpace(localImagePath))
+                {
+                    cachedEntry.ResolvedFromSource = !string.IsNullOrWhiteSpace(localImagePath) ? "local_file" : "cache";
+                    return cachedEntry;
+                }
+            }
+
+            var entry = await _client.GetEntryAsync(date).ConfigureAwait(false);
+            _cache.Upsert(entry);
+            AppLogger.Info("Resolved APOD " + date.ToString("yyyy-MM-dd") + " from " + (entry.ResolvedFromSource ?? "unknown") + ".");
+            return entry;
+        }
+
         public ApodEntry GetLatestEntry(bool forceRefresh = false)
+        {
+            return GetLatestPublishedEntry(forceRefresh);
+        }
+
+        public ApodEntry GetLatestPublishedEntry(bool forceRefresh = false)
         {
             if (!forceRefresh &&
                 _latestEntry != null &&
@@ -58,6 +92,42 @@ namespace apod_wallpaper
                     var cachedEntry = cached.ToEntry();
                     if (cachedEntry.HasImage || !ShouldRefreshCachedEntry(cached, entryDate))
                     {
+                        cachedEntry.ResolvedFromSource = cachedEntry.HasImage ? "cache" : cachedEntry.ResolvedFromSource;
+                        _latestEntry = cachedEntry;
+                        _latestEntryFetchedAtUtc = DateTime.UtcNow;
+                        return cachedEntry;
+                    }
+                }
+            }
+
+            _cache.Upsert(latestEntry);
+            _latestEntry = latestEntry;
+            _latestEntryFetchedAtUtc = DateTime.UtcNow;
+            AppLogger.Info("Resolved latest APOD " + latestEntry.Date + " from " + (latestEntry.ResolvedFromSource ?? "unknown") + ".");
+            return latestEntry;
+        }
+
+        public async Task<ApodEntry> GetLatestPublishedEntryAsync(bool forceRefresh = false)
+        {
+            if (!forceRefresh &&
+                _latestEntry != null &&
+                DateTime.UtcNow - _latestEntryFetchedAtUtc < LatestEntryCacheDuration)
+            {
+                return _latestEntry;
+            }
+
+            var latestEntry = await _client.GetLatestEntryAsync().ConfigureAwait(false);
+            var entryDate = DateTime.Parse(latestEntry.Date).Date;
+
+            if (!forceRefresh)
+            {
+                var cached = _cache.Get(entryDate);
+                if (cached != null)
+                {
+                    var cachedEntry = cached.ToEntry();
+                    if (cachedEntry.HasImage || !ShouldRefreshCachedEntry(cached, entryDate))
+                    {
+                        cachedEntry.ResolvedFromSource = cachedEntry.HasImage ? "cache" : cachedEntry.ResolvedFromSource;
                         _latestEntry = cachedEntry;
                         _latestEntryFetchedAtUtc = DateTime.UtcNow;
                         return cachedEntry;
@@ -74,9 +144,14 @@ namespace apod_wallpaper
 
         public IReadOnlyList<ApodDayAvailability> GetMonthAvailability(DateTime month, bool refreshMissingDates)
         {
+            return GetMonthStatus(month, refreshMissingDates);
+        }
+
+        public IReadOnlyList<ApodDayAvailability> GetMonthStatus(DateTime month, bool refreshMissingDates)
+        {
             var monthStart = new DateTime(month.Year, month.Month, 1);
             var monthEnd = monthStart.AddMonths(1).AddDays(-1);
-            var latestAvailableDate = GetLatestAvailableDate();
+            var latestAvailableDate = GetLatestPublishedDate();
             var fetchEnd = monthEnd <= latestAvailableDate ? monthEnd : latestAvailableDate;
 
             if (refreshMissingDates && fetchEnd >= monthStart)
@@ -104,9 +179,10 @@ namespace apod_wallpaper
 
                 if (shouldRefreshRange)
                 {
+                    AppLogger.Web("scope=month_refresh month=" + monthStart.ToString("yyyy-MM") + " mode=sync refreshMissingDates=true");
                     var entries = _client.GetEntries(monthStart, fetchEnd);
                     _cache.UpsertRange(entries);
-                    AppLogger.Info("Refreshed APOD month availability for " + monthStart.ToString("yyyy-MM") + ".");
+                    AppLogger.Info("Refreshed APOD month availability for " + monthStart.ToString("yyyy-MM") + " entries=" + entries.Count + ".");
                 }
             }
 
@@ -125,7 +201,10 @@ namespace apod_wallpaper
                         Date = date,
                         IsKnown = true,
                         HasImage = entry.HasImage,
+                        IsLocalImageAvailable = HasLocalImage(date),
+                        IsSelectable = entry.HasImage,
                         MediaType = entry.MediaType,
+                        Source = ResolveDataSource(entry.ResolvedFromSource),
                     });
                 }
                 else
@@ -135,7 +214,10 @@ namespace apod_wallpaper
                         Date = date,
                         IsKnown = false,
                         HasImage = false,
+                        IsLocalImageAvailable = false,
+                        IsSelectable = false,
                         MediaType = null,
+                        Source = ApodDataSource.Unknown,
                     });
                 }
             }
@@ -143,9 +225,56 @@ namespace apod_wallpaper
             return result;
         }
 
+        public async Task<IReadOnlyList<ApodDayAvailability>> GetMonthStatusAsync(DateTime month, bool refreshMissingDates)
+        {
+            var monthStart = new DateTime(month.Year, month.Month, 1);
+            var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+            var latestAvailableDate = await GetLatestPublishedDateAsync().ConfigureAwait(false);
+            var fetchEnd = monthEnd <= latestAvailableDate ? monthEnd : latestAvailableDate;
+
+            if (refreshMissingDates && fetchEnd >= monthStart)
+            {
+                var cachedEntriesForRange = _cache
+                    .GetRange(monthStart, fetchEnd)
+                    .ToDictionary(item => DateTime.Parse(item.Date).Date, item => item);
+
+                var shouldRefreshRange = false;
+                for (var date = monthStart; date <= fetchEnd; date = date.AddDays(1))
+                {
+                    ApodCachedEntry cachedEntry;
+                    if (!cachedEntriesForRange.TryGetValue(date, out cachedEntry))
+                    {
+                        shouldRefreshRange = true;
+                        break;
+                    }
+
+                    if (!cachedEntry.ToEntry().HasImage && ShouldRefreshCachedEntry(cachedEntry, date))
+                    {
+                        shouldRefreshRange = true;
+                        break;
+                    }
+                }
+
+                if (shouldRefreshRange)
+                {
+                    AppLogger.Web("scope=month_refresh month=" + monthStart.ToString("yyyy-MM") + " mode=async refreshMissingDates=true");
+                    var entries = await _client.GetEntriesAsync(monthStart, fetchEnd).ConfigureAwait(false);
+                    _cache.UpsertRange(entries);
+                    AppLogger.Info("Refreshed APOD month availability for " + monthStart.ToString("yyyy-MM") + " entries=" + entries.Count + ".");
+                }
+            }
+
+            return BuildMonthStatus(monthStart, monthEnd);
+        }
+
         public ApodPreviewResult Preview(DateTime date, bool forceRefresh = false)
         {
-            var entry = GetEntry(date, forceRefresh);
+            return GetPreviewByDate(date, forceRefresh);
+        }
+
+        public ApodPreviewResult GetPreviewByDate(DateTime date, bool forceRefresh = false)
+        {
+            var entry = GetEntryByDate(date, forceRefresh);
             var localImagePath = TryGetLocalImagePath(date);
 
             return new ApodPreviewResult
@@ -154,18 +283,61 @@ namespace apod_wallpaper
                 PreviewLocation = localImagePath ?? entry.PreviewImageUrl,
                 IsLocalFile = !string.IsNullOrWhiteSpace(localImagePath),
                 PostUrl = OpenPost(date),
+                Source = !string.IsNullOrWhiteSpace(localImagePath)
+                    ? ApodDataSource.LocalFile
+                    : ResolveDataSource(entry.ResolvedFromSource),
+            };
+        }
+
+        public async Task<ApodPreviewResult> GetPreviewByDateAsync(DateTime date, bool forceRefresh = false)
+        {
+            var localImagePath = TryGetLocalImagePath(date);
+            var entry = !string.IsNullOrWhiteSpace(localImagePath)
+                ? (_cache.Get(date)?.ToEntry() ?? new ApodEntry
+                {
+                    Date = date.ToString("yyyy-MM-dd"),
+                    MediaType = "image",
+                    ResolvedFromSource = "local_file",
+                })
+                : await GetEntryByDateAsync(date, forceRefresh).ConfigureAwait(false);
+
+            return new ApodPreviewResult
+            {
+                Entry = entry,
+                PreviewLocation = localImagePath ?? entry.PreviewImageUrl,
+                IsLocalFile = !string.IsNullOrWhiteSpace(localImagePath),
+                PostUrl = OpenPost(date),
+                Source = !string.IsNullOrWhiteSpace(localImagePath)
+                    ? ApodDataSource.LocalFile
+                    : ResolveDataSource(entry.ResolvedFromSource),
             };
         }
 
         public ApodDownloadResult Download(DateTime date, bool forceRefresh = false)
         {
-            var entry = GetEntry(date, forceRefresh);
+            return DownloadImageByDate(date, forceRefresh);
+        }
+
+        public ApodDownloadResult DownloadImageByDate(DateTime date, bool forceRefresh = false)
+        {
+            var entry = GetEntryByDate(date, forceRefresh);
             return EnsureImageDownloaded(entry, date);
+        }
+
+        public async Task<ApodDownloadResult> DownloadImageByDateAsync(DateTime date, bool forceRefresh = false)
+        {
+            var entry = await GetEntryByDateAsync(date, forceRefresh).ConfigureAwait(false);
+            return await EnsureImageDownloadedAsync(entry, date).ConfigureAwait(false);
         }
 
         public ApodApplyResult Apply(DateTime date, WallpaperStyle style, bool forceRefresh = false)
         {
-            var downloadResult = Download(date, forceRefresh);
+            return ApplyWallpaperByDate(date, style, forceRefresh);
+        }
+
+        public ApodApplyResult ApplyWallpaperByDate(DateTime date, WallpaperStyle style, bool forceRefresh = false)
+        {
+            var downloadResult = DownloadImageByDate(date, forceRefresh);
             _wallpaperService.ApplyPreservingHistory(downloadResult.ImagePath, style);
 
             return new ApodApplyResult
@@ -173,12 +345,32 @@ namespace apod_wallpaper
                 Entry = downloadResult.Entry,
                 ImagePath = downloadResult.ImagePath,
                 DownloadedNow = downloadResult.DownloadedNow,
+                Source = downloadResult.Source,
+            };
+        }
+
+        public async Task<ApodApplyResult> ApplyWallpaperByDateAsync(DateTime date, WallpaperStyle style, bool forceRefresh = false)
+        {
+            var downloadResult = await DownloadImageByDateAsync(date, forceRefresh).ConfigureAwait(false);
+            _wallpaperService.ApplyPreservingHistory(downloadResult.ImagePath, style);
+
+            return new ApodApplyResult
+            {
+                Entry = downloadResult.Entry,
+                ImagePath = downloadResult.ImagePath,
+                DownloadedNow = downloadResult.DownloadedNow,
+                Source = downloadResult.Source,
             };
         }
 
         public ApodApplyResult ApplyLatestAvailable(WallpaperStyle style, bool forceRefresh = false)
         {
-            var latestEntry = GetLatestEntry(forceRefresh);
+            return ApplyLatestPublishedWallpaper(style, forceRefresh);
+        }
+
+        public ApodApplyResult ApplyLatestPublishedWallpaper(WallpaperStyle style, bool forceRefresh = false)
+        {
+            var latestEntry = GetLatestPublishedEntry(forceRefresh);
             var entryDate = DateTime.Parse(latestEntry.Date).Date;
             var downloadResult = EnsureImageDownloaded(latestEntry, entryDate);
             _wallpaperService.ApplyPreservingHistory(downloadResult.ImagePath, style);
@@ -188,12 +380,34 @@ namespace apod_wallpaper
                 Entry = downloadResult.Entry,
                 ImagePath = downloadResult.ImagePath,
                 DownloadedNow = downloadResult.DownloadedNow,
+                Source = downloadResult.Source,
+            };
+        }
+
+        public async Task<ApodApplyResult> ApplyLatestPublishedWallpaperAsync(WallpaperStyle style, bool forceRefresh = false)
+        {
+            var latestEntry = await GetLatestPublishedEntryAsync(forceRefresh).ConfigureAwait(false);
+            var entryDate = DateTime.Parse(latestEntry.Date).Date;
+            var downloadResult = await EnsureImageDownloadedAsync(latestEntry, entryDate).ConfigureAwait(false);
+            _wallpaperService.ApplyPreservingHistory(downloadResult.ImagePath, style);
+
+            return new ApodApplyResult
+            {
+                Entry = downloadResult.Entry,
+                ImagePath = downloadResult.ImagePath,
+                DownloadedNow = downloadResult.DownloadedNow,
+                Source = downloadResult.Source,
             };
         }
 
         public string OpenPost(DateTime date)
         {
-            return TodayUrl.GetUrl(date);
+            return GetPostUrl(date);
+        }
+
+        public string GetPostUrl(DateTime date)
+        {
+            return ApodPageUrl.GetUrl(date);
         }
 
         public ApodDownloadResult EnsureImageDownloaded(ApodEntry entry, DateTime date)
@@ -206,7 +420,7 @@ namespace apod_wallpaper
 
             FileStorage.EnsureImagesDirectory();
 
-            var baseName = TodayUrl.GetBaseName(date);
+            var baseName = ApodPageUrl.GetBaseName(date);
             var existingImagePath = FileStorage.TryFindExistingImagePath(baseName);
             if (!string.IsNullOrWhiteSpace(existingImagePath) && File.Exists(existingImagePath))
             {
@@ -218,10 +432,11 @@ namespace apod_wallpaper
                     Entry = entry,
                     ImagePath = existingImagePath,
                     DownloadedNow = false,
+                    Source = ApodDataSource.LocalFile,
                 };
             }
 
-            var image = new Image(entry.BestImageUrl, baseName);
+            var image = new DownloadedImageFile(entry.BestImageUrl, baseName);
             var downloadedNow = false;
             if (!File.Exists(image.FullPath))
             {
@@ -239,12 +454,76 @@ namespace apod_wallpaper
                 Entry = entry,
                 ImagePath = image.FullPath,
                 DownloadedNow = downloadedNow,
+                Source = ResolveDataSource(entry.ResolvedFromSource),
             };
+        }
+
+        public async Task<ApodDownloadResult> EnsureImageDownloadedAsync(ApodEntry entry, DateTime date)
+        {
+            if (entry == null)
+                throw new ArgumentNullException(nameof(entry));
+
+            if (!entry.HasImage || string.IsNullOrWhiteSpace(entry.BestImageUrl))
+                throw new InvalidOperationException("The selected APOD entry does not contain a downloadable image.");
+
+            FileStorage.EnsureImagesDirectory();
+
+            var baseName = ApodPageUrl.GetBaseName(date);
+            var existingImagePath = FileStorage.TryFindExistingImagePath(baseName);
+            if (!string.IsNullOrWhiteSpace(existingImagePath) && File.Exists(existingImagePath))
+            {
+                _cache.Upsert(entry);
+                _cache.SaveLocalImagePath(date, existingImagePath);
+
+                return new ApodDownloadResult
+                {
+                    Entry = entry,
+                    ImagePath = existingImagePath,
+                    DownloadedNow = false,
+                    Source = ApodDataSource.LocalFile,
+                };
+            }
+
+            var image = new DownloadedImageFile(entry.BestImageUrl, baseName);
+            var downloadedNow = false;
+            if (!File.Exists(image.FullPath))
+            {
+                await image.DownloadImageAsync().ConfigureAwait(false);
+                image.SaveImage();
+                downloadedNow = true;
+            }
+
+            _cache.Upsert(entry);
+            _cache.SaveLocalImagePath(date, image.FullPath);
+            AppLogger.Info("Stored APOD image for " + date.ToString("yyyy-MM-dd") + " at " + image.FullPath + ".");
+
+            return new ApodDownloadResult
+            {
+                Entry = entry,
+                ImagePath = image.FullPath,
+                DownloadedNow = downloadedNow,
+                Source = ResolveDataSource(entry.ResolvedFromSource),
+            };
+        }
+
+        public string GetCachedLocalImagePath(DateTime date)
+        {
+            return TryGetLocalImagePath(date);
+        }
+
+        public void RefreshLocalImageIndex()
+        {
+            _cache.SyncLocalImagePaths();
+        }
+
+        public Task RefreshLocalImageIndexAsync()
+        {
+            return Task.Run((Action)RefreshLocalImageIndex);
         }
 
         private string TryGetLocalImagePath(DateTime date)
         {
-            var baseName = TodayUrl.GetBaseName(date);
+            var baseName = ApodPageUrl.GetBaseName(date);
             var expectedPath = FileStorage.TryFindExistingImagePath(baseName);
             if (!string.IsNullOrWhiteSpace(expectedPath) && File.Exists(expectedPath))
             {
@@ -261,9 +540,27 @@ namespace apod_wallpaper
 
         public DateTime GetLatestAvailableDate()
         {
+            return GetLatestPublishedDate();
+        }
+
+        public DateTime GetLatestPublishedDate()
+        {
             try
             {
-                var latestEntry = GetLatestEntry();
+                var latestEntry = GetLatestPublishedEntry();
+                return DateTime.Parse(latestEntry.Date).Date;
+            }
+            catch
+            {
+                return DateTime.UtcNow.Date;
+            }
+        }
+
+        public async Task<DateTime> GetLatestPublishedDateAsync()
+        {
+            try
+            {
+                var latestEntry = await GetLatestPublishedEntryAsync().ConfigureAwait(false);
                 return DateTime.Parse(latestEntry.Date).Date;
             }
             catch
@@ -313,6 +610,69 @@ namespace apod_wallpaper
                     AppLogger.Warn("Background cache housekeeping failed.", ex);
                 }
             }
+        }
+
+        private static ApodDataSource ResolveDataSource(string value)
+        {
+            switch (value)
+            {
+                case "api":
+                    return ApodDataSource.Api;
+                case "cache":
+                    return ApodDataSource.Cache;
+                case "html_fallback":
+                    return ApodDataSource.HtmlFallback;
+                case "local_file":
+                    return ApodDataSource.LocalFile;
+                default:
+                    return ApodDataSource.Unknown;
+            }
+        }
+
+        private static bool HasLocalImage(DateTime date)
+        {
+            return !string.IsNullOrWhiteSpace(FileStorage.TryFindExistingImagePath(ApodPageUrl.GetBaseName(date)));
+        }
+
+        private IReadOnlyList<ApodDayAvailability> BuildMonthStatus(DateTime monthStart, DateTime monthEnd)
+        {
+            var cachedEntries = _cache.GetRange(monthStart, monthEnd)
+                .ToDictionary(item => DateTime.Parse(item.Date).Date, item => item);
+
+            var result = new List<ApodDayAvailability>();
+            for (var date = monthStart; date <= monthEnd; date = date.AddDays(1))
+            {
+                ApodCachedEntry cachedEntry;
+                if (cachedEntries.TryGetValue(date, out cachedEntry))
+                {
+                    var entry = cachedEntry.ToEntry();
+                    result.Add(new ApodDayAvailability
+                    {
+                        Date = date,
+                        IsKnown = true,
+                        HasImage = entry.HasImage,
+                        IsLocalImageAvailable = HasLocalImage(date),
+                        IsSelectable = entry.HasImage,
+                        MediaType = entry.MediaType,
+                        Source = ResolveDataSource(entry.ResolvedFromSource),
+                    });
+                }
+                else
+                {
+                    result.Add(new ApodDayAvailability
+                    {
+                        Date = date,
+                        IsKnown = false,
+                        HasImage = false,
+                        IsLocalImageAvailable = false,
+                        IsSelectable = false,
+                        MediaType = null,
+                        Source = ApodDataSource.Unknown,
+                    });
+                }
+            }
+
+            return result;
         }
     }
 }

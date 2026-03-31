@@ -29,9 +29,9 @@ C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\bin\Debug\apod_wal
 C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\bin\Debug\apod_wallpaper.Core.pdb
 C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.csproj.AssemblyReference.cache
 C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.csproj.SuggestedBindingRedirects.cache
-C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.configurationForm.resources
+C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.ConfigurationForm.resources
 C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.Properties.Resources.resources
-C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.resources_apod.resources
+C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.ApodResources.resources
 C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.csproj.GenerateResource.cache
 C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.csproj.CoreCompileInputs.cache
 C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper\obj\Debug\apod_wallpaper.csproj.CopyComplete

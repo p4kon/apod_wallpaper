@@ -15,10 +15,11 @@ namespace apod_wallpaper
             {
                 if (createdNew)
                 {
-                    RuntimeSettingsSync.ApplyCurrentSettings();
+                    var controller = new ApplicationController();
+                    controller.Initialize();
                     Application.EnableVisualStyles();
                     Application.SetCompatibleTextRenderingDefault(false);
-                    Application.Run(new TrayApplicationContext());
+                    Application.Run(new TrayApplicationContext(controller));
                     return;
                 }
 

@@ -23,6 +23,11 @@ namespace apod_wallpaper
             Write("ERROR", message, exception);
         }
 
+        public static void Web(string message)
+        {
+            Write("WEB", message, null);
+        }
+
         private static void Write(string level, string message, Exception exception)
         {
             try

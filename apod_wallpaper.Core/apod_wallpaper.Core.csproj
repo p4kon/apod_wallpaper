@@ -37,15 +37,28 @@
     <Reference Include="System.Drawing" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\apod_wallpaper\ApodCalendarDayState.cs">
+      <Link>ApodCalendarDayState.cs</Link>
+    </Compile>
+    <Compile Include="..\apod_wallpaper\ApodCalendarMonthState.cs">
+      <Link>ApodCalendarMonthState.cs</Link>
+    </Compile>
+    <Compile Include="..\apod_wallpaper\ApodCalendarStateService.cs">
+      <Link>ApodCalendarStateService.cs</Link>
+    </Compile>
     <Compile Include="..\apod_wallpaper\ApodClient.cs">
       <Link>ApodClient.cs</Link>
     </Compile>
     <Compile Include="..\apod_wallpaper\ApodCachedEntry.cs">
       <Link>ApodCachedEntry.cs</Link>
+    </Compile>
+    <Compile Include="..\apod_wallpaper\ApodDataSource.cs">
+      <Link>ApodDataSource.cs</Link>
     </Compile>
     <Compile Include="..\apod_wallpaper\ApodDayAvailability.cs">
       <Link>ApodDayAvailability.cs</Link>
@@ -71,6 +84,15 @@
     <Compile Include="..\apod_wallpaper\ApodPreviewResult.cs">
       <Link>ApodPreviewResult.cs</Link>
     </Compile>
+    <Compile Include="..\apod_wallpaper\ApodWorkflowResult.cs">
+      <Link>ApodWorkflowResult.cs</Link>
+    </Compile>
+    <Compile Include="..\apod_wallpaper\ApodWorkflowService.cs">
+      <Link>ApodWorkflowService.cs</Link>
+    </Compile>
+    <Compile Include="..\apod_wallpaper\ApodWorkflowStatus.cs">
+      <Link>ApodWorkflowStatus.cs</Link>
+    </Compile>
     <Compile Include="..\apod_wallpaper\ApodWallpaperService.cs">
       <Link>ApodWallpaperService.cs</Link>
     </Compile>
@@ -80,8 +102,8 @@
     <Compile Include="..\apod_wallpaper\FileStorage.cs">
       <Link>FileStorage.cs</Link>
     </Compile>
-    <Compile Include="..\apod_wallpaper\Image.cs">
-      <Link>Image.cs</Link>
+    <Compile Include="..\apod_wallpaper\DownloadedImageFile.cs">
+      <Link>DownloadedImageFile.cs</Link>
     </Compile>
     <Compile Include="..\apod_wallpaper\Network.cs">
       <Link>Network.cs</Link>
@@ -89,8 +111,8 @@
     <Compile Include="..\apod_wallpaper\Scheduler.cs">
       <Link>Scheduler.cs</Link>
     </Compile>
-    <Compile Include="..\apod_wallpaper\TodayURL.cs">
-      <Link>TodayURL.cs</Link>
+    <Compile Include="..\apod_wallpaper\ApodPageUrl.cs">
+      <Link>ApodPageUrl.cs</Link>
     </Compile>
     <Compile Include="..\apod_wallpaper\Wallpaper.cs">
       <Link>Wallpaper.cs</Link>
@@ -98,6 +120,7 @@
     <Compile Include="..\apod_wallpaper\WallpaperService.cs">
       <Link>WallpaperService.cs</Link>
     </Compile>
+    <Compile Include="SmartWallpaperComposer.cs" />
     <Compile Include="AppRuntimeSettings.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

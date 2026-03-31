@@ -6,5 +6,6 @@ namespace apod_wallpaper
         public string PreviewLocation { get; set; }
         public bool IsLocalFile { get; set; }
         public string PostUrl { get; set; }
+        public ApodDataSource Source { get; set; }
     }
 }

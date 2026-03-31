@@ -1,21 +1,23 @@
 using System;
 using System.Drawing;
-using System.Net.Http;
 using System.Threading;
 using System.Windows.Forms;
 
 namespace apod_wallpaper
 {
-    public class TrayApplicationContext : ApplicationContext
+    internal class TrayApplicationContext : ApplicationContext
     {
-        static NotifyIcon trayIcon = new NotifyIcon();
-        configurationForm configWindow = new configurationForm();
+        private static NotifyIcon trayIcon = new NotifyIcon();
+        private readonly ApplicationController controller;
+        private readonly ConfigurationForm configWindow;
 
-        public TrayApplicationContext()
+        internal TrayApplicationContext(ApplicationController controller)
         {
+            this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
+            configWindow = new ConfigurationForm(this.controller);
             MenuItem configMenuItem = new MenuItem("Configuration", new EventHandler(ShowConfig));
             MenuItem exitMenuItem = new MenuItem("Exit", new EventHandler(Exit));
-            Icon apod_icon = new Icon(resources_apod.apod_icon, 32, 32);
+            Icon apod_icon = new Icon(ApodResources.apod_icon, 32, 32);
 
             trayIcon.Icon = apod_icon;
             trayIcon.DoubleClick += new EventHandler(TrayDoubleClickAction);
@@ -26,7 +28,7 @@ namespace apod_wallpaper
 
         void TrayDoubleClickAction(object sender, EventArgs e)
         {
-            if (!apod_wallpaper.Properties.Settings.Default.TrayDoubleClickAction)
+            if (!controller.ShouldApplyOnTrayDoubleClick())
             {
                 ShowConfig(sender, e);
                 return;
@@ -34,15 +36,10 @@ namespace apod_wallpaper
 
             Thread thread = new Thread(() =>
             {
-                try
+                var workflowResult = controller.ApplyLatestPublished(controller.GetSelectedWallpaperStyle());
+                if (!workflowResult.IsSuccess)
                 {
-                    var service = new ApodWallpaperService();
-                    var style = (WallpaperStyle)apod_wallpaper.Properties.Settings.Default.StyleComboBox;
-                    service.ApplyLatestAvailable(style);
-                }
-                catch (Exception ex)
-                {
-                    ShowTrayError(ex);
+                    ShowTrayError(workflowResult.Message);
                 }
             });
             thread.IsBackground = true;
@@ -59,7 +56,7 @@ namespace apod_wallpaper
 
         void Exit(object sender, EventArgs e)
         {
-            Scheduler.Stop();
+            controller.Dispose();
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();
@@ -70,12 +67,8 @@ namespace apod_wallpaper
             trayIcon.Dispose();
         }
 
-        private static void ShowTrayError(Exception ex)
+        private static void ShowTrayError(string message)
         {
-            var message = ex is HttpRequestException
-                ? "Unable to reach NASA APOD right now."
-                : ApodErrorTranslator.ToUserMessage(ex);
-
             trayIcon.BalloonTipTitle = "APOD Wallpaper";
             trayIcon.BalloonTipText = message;
             trayIcon.ShowBalloonTip(4000);

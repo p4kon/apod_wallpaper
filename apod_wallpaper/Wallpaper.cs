@@ -12,6 +12,7 @@ namespace apod_wallpaper
         Tile,
         Center,
         Span,
+        Smart,
     }
 
     internal static class WallpaperNative
@@ -104,6 +105,9 @@ namespace apod_wallpaper
                     break;
                 case WallpaperStyle.Span:
                     SetWallpaperConfig(new Config { Style = 22, IsTile = false });
+                    break;
+                case WallpaperStyle.Smart:
+                    SetWallpaperConfig(new Config { Style = 6, IsTile = false });
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(style));
