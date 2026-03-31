@@ -1,79 +1,114 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System;
+using System.Threading;
 
 namespace apod_wallpaper
 {
-    public static class Scheduler
+    public sealed class Scheduler : IDisposable
     {
-        private static int executedToday;
-        private static bool autoExecute;
-        private static int _everyHour;
-        private static int _everyMinute;
-        private static int _everySecond;
+        private readonly object _syncRoot = new object();
+        private Timer _timer;
+        private Action _scheduledTask;
+        private TimeSpan _scheduledTime;
 
-        public static int EveryHour
+        public int EveryHour { get; set; }
+        public int EveryMinute { get; set; }
+        public int EverySecond { get; set; }
+
+        public bool IsRunning { get; private set; }
+        public DateTime? NextRun { get; private set; }
+
+        public void Start(Action scheduledTask)
         {
-            get 
-            {
-                return _everyHour;
-            }
+            if (scheduledTask == null)
+                throw new ArgumentNullException(nameof(scheduledTask));
 
-            set
+            lock (_syncRoot)
             {
-                _everyHour = value;
+                _scheduledTask = scheduledTask;
+                _scheduledTime = new TimeSpan(EveryHour, EveryMinute, EverySecond);
+                IsRunning = true;
+                ScheduleNextRun();
             }
         }
 
-        public static int EverySecond
+        public void UpdateSchedule()
         {
-            get
+            lock (_syncRoot)
             {
-                return _everySecond;
-            }
-
-            set
-            {
-                _everySecond = value;
+                _scheduledTime = new TimeSpan(EveryHour, EveryMinute, EverySecond);
+                if (IsRunning)
+                    ScheduleNextRun();
             }
         }
 
-        public static int EveryMinute
+        public void Stop()
         {
-            get
+            lock (_syncRoot)
             {
-                return _everyMinute;
-            }
-
-            set
-            {
-                _everyMinute = value;
+                IsRunning = false;
+                NextRun = null;
+                DisposeTimer();
             }
         }
 
-        public async static void Check(params Action[] tasks)
+        public void Dispose()
         {
-            DateTime runTime = DateTime.Now./*AddHours((double)_everyHour).AddMinutes((double)_everyMinute).*/AddSeconds(/*(double)_everySecond*/10.0);
-            TimeSpan ts = new TimeSpan(runTime.Hour, runTime.Minute, runTime.Second); //(runTime.Hour, 0, 0);
-            runTime = runTime.Date + ts;
+            Stop();
+        }
 
-            Console.WriteLine("next run will be at: {0} and current hour is: {1}", runTime, DateTime.Now);
-            while (true)
+        private void ScheduleNextRun()
+        {
+            var now = DateTime.Now;
+            var nextRun = now.Date.Add(_scheduledTime);
+            if (nextRun <= now)
+                nextRun = nextRun.AddDays(1);
+
+            NextRun = nextRun;
+
+            var dueTime = nextRun - now;
+            if (_timer == null)
             {
-                TimeSpan duration = runTime.Subtract(DateTime.Now);
-                if (duration.TotalMilliseconds <= 0.0)
+                _timer = new Timer(RunScheduledTask, null, dueTime, Timeout.InfiniteTimeSpan);
+            }
+            else
+            {
+                _timer.Change(dueTime, Timeout.InfiniteTimeSpan);
+            }
+        }
+
+        private void RunScheduledTask(object state)
+        {
+            Action task;
+
+            lock (_syncRoot)
+            {
+                if (!IsRunning)
+                    return;
+
+                task = _scheduledTask;
+            }
+
+            try
+            {
+                task();
+            }
+            finally
+            {
+                lock (_syncRoot)
                 {
-                    Parallel.Invoke(tasks);
-                    Console.WriteLine("It is the run time as shown before to be: {0} confirmed with system time, that is: {1}", runTime, DateTime.Now);
-                    runTime = DateTime.Now/*.AddHours((double)_everyHour).AddMinutes((double)_everyMinute)*/.AddSeconds(/*(double)_everySecond*/10.0);
-                    Console.WriteLine("next run will be at: {0} and current hour is: {1}", runTime, DateTime.Now);
-                    continue;
+                    if (IsRunning)
+                        ScheduleNextRun();
                 }
-                int delay = (int)(duration.TotalMilliseconds / 2);
-                await Task.Delay(5000);  // 3 seconds
             }
+        }
+
+        private void DisposeTimer()
+        {
+            if (_timer == null)
+                return;
+
+            _timer.Dispose();
+            _timer = null;
         }
     }
 }

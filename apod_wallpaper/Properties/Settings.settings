@@ -1,4 +1,4 @@
-﻿<?xml version='1.0' encoding='utf-8'?>
+<?xml version='1.0' encoding='utf-8'?>
 <SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="apod_wallpaper.Properties" GeneratedClassName="Settings">
   <Profiles />
   <Settings>
@@ -6,10 +6,22 @@
       <Value Profile="(Default)">True</Value>
     </Setting>
     <Setting Name="StyleComboBox" Type="System.Int32" Scope="User">
-      <Value Profile="(Default)">0</Value>
+      <Value Profile="(Default)">1</Value>
     </Setting>
     <Setting Name="TimeRefresh" Type="System.DateTime" Scope="User">
       <Value Profile="(Default)">01/01/2021 03:00:00</Value>
+    </Setting>
+    <Setting Name="NasaApiKey" Type="System.String" Scope="User">
+      <Value Profile="(Default)">DEMO_KEY</Value>
+    </Setting>
+    <Setting Name="AutoRefreshEnabled" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="StartWithWindows" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="ImagesDirectoryPath" Type="System.String" Scope="User">
+      <Value Profile="(Default)"></Value>
     </Setting>
   </Settings>
 </SettingsFile>

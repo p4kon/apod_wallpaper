@@ -1,22 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System;
 using System.Drawing;
-using System.Windows.Forms;
 using System.Threading;
+using System.Windows.Forms;
 
 namespace apod_wallpaper
 {
-    public class TrayApplicationContext : ApplicationContext
+    internal class TrayApplicationContext : ApplicationContext
     {
-        static NotifyIcon trayIcon = new NotifyIcon();
-        configurationForm configWindow = new configurationForm();
+        private static NotifyIcon trayIcon = new NotifyIcon();
+        private readonly ApplicationController controller;
+        private readonly ConfigurationForm configWindow;
 
-        public TrayApplicationContext()
+        internal TrayApplicationContext(ApplicationController controller)
         {
+            this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
+            configWindow = new ConfigurationForm(this.controller);
             MenuItem configMenuItem = new MenuItem("Configuration", new EventHandler(ShowConfig));
             MenuItem exitMenuItem = new MenuItem("Exit", new EventHandler(Exit));
-            Icon apod_icon = new Icon(resources_apod.apod_icon, 32, 32);
+            Icon apod_icon = new Icon(ApodResources.apod_icon, 32, 32);
 
             trayIcon.Icon = apod_icon;
             trayIcon.DoubleClick += new EventHandler(TrayDoubleClickAction);
@@ -27,16 +28,26 @@ namespace apod_wallpaper
 
         void TrayDoubleClickAction(object sender, EventArgs e)
         {
-            TodayUrl.SetDate(DateTime.UtcNow);
-            configurationForm form = new configurationForm();
-            Thread thread = new Thread(form.DownloadWallpaper);
+            if (!controller.ShouldApplyOnTrayDoubleClick())
+            {
+                ShowConfig(sender, e);
+                return;
+            }
+
+            Thread thread = new Thread(() =>
+            {
+                var workflowResult = controller.ApplyLatestPublished(controller.GetSelectedWallpaperStyle());
+                if (!workflowResult.IsSuccess)
+                {
+                    ShowTrayError(workflowResult.Message);
+                }
+            });
+            thread.IsBackground = true;
             thread.Start();
         }
 
-
         void ShowConfig(object sender, EventArgs e)
         {
-            // If we are already showing the window meerly focus it.
             if (configWindow.Visible)
                 configWindow.Focus();
             else
@@ -45,13 +56,22 @@ namespace apod_wallpaper
 
         void Exit(object sender, EventArgs e)
         {
+            controller.Dispose();
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();
         }
+
         public static void TrayIconDispose()
         {
             trayIcon.Dispose();
+        }
+
+        private static void ShowTrayError(string message)
+        {
+            trayIcon.BalloonTipTitle = "APOD Wallpaper";
+            trayIcon.BalloonTipText = message;
+            trayIcon.ShowBalloonTip(4000);
         }
     }
 }

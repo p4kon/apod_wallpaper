@@ -1,216 +1,297 @@
-﻿using System;
-using System.IO;
-using System.Diagnostics;
-using System.Collections.Generic;
+using System;
 using System.ComponentModel;
-using System.Data;
+using System.Diagnostics;
 using System.Drawing;
-using System.Linq;
-using System.Text;
+using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Threading;
 
 namespace apod_wallpaper
 {
-    public partial class configurationForm : Form
+    internal partial class ConfigurationForm : Form
     {
+        private readonly ApplicationController controller;
+        private bool suppressSettingsSync = true;
         private bool not_found = false;
+        private bool nonImageMedia = false;
         private bool loading_picture = false;
         private bool download_only = false;
-        private string full_path_image;
+        private int previewRequestVersion;
+        private ApodEntry currentEntry;
+        private ApplicationSettingsSnapshot currentSettings;
         private ToolTip toolTip = new ToolTip();
 
-        public configurationForm()
+        internal ConfigurationForm(ApplicationController controller)
         {
+            this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
             InitializeComponent();
-            SetTimeRefresh();
-            Scheduler.Check();
             pictureDayDateTimePicker.Value = DateTime.UtcNow;
-            Network.AllowInvalidCertificate();
             wallpaperStyleComboBox.DataSource = Enum.GetValues(typeof(WallpaperStyle));
+            pictureDayDateTimePicker.DropDown += pictureDayDateTimePicker_DropDown;
+            imagesFolderTextBox.TextChanged += imagesFolderTextBox_TextChanged;
+            downloadSetCheckBox.CheckedChanged += settingsControl_Changed;
+            startWithWindowsCheckBox.CheckedChanged += settingsControl_Changed;
+            everyTimeCheckBox.CheckedChanged += settingsControl_Changed;
+            wallpaperStyleComboBox.SelectedIndexChanged += settingsControl_Changed;
+            setRefreshDateTimePicker.ValueChanged += settingsControl_Changed;
+            apiKeyTextBox.TextChanged += settingsControl_Changed;
         }
 
-        private void LoadSettings(object sender, EventArgs e)
+        private async void LoadSettings(object sender, EventArgs e)
         {
-            downloadSetCheckBox.Checked = apod_wallpaper.Properties.Settings.Default.TrayDoubleClickAction;
-            wallpaperStyleComboBox.SelectedIndex = apod_wallpaper.Properties.Settings.Default.StyleComboBox;
-            setRefreshDateTimePicker.Value = apod_wallpaper.Properties.Settings.Default.TimeRefresh;
+            suppressSettingsSync = true;
+            currentSettings = controller.GetSettings();
+            downloadSetCheckBox.Checked = currentSettings.TrayDoubleClickAction;
+            wallpaperStyleComboBox.SelectedIndex = currentSettings.WallpaperStyleIndex;
+            setRefreshDateTimePicker.Value = currentSettings.RefreshTime;
+            everyTimeCheckBox.Checked = currentSettings.AutoRefreshEnabled;
+            startWithWindowsCheckBox.Checked = currentSettings.StartWithWindows;
+            apiKeyTextBox.Text = currentSettings.NasaApiKey;
+            imagesFolderTextBox.Text = FileStorage.ImagesDirectory;
+            controller.UpdateSessionImagesDirectory(imagesFolderTextBox.Text);
+            await controller.RefreshLocalImageIndexAsync().ConfigureAwait(true);
+            suppressSettingsSync = false;
+
+            await WarmUpCalendarMonthAsync(pictureDayDateTimePicker.Value.Date, true);
         }
 
         private void SaveSettings(object sender, FormClosingEventArgs e)
         {
-            if (this.DialogResult == DialogResult.OK)
-            {
-                apod_wallpaper.Properties.Settings.Default.TrayDoubleClickAction = downloadSetCheckBox.Checked;
-                apod_wallpaper.Properties.Settings.Default.StyleComboBox = wallpaperStyleComboBox.SelectedIndex;
-                apod_wallpaper.Properties.Settings.Default.TimeRefresh = setRefreshDateTimePicker.Value;
-                apod_wallpaper.Properties.Settings.Default.Save();
-            }
-        }
-
-        private void SetTimeRefresh()
-        {
-            Scheduler.EveryHour = setRefreshDateTimePicker.Value.Hour;
-            Scheduler.EveryMinute = setRefreshDateTimePicker.Value.Minute;
-            Scheduler.EverySecond = setRefreshDateTimePicker.Value.Second;
+            PersistSettings();
         }
 
         public void DownloadWallpaper()
         {
-            if (Control.ModifierKeys == Keys.Shift)
-            {
-                download_only = true;
-            }
-            else
-            {
-                download_only = false;
-            }
+            var selectedDate = pictureDayDateTimePicker.Value.Date;
+            download_only = Control.ModifierKeys == Keys.Shift;
 
-            var image = new Image(Parser.img_url, TodayUrl.GetName());
-            if (Parser.isExistUrl || File.Exists(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name))
+            try
             {
-                TodayUrl.SetDate(pictureDayDateTimePicker.Value);
-
-                if (!File.Exists(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name))
+                ApodWorkflowResult workflowResult;
+                if (download_only)
                 {
-                    Application.UseWaitCursor = true;
-                    image.DownloadImage();
-                    image.SaveImage(image.name, image.format);
-                }
-                Application.UseWaitCursor = false;
-
-                if (this.InvokeRequired)
-                {
-                    PreviewPictureBox.Invoke((MethodInvoker)delegate
-                    {
-                        PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-                        PreviewPictureBox.ImageLocation = AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name;
-                    });
-
-                    wallpaperStyleComboBox.Invoke((MethodInvoker)delegate
-                    {
-                        WallpaperStyle style = (WallpaperStyle)wallpaperStyleComboBox.SelectedItem;
-                        if (!download_only) 
-                        {
-                            Wallpaper.SilentSet(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name, style);
-                        }
-                    });
+                    workflowResult = controller.DownloadDay(selectedDate);
                 }
                 else
                 {
-                    WallpaperStyle style = (WallpaperStyle)apod_wallpaper.Properties.Settings.Default.StyleComboBox;
-                    if (!download_only)
-                    {
-                        Wallpaper.SilentSet(AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name, style);
-                    }
+                    workflowResult = controller.ApplyDay(selectedDate, GetSelectedWallpaperStyle());
                 }
-            }
-            else
-            {
-                PreviewPictureBox.Image = resources_apod.image_not_found;
-                not_found = true;
-                pictureDayDateTimePicker.Enabled = true;
-                if (this.InvokeRequired)
+
+                currentEntry = workflowResult.Entry;
+                if (!workflowResult.IsSuccess)
                 {
-                    downloadButton.Invoke((MethodInvoker)delegate
+                    ShowUnavailableEntryState();
+                    if (workflowResult.Status == ApodWorkflowStatus.Failed)
                     {
-                        downloadButton.Enabled = false;
-                    });
-                }
-            }
-        }
-
-        private void PictureDayDateTimePicker_ValueChanged(Object sender, EventArgs e)
-        {
-            not_found = false;
-            pictureDayDateTimePicker.Enabled = false;
-            downloadButton.Enabled = false;
-            PictureShowPreview();
-        }
-
-        private void PictureShowPreview()
-        {
-            Parser.ImgUrl = null;
-            Parser.IsExistUrl = false;
-
-            TodayUrl.SetDate(pictureDayDateTimePicker.Value);
-
-            var image = new Image(Parser.img_url, TodayUrl.GetName());
-            full_path_image = AppDomain.CurrentDomain.BaseDirectory + image.image_path + image.name;
-
-            if (File.Exists(full_path_image))
-            {
-                PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-                PreviewPictureBox.ImageLocation = full_path_image;
-            }
-            else
-            {
-                try
-                {
-                    PreviewPictureBox.Image = resources_apod.loading_image_progress;
-                    loading_picture = true;
-                    var parser = new Parser(TodayUrl.GetUrl());
-                    parser.GetUrl();
-
-                    if (!Parser.isExistUrl)
-                    {
-                        PreviewPictureBox.Image = resources_apod.image_not_found;
-                        not_found = true;
-                        pictureDayDateTimePicker.Enabled = true;
-                        downloadButton.Enabled = false;
-                    }
-
-                    PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-                    PreviewPictureBox.ImageLocation = Parser.img_url;
-                }
-                catch (System.ArgumentNullException ane)
-                {
-                    Console.WriteLine(ane.Message);
-
-                    if (pictureDayDateTimePicker.Value > DateTime.UtcNow)
-                    {
-                        pictureDayDateTimePicker.Value = DateTime.UtcNow;
-                        MessageBox.Show("You cannot choose a date from the future",
-                                        "Date selection error",
+                        MessageBox.Show(workflowResult.Message,
+                                        "APOD error",
                                         MessageBoxButtons.OK,
                                         MessageBoxIcon.Error);
                     }
+
+                    return;
                 }
+
+                nonImageMedia = false;
+                UpdatePreviewImage(workflowResult.ImagePath);
+            }
+            catch (Exception ex)
+            {
+                ShowUnavailableEntryState();
+                MessageBox.Show(ApodErrorTranslator.ToUserMessage(ex),
+                                "APOD error",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Error);
+            }
+        }
+
+        public async Task DownloadWallpaperAsync()
+        {
+            var selectedDate = pictureDayDateTimePicker.Value.Date;
+            download_only = Control.ModifierKeys == Keys.Shift;
+
+            ApodWorkflowResult workflowResult;
+            if (download_only)
+            {
+                workflowResult = await controller.DownloadDayAsync(selectedDate).ConfigureAwait(true);
+            }
+            else
+            {
+                workflowResult = await controller.ApplyDayAsync(selectedDate, GetSelectedWallpaperStyle()).ConfigureAwait(true);
+            }
+
+            currentEntry = workflowResult.Entry;
+            if (!workflowResult.IsSuccess)
+            {
+                ShowUnavailableEntryState();
+                if (workflowResult.Status == ApodWorkflowStatus.Failed)
+                {
+                    MessageBox.Show(workflowResult.Message,
+                                    "APOD error",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Error);
+                }
+
+                return;
+            }
+
+            nonImageMedia = false;
+            UpdatePreviewImage(workflowResult.ImagePath);
+        }
+
+        private async void PictureDayDateTimePicker_ValueChanged(Object sender, EventArgs e)
+        {
+            not_found = false;
+            nonImageMedia = false;
+            pictureDayDateTimePicker.Enabled = false;
+            downloadButton.Enabled = false;
+            await PictureShowPreviewAsync();
+        }
+
+        private async Task PictureShowPreviewAsync()
+        {
+            var selectedDate = pictureDayDateTimePicker.Value.Date;
+            var requestVersion = Interlocked.Increment(ref previewRequestVersion);
+            currentEntry = null;
+
+            try
+            {
+                PreviewPictureBox.ImageLocation = null;
+                PreviewPictureBox.Image = ApodResources.loading_image_progress;
+                loading_picture = true;
+
+                var monthState = await controller.GetCalendarMonthStateAsync(selectedDate, false).ConfigureAwait(true);
+                if (requestVersion != previewRequestVersion)
+                    return;
+
+                ApodCalendarDayState dayState;
+                if (monthState.TryGetDay(selectedDate, out dayState) && dayState.IsKnown && !dayState.IsSelectable)
+                {
+                    currentEntry = null;
+                    ShowUnavailableEntryState();
+                    return;
+                }
+
+                var workflowResult = await controller.LoadDayAsync(selectedDate).ConfigureAwait(true);
+                if (requestVersion != previewRequestVersion)
+                    return;
+
+                currentEntry = workflowResult.Entry;
+
+                if (workflowResult.Status == ApodWorkflowStatus.Unavailable &&
+                    workflowResult.LatestPublishedDate.HasValue &&
+                    selectedDate > workflowResult.LatestPublishedDate.Value)
+                {
+                    pictureDayDateTimePicker.Value = workflowResult.LatestPublishedDate.Value;
+                    MessageBox.Show(workflowResult.Message,
+                                    "Date selection error",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Error);
+                    return;
+                }
+
+                if (!workflowResult.IsSuccess || string.IsNullOrWhiteSpace(workflowResult.PreviewLocation))
+                {
+                    ShowUnavailableEntryState();
+                    return;
+                }
+
+                nonImageMedia = false;
+                UpdatePreviewImage(workflowResult.PreviewLocation);
+            }
+            catch
+            {
+                if (requestVersion != previewRequestVersion)
+                    return;
+
+                ShowUnavailableEntryState();
             }
         }
 
         private void SetRefreshDateTimePicker_ValueChanged(Object sender, EventArgs e)
         {
-            SetTimeRefresh();
+            PersistSettings();
+        }
+
+        private void everyTimeCheckBox_CheckedChanged(object sender, EventArgs e)
+        {
+            PersistSettings();
+        }
+
+        private async void pictureDayDateTimePicker_DropDown(object sender, EventArgs e)
+        {
+            await WarmUpCalendarMonthAsync(pictureDayDateTimePicker.Value.Date, true);
         }
 
         private void downloadButton_Click(object sender, EventArgs e)
         {
-            MyExtensions.CheckFolder();
-            Thread thread = new Thread(DownloadWallpaper);
-            thread.Start();
+            _ = HandleDownloadButtonClickAsync();
             PreviewPictureBox.Focus();
+        }
+
+        private async Task HandleDownloadButtonClickAsync()
+        {
+            try
+            {
+                await DownloadWallpaperAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                ShowUnavailableEntryState();
+                MessageBox.Show(ApodErrorTranslator.ToUserMessage(ex),
+                                "APOD error",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Error);
+            }
+        }
+
+        private void browseImagesFolderButton_Click(object sender, EventArgs e)
+        {
+            using (var dialog = new FolderBrowserDialog())
+            {
+                dialog.SelectedPath = imagesFolderTextBox.Text;
+                if (dialog.ShowDialog() == DialogResult.OK)
+                {
+                    imagesFolderTextBox.Text = dialog.SelectedPath;
+                    ApplyPendingImagesDirectory();
+                }
+            }
+        }
+
+        private void openImagesFolderButton_Click(object sender, EventArgs e)
+        {
+            var path = string.IsNullOrWhiteSpace(imagesFolderTextBox.Text) ? FileStorage.ImagesDirectory : imagesFolderTextBox.Text.Trim();
+            Directory.CreateDirectory(path);
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+
+        private void imagesFolderTextBox_TextChanged(object sender, EventArgs e)
+        {
+            ApplyPendingImagesDirectory();
+            PersistSettings();
         }
 
         private void PreviewPictureBox_MouseClick(object sender, MouseEventArgs e)
         {
-            if (!not_found && !loading_picture) 
+            if (!not_found && !loading_picture)
             {
                 if (Control.ModifierKeys == Keys.Shift)
                 {
-                    ProcessStartInfo processStartInfo = new ProcessStartInfo(TodayUrl.GetUrl());
-                    Process.Start(processStartInfo);
+                    Process.Start(new ProcessStartInfo(controller.GetPostUrl(pictureDayDateTimePicker.Value.Date))
+                    {
+                        UseShellExecute = true
+                    });
                 }
                 else
                 {
-                    Form fullScreenFrom = new Form();
-                    PictureBox fullScreenPictureBox = new PictureBox();
+                    var fullScreenFrom = new Form();
+                    var fullScreenPictureBox = new PictureBox();
                     fullScreenPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
                     fullScreenPictureBox.Image = PreviewPictureBox.Image;
                     fullScreenPictureBox.Dock = DockStyle.Fill;
                     fullScreenFrom.Controls.Add(fullScreenPictureBox);
-                    fullScreenFrom.Icon = resources_apod.apod_icon;
+                    fullScreenFrom.Icon = ApodResources.apod_icon;
                     fullScreenFrom.WindowState = FormWindowState.Maximized;
                     fullScreenFrom.KeyPreview = true;
                     fullScreenFrom.KeyDown += new KeyEventHandler(FullScreenFrom_KeyDown);
@@ -219,8 +300,10 @@ namespace apod_wallpaper
             }
             else if (not_found && Control.ModifierKeys == Keys.Shift)
             {
-                ProcessStartInfo processStartInfo = new ProcessStartInfo(TodayUrl.GetUrl());
-                Process.Start(processStartInfo);
+                Process.Start(new ProcessStartInfo(controller.GetPostUrl(pictureDayDateTimePicker.Value.Date))
+                {
+                    UseShellExecute = true
+                });
             }
         }
 
@@ -228,7 +311,9 @@ namespace apod_wallpaper
         {
             if (e.KeyCode == Keys.Escape)
             {
-                Form.ActiveForm.Close();
+                var activeForm = Form.ActiveForm;
+                if (activeForm != null)
+                    activeForm.Close();
             }
         }
 
@@ -239,47 +324,151 @@ namespace apod_wallpaper
                 toolTip.Active = true;
                 PreviewPictureBox.Cursor = Cursors.Hand;
                 toolTip.SetToolTip(this.PreviewPictureBox,
-                                   "Click: open fullsize preview" + Environment.NewLine + "Shift+Click: open nasa post <Astronomy Picture of the Day>");
+                                   "Click: open fullsize preview" + Environment.NewLine + "Shift+Click: open NASA APOD page");
             }
             else if (!not_found && loading_picture)
             {
                 toolTip.Active = true;
                 PreviewPictureBox.Cursor = Cursors.Default;
+                toolTip.SetToolTip(this.PreviewPictureBox, "Loading may take some time");
+            }
+            else if (nonImageMedia)
+            {
+                toolTip.Active = true;
+                PreviewPictureBox.Cursor = Cursors.Hand;
                 toolTip.SetToolTip(this.PreviewPictureBox,
-                                   "Loading may take some time");
+                                   "This APOD entry is not an image." + Environment.NewLine + "Shift+Click: open NASA APOD page");
             }
             else if (not_found)
             {
                 toolTip.Active = true;
                 PreviewPictureBox.Cursor = Cursors.Hand;
-                toolTip.SetToolTip(this.PreviewPictureBox,
-                                   "Shift+Click: open nasa post <Astronomy Picture of the Day>");
+                toolTip.SetToolTip(this.PreviewPictureBox, "Shift+Click: open NASA APOD page");
             }
-            else
-            {
-                toolTip.Active = false;
-                PreviewPictureBox.Cursor = Cursors.Default;
-            }
-            
         }
 
         private void PreviewPictureBox_LoadCompleted(object sender, AsyncCompletedEventArgs e)
         {
             pictureDayDateTimePicker.Enabled = true;
-            downloadButton.Enabled = true;
+            downloadButton.Enabled = !not_found;
             loading_picture = false;
         }
 
         private void wallpaperStyleComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            configurationForm.ActiveForm.Focus();
+            var activeForm = ActiveForm;
+            if (activeForm != null)
+                activeForm.Focus();
         }
 
         private void downloadButton_MouseHover(object sender, EventArgs e)
         {
             toolTip.Active = true;
-            toolTip.SetToolTip(this.downloadButton,
-                               "Shift+Click for only download picture");
+            toolTip.SetToolTip(this.downloadButton, "Shift+Click for only download picture");
+        }
+
+        private void getApiKeyButton_Click(object sender, EventArgs e)
+        {
+            Process.Start(new ProcessStartInfo("https://api.nasa.gov/")
+            {
+                UseShellExecute = true
+            });
+        }
+
+        private WallpaperStyle GetSelectedWallpaperStyle()
+        {
+            if (InvokeRequired)
+            {
+                return (WallpaperStyle)wallpaperStyleComboBox.Invoke(new Func<WallpaperStyle>(GetSelectedWallpaperStyle));
+            }
+
+            return wallpaperStyleComboBox.SelectedItem != null
+                ? (WallpaperStyle)wallpaperStyleComboBox.SelectedItem
+                : (WallpaperStyle)currentSettings.WallpaperStyleIndex;
+        }
+
+        private void ShowUnavailableEntryState()
+        {
+            nonImageMedia = currentEntry != null && !currentEntry.HasImage;
+
+            if (InvokeRequired)
+            {
+                Invoke((MethodInvoker)ShowUnavailableEntryState);
+                return;
+            }
+
+            PreviewPictureBox.ImageLocation = null;
+            PreviewPictureBox.Image = ApodResources.image_not_found;
+            not_found = true;
+            pictureDayDateTimePicker.Enabled = true;
+            downloadButton.Enabled = false;
+            loading_picture = false;
+        }
+
+        private void ApplyPendingImagesDirectory()
+        {
+            var configuredImagesPath = imagesFolderTextBox.Text.Trim();
+            controller.UpdateSessionImagesDirectory(configuredImagesPath);
+            _ = controller.RefreshLocalImageIndexAsync();
+        }
+
+        private void settingsControl_Changed(object sender, EventArgs e)
+        {
+            PersistSettings();
+        }
+
+        private void PersistSettings()
+        {
+            if (suppressSettingsSync)
+                return;
+
+            try
+            {
+                currentSettings = new ApplicationSettingsSnapshot
+                {
+                    TrayDoubleClickAction = downloadSetCheckBox.Checked,
+                    WallpaperStyleIndex = wallpaperStyleComboBox.SelectedIndex,
+                    RefreshTime = setRefreshDateTimePicker.Value,
+                    AutoRefreshEnabled = everyTimeCheckBox.Checked,
+                    StartWithWindows = startWithWindowsCheckBox.Checked,
+                    ImagesDirectoryPath = imagesFolderTextBox.Text.Trim(),
+                    NasaApiKey = apiKeyTextBox.Text.Trim(),
+                };
+
+                controller.SaveSettings(currentSettings);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("Unable to persist settings immediately.", ex);
+            }
+        }
+
+        private void UpdatePreviewImage(string imageLocation)
+        {
+            if (InvokeRequired)
+            {
+                PreviewPictureBox.Invoke((MethodInvoker)delegate { UpdatePreviewImage(imageLocation); });
+                return;
+            }
+
+            PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+            PreviewPictureBox.Image = null;
+            PreviewPictureBox.ImageLocation = imageLocation;
+            not_found = false;
+            pictureDayDateTimePicker.Enabled = true;
+            downloadButton.Enabled = true;
+            loading_picture = false;
+        }
+
+        private async Task WarmUpCalendarMonthAsync(DateTime month, bool refreshMissingDates)
+        {
+            try
+            {
+                await controller.GetCalendarMonthStateAsync(month, refreshMissingDates).ConfigureAwait(true);
+            }
+            catch
+            {
+            }
         }
     }
 }

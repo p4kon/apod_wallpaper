@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
@@ -12,24 +12,23 @@ namespace apod_wallpaper
         Tile,
         Center,
         Span,
+        Smart,
     }
 
-    class Wallpaper
+    internal static class WallpaperNative
     {
+        private const string DesktopRegistryPath = @"Control Panel\Desktop";
+        private const string HistoryRegistryPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers";
+        private const string WallpaperStyleRegistryPath = "WallpaperStyle";
+        private const string TileWallpaperRegistryPath = "TileWallpaper";
+        private const int HistoryMaxEntries = 5;
 
-        private const string DESKTOP_REG_PATH = @"Control Panel\Desktop";
-        private const string HISTORY_REG_PATH = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers";
-        private const string WALLPAPER_STYLE_REG_PATH = "WallpaperStyle";
-        private const string TILE_WALLPAPER_REG_PATH = "TileWallpaper";
-
-        private const int HISTORY_MAX_ENTRIES = 5;
-
-        const int SPI_SETDESKWALLPAPER = 20;
-        const int SPIF_UPDATEINIFILE = 0x01;
-        const int SPIF_SENDWININICHANGE = 0x02;
+        private const int SpiSetDesktopWallpaper = 20;
+        private const int SpifUpdateIniFile = 0x01;
+        private const int SpifSendWinIniChange = 0x02;
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+        private static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
 
         private static State? _backupState;
         private static bool _historyRestored;
@@ -69,20 +68,20 @@ namespace apod_wallpaper
 
         private static Config GetWallpaperConfig()
         {
-            RegistryKey key = Registry.CurrentUser.OpenSubKey(DESKTOP_REG_PATH, true);
+            RegistryKey key = Registry.CurrentUser.OpenSubKey(DesktopRegistryPath, true);
 
             return new Config
             {
-                Style = GetRegistryValue(key, WALLPAPER_STYLE_REG_PATH, 0),
-                IsTile = GetRegistryValue(key, TILE_WALLPAPER_REG_PATH, false),
+                Style = GetRegistryValue(key, WallpaperStyleRegistryPath, 0),
+                IsTile = GetRegistryValue(key, TileWallpaperRegistryPath, false),
             };
         }
 
         private static void SetWallpaperConfig(Config value)
         {
-            RegistryKey key = Registry.CurrentUser.OpenSubKey(DESKTOP_REG_PATH, true);
-            SetRegistryValue(key, WALLPAPER_STYLE_REG_PATH, value.Style);
-            SetRegistryValue(key, TILE_WALLPAPER_REG_PATH, value.IsTile);
+            RegistryKey key = Registry.CurrentUser.OpenSubKey(DesktopRegistryPath, true);
+            SetRegistryValue(key, WallpaperStyleRegistryPath, value.Style);
+            SetRegistryValue(key, TileWallpaperRegistryPath, value.IsTile);
         }
 
         private static void SetStyle(WallpaperStyle style)
@@ -104,8 +103,11 @@ namespace apod_wallpaper
                 case WallpaperStyle.Center:
                     SetWallpaperConfig(new Config { Style = 0, IsTile = false });
                     break;
-                case WallpaperStyle.Span: // Windows 8 or newer only
+                case WallpaperStyle.Span:
                     SetWallpaperConfig(new Config { Style = 22, IsTile = false });
+                    break;
+                case WallpaperStyle.Smart:
+                    SetWallpaperConfig(new Config { Style = 6, IsTile = false });
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(style));
@@ -114,33 +116,36 @@ namespace apod_wallpaper
 
         private static void ChangeWallpaper(string filename)
         {
-            SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, filename, SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE);
+            SystemParametersInfo(SpiSetDesktopWallpaper, 0, filename, SpifUpdateIniFile | SpifSendWinIniChange);
         }
 
         private static void RestoreHistory()
         {
-            if (_historyRestored) return;
+            if (_historyRestored)
+                return;
 
             if (!_backupState.HasValue)
-                throw new Exception("You must call BackupState() before.");
+                throw new InvalidOperationException("You must call BackupState() before.");
 
             var backupState = _backupState.Value;
 
-            using (var key = Registry.CurrentUser.OpenSubKey(HISTORY_REG_PATH, true))
+            using (var key = Registry.CurrentUser.OpenSubKey(HistoryRegistryPath, true))
             {
-                for (var i = 0; i < HISTORY_MAX_ENTRIES; i++)
+                for (var i = 0; i < HistoryMaxEntries; i++)
+                {
                     if (backupState.History[i] != null)
                         key.SetValue($"BackgroundHistoryPath{i}", backupState.History[i], RegistryValueKind.String);
+                }
             }
 
             _historyRestored = true;
         }
 
-        public static void BackupState()
+        private static void BackupState()
         {
-            var history = new string[HISTORY_MAX_ENTRIES];
+            var history = new string[HistoryMaxEntries];
 
-            using (var key = Registry.CurrentUser.OpenSubKey(HISTORY_REG_PATH, true))
+            using (var key = Registry.CurrentUser.OpenSubKey(HistoryRegistryPath, true))
             {
                 for (var i = 0; i < history.Length; i++)
                     history[i] = (string)key.GetValue($"BackgroundHistoryPath{i}");
@@ -156,56 +161,17 @@ namespace apod_wallpaper
             _historyRestored = false;
         }
 
-        /// <summary>
-        /// Restores the state (style, wallpaper and history) before any Set() method.
-        /// </summary>
-        public static void RestoreState()
-        {
-            if (!_backupState.HasValue)
-                throw new Exception("You must call BackupState() before.");
-
-            SetWallpaperConfig(_backupState.Value.Config);
-            ChangeWallpaper(_backupState.Value.Wallpaper);
-            RestoreHistory();
-
-            _backupState = null;
-        }
-
-        /// <summary>
-        /// Sets the wallpaper without changing its style.
-        /// </summary>
-        public static void Set(string filename)
-        {
-            BackupState();
-            ChangeWallpaper(filename);
-        }
-
-        /// <summary>
-        /// Sets the wallpaper with the given style.
-        /// </summary>
-        public static void Set(string filename, WallpaperStyle style)
+        private static void Set(string filename, WallpaperStyle style)
         {
             BackupState();
             SetStyle(style);
             ChangeWallpaper(filename);
         }
 
-        /// <summary>
-        /// Sets the wallpaper without changing its style nor the history in Windows settings.
-        /// </summary>
-        public static void SilentSet(string filename)
-        {
-            Set(filename);
-            RestoreHistory();
-        }
-
-        /// <summary>
-        /// Sets the wallpaper with the given style without changing the history in Windows settings.
-        /// </summary>
         public static void SilentSet(string filename, WallpaperStyle style)
         {
             Set(filename, style);
             RestoreHistory();
-        }   
+        }
     }
 }

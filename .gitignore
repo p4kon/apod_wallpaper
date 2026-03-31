@@ -1,0 +1,45 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.rsuser
+*.VC.db
+
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+AnyCPU/
+TestResults/
+
+# Publish artifacts
+app.publish/
+publish/
+*.publish.xml
+
+# Runtime-generated application data
+cache/
+images/
+logs/
+apod_wallpaper/cache/
+apod_wallpaper/images/
+apod_wallpaper/logs/
+apod_wallpaper/bin/
+apod_wallpaper/obj/
+apod_wallpaper.Core/bin/
+apod_wallpaper.Core/obj/
+
+# Certificates and local secrets
+*.pfx
+*.snk
+
+# Misc
+*.log
+*.tmp
+*.temp
+Thumbs.db
+Desktop.ini
