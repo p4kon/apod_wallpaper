@@ -1,6 +1,0 @@
-C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper.Core\bin\Debug\apod_wallpaper.Core.dll
-C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper.Core\bin\Debug\apod_wallpaper.Core.pdb
-C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper.Core\obj\Debug\apod_wallpaper.Core.csproj.AssemblyReference.cache
-C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper.Core\obj\Debug\apod_wallpaper.Core.csproj.CoreCompileInputs.cache
-C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper.Core\obj\Debug\apod_wallpaper.Core.dll
-C:\Users\p4kon\Documents\GitHub\apod_wallpaper\apod_wallpaper.Core\obj\Debug\apod_wallpaper.Core.pdb
