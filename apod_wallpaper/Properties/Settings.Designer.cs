@@ -19,7 +19,7 @@ namespace apod_wallpaper.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
         public bool TrayDoubleClickAction {
             get {
                 return ((bool)(this["TrayDoubleClickAction"]));
@@ -38,18 +38,6 @@ namespace apod_wallpaper.Properties {
             }
             set {
                 this["StyleComboBox"] = value;
-            }
-        }
-        
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("01/01/2021 03:00:00")]
-        public global::System.DateTime TimeRefresh {
-            get {
-                return ((global::System.DateTime)(this["TimeRefresh"]));
-            }
-            set {
-                this["TimeRefresh"] = value;
             }
         }
         
@@ -98,6 +86,18 @@ namespace apod_wallpaper.Properties {
             }
             set {
                 this["ImagesDirectoryPath"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string LastAutoRefreshRunDate {
+            get {
+                return ((string)(this["LastAutoRefreshRunDate"]));
+            }
+            set {
+                this["LastAutoRefreshRunDate"] = value;
             }
         }
     }

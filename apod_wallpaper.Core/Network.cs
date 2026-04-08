@@ -201,7 +201,7 @@ namespace apod_wallpaper
                 var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
                 AppLogger.Web("transport=httpclient kind=text stage=response status=" + (int)response.StatusCode + " url=" + url);
                 response.EnsureSuccessStatusCode();
-                return content;
+                return NormalizeTextContent(content);
             }
         }
 
@@ -212,7 +212,7 @@ namespace apod_wallpaper
                 var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 AppLogger.Web("transport=httpclient kind=text stage=response status=" + (int)response.StatusCode + " url=" + url);
                 response.EnsureSuccessStatusCode();
-                return content;
+                return NormalizeTextContent(content);
             }
         }
 
@@ -234,7 +234,7 @@ namespace apod_wallpaper
                 using (var reader = new StreamReader(stream ?? Stream.Null, Encoding.UTF8))
                 {
                     AppLogger.Web("transport=webrequest kind=text stage=success status=" + (int)response.StatusCode + " url=" + url);
-                    return reader.ReadToEnd();
+                    return NormalizeTextContent(reader.ReadToEnd());
                 }
             }
             catch (WebException ex) when (ex.Response is HttpWebResponse response)
@@ -242,6 +242,20 @@ namespace apod_wallpaper
                 AppLogger.Warn("HttpWebRequest fallback returned HTTP " + (int)response.StatusCode + " for text url=" + url + ".", ex);
                 return null;
             }
+        }
+
+        private static string NormalizeTextContent(string content)
+        {
+            if (string.IsNullOrEmpty(content))
+                return content;
+
+            var normalized = content.Replace("\0", string.Empty);
+            if (!ReferenceEquals(normalized, content) && normalized.Length > 0)
+            {
+                AppLogger.Web("transport=text stage=normalize removed_nulls=true originalLength=" + content.Length + " normalizedLength=" + normalized.Length);
+            }
+
+            return normalized.TrimStart('\uFEFF', '\uFFFE');
         }
 
         private static Bitmap DownloadBitmapWithWebRequest(string url)

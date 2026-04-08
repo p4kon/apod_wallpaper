@@ -7,12 +7,20 @@ namespace apod_wallpaper
 {
     internal static class ApodPageImageExtractor
     {
+        private static readonly Regex AnchorHrefRegex = new Regex(
+            "<a\\b[^>]*href\\s*=\\s*[\"'](?<href>[^\"']+)[\"'][^>]*>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
         private static readonly Regex AnchorImageRegex = new Regex(
             "<a\\b[^>]*href\\s*=\\s*[\"'](?<href>[^\"']+)[\"'][^>]*>\\s*<img\\b[^>]*src\\s*=\\s*[\"'](?<src>[^\"']+)[\"'][^>]*>",
             RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
         private static readonly Regex ImageRegex = new Regex(
             "<img\\b[^>]*src\\s*=\\s*[\"'](?<src>[^\"']+)[\"'][^>]*>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+        private static readonly Regex ImagePathRegex = new Regex(
+            "(?<url>(?:https?:)?//[^\\s\"'<>]+\\.(?:jpg|jpeg|png|gif|bmp|webp|tif|tiff)|(?:\\.?\\.?/)?image/[^\\s\"'<>]+\\.(?:jpg|jpeg|png|gif|bmp|webp|tif|tiff))",
             RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
         public static bool TryExtract(string html, string pageUrl, out string previewUrl, out string imageUrl)
@@ -33,10 +41,22 @@ namespace apod_wallpaper
                 candidates.Add(new Candidate(src, href));
             }
 
+            foreach (Match match in AnchorHrefRegex.Matches(html))
+            {
+                var href = ToAbsoluteUrl(baseUri, match.Groups["href"].Value);
+                candidates.Add(new Candidate(null, href));
+            }
+
             foreach (Match match in ImageRegex.Matches(html))
             {
                 var src = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
                 candidates.Add(new Candidate(src, src));
+            }
+
+            foreach (Match match in ImagePathRegex.Matches(html))
+            {
+                var imagePath = ToAbsoluteUrl(baseUri, match.Groups["url"].Value);
+                candidates.Add(new Candidate(imagePath, imagePath));
             }
 
             var bestCandidate = candidates
@@ -47,8 +67,8 @@ namespace apod_wallpaper
             if (bestCandidate == null)
                 return false;
 
-            previewUrl = bestCandidate.PreviewUrl;
-            imageUrl = bestCandidate.ImageUrl;
+            previewUrl = bestCandidate.PreviewUrl ?? bestCandidate.ImageUrl;
+            imageUrl = bestCandidate.ImageUrl ?? bestCandidate.PreviewUrl;
             return !string.IsNullOrWhiteSpace(previewUrl) || !string.IsNullOrWhiteSpace(imageUrl);
         }
 
@@ -122,6 +142,10 @@ namespace apod_wallpaper
                         score += 30;
                     if (ContainsApodImagePath(PreviewUrl))
                         score += 20;
+                    if (LooksLikeOriginalFile(ImageUrl))
+                        score += 25;
+                    if (LooksLikeOriginalFile(PreviewUrl))
+                        score += 10;
 
                     if (!string.IsNullOrWhiteSpace(ImageUrl) &&
                         !string.IsNullOrWhiteSpace(PreviewUrl) &&
@@ -138,6 +162,14 @@ namespace apod_wallpaper
             {
                 return !string.IsNullOrWhiteSpace(url) &&
                     url.IndexOf("/image/", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            private static bool LooksLikeOriginalFile(string url)
+            {
+                return !string.IsNullOrWhiteSpace(url) &&
+                    (url.IndexOf("original", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     url.IndexOf("_full", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     url.IndexOf("_large", StringComparison.OrdinalIgnoreCase) >= 0);
             }
         }
     }

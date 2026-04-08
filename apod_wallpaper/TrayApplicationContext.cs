@@ -28,19 +28,28 @@ namespace apod_wallpaper
 
         void TrayDoubleClickAction(object sender, EventArgs e)
         {
+            if (Control.ModifierKeys == Keys.Shift)
+            {
+                ApplyLatestFromTray();
+                return;
+            }
+
             if (!controller.ShouldApplyOnTrayDoubleClick())
             {
                 ShowConfig(sender, e);
                 return;
             }
 
+            ApplyLatestFromTray();
+        }
+
+        private void ApplyLatestFromTray()
+        {
             Thread thread = new Thread(() =>
             {
                 var workflowResult = controller.ApplyLatestPublished(controller.GetSelectedWallpaperStyle());
                 if (!workflowResult.IsSuccess)
-                {
                     ShowTrayError(workflowResult.Message);
-                }
             });
             thread.IsBackground = true;
             thread.Start();

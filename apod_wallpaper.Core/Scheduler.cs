@@ -6,16 +6,13 @@ namespace apod_wallpaper
     public sealed class Scheduler : IDisposable
     {
         private readonly object _syncRoot = new object();
+        private static readonly TimeSpan DefaultPollingInterval = TimeSpan.FromMinutes(5);
         private Timer _timer;
         private Action _scheduledTask;
-        private TimeSpan _scheduledTime;
-
-        public int EveryHour { get; set; }
-        public int EveryMinute { get; set; }
-        public int EverySecond { get; set; }
 
         public bool IsRunning { get; private set; }
         public DateTime? NextRun { get; private set; }
+        public TimeSpan PollingInterval { get; set; } = DefaultPollingInterval;
 
         public void Start(Action scheduledTask)
         {
@@ -25,9 +22,8 @@ namespace apod_wallpaper
             lock (_syncRoot)
             {
                 _scheduledTask = scheduledTask;
-                _scheduledTime = new TimeSpan(EveryHour, EveryMinute, EverySecond);
                 IsRunning = true;
-                ScheduleNextRun();
+                SchedulePolling();
             }
         }
 
@@ -35,9 +31,8 @@ namespace apod_wallpaper
         {
             lock (_syncRoot)
             {
-                _scheduledTime = new TimeSpan(EveryHour, EveryMinute, EverySecond);
                 if (IsRunning)
-                    ScheduleNextRun();
+                    SchedulePolling();
             }
         }
 
@@ -56,23 +51,18 @@ namespace apod_wallpaper
             Stop();
         }
 
-        private void ScheduleNextRun()
+        private void SchedulePolling()
         {
-            var now = DateTime.Now;
-            var nextRun = now.Date.Add(_scheduledTime);
-            if (nextRun <= now)
-                nextRun = nextRun.AddDays(1);
-
-            NextRun = nextRun;
-
-            var dueTime = nextRun - now;
+            var dueTime = TimeSpan.Zero;
+            var period = PollingInterval <= TimeSpan.Zero ? DefaultPollingInterval : PollingInterval;
+            NextRun = DateTime.Now.Add(period);
             if (_timer == null)
             {
-                _timer = new Timer(RunScheduledTask, null, dueTime, Timeout.InfiniteTimeSpan);
+                _timer = new Timer(RunScheduledTask, null, dueTime, period);
             }
             else
             {
-                _timer.Change(dueTime, Timeout.InfiniteTimeSpan);
+                _timer.Change(dueTime, period);
             }
         }
 
@@ -97,7 +87,7 @@ namespace apod_wallpaper
                 lock (_syncRoot)
                 {
                     if (IsRunning)
-                        ScheduleNextRun();
+                        NextRun = DateTime.Now.Add(PollingInterval <= TimeSpan.Zero ? DefaultPollingInterval : PollingInterval);
                 }
             }
         }

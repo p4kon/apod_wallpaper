@@ -3,13 +3,10 @@
   <Profiles />
   <Settings>
     <Setting Name="TrayDoubleClickAction" Type="System.Boolean" Scope="User">
-      <Value Profile="(Default)">True</Value>
+      <Value Profile="(Default)">False</Value>
     </Setting>
     <Setting Name="StyleComboBox" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">1</Value>
-    </Setting>
-    <Setting Name="TimeRefresh" Type="System.DateTime" Scope="User">
-      <Value Profile="(Default)">01/01/2021 03:00:00</Value>
     </Setting>
     <Setting Name="NasaApiKey" Type="System.String" Scope="User">
       <Value Profile="(Default)">DEMO_KEY</Value>
@@ -21,6 +18,9 @@
       <Value Profile="(Default)">True</Value>
     </Setting>
     <Setting Name="ImagesDirectoryPath" Type="System.String" Scope="User">
+      <Value Profile="(Default)"></Value>
+    </Setting>
+    <Setting Name="LastAutoRefreshRunDate" Type="System.String" Scope="User">
       <Value Profile="(Default)"></Value>
     </Setting>
   </Settings>

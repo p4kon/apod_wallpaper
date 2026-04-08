@@ -6,11 +6,11 @@ namespace apod_wallpaper
     {
         public bool TrayDoubleClickAction { get; set; }
         public int WallpaperStyleIndex { get; set; }
-        public DateTime RefreshTime { get; set; }
         public bool AutoRefreshEnabled { get; set; }
         public bool StartWithWindows { get; set; }
         public string NasaApiKey { get; set; }
         public string ImagesDirectoryPath { get; set; }
+        public string LastAutoRefreshRunDate { get; set; }
 
         public ApplicationSettingsSnapshot Clone()
         {
@@ -18,11 +18,11 @@ namespace apod_wallpaper
             {
                 TrayDoubleClickAction = TrayDoubleClickAction,
                 WallpaperStyleIndex = WallpaperStyleIndex,
-                RefreshTime = RefreshTime,
                 AutoRefreshEnabled = AutoRefreshEnabled,
                 StartWithWindows = StartWithWindows,
                 NasaApiKey = NasaApiKey,
                 ImagesDirectoryPath = ImagesDirectoryPath,
+                LastAutoRefreshRunDate = LastAutoRefreshRunDate,
             };
         }
     }

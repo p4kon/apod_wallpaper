@@ -11,6 +11,7 @@ namespace apod_wallpaper
 {
     internal partial class ConfigurationForm : Form
     {
+        private const string NasaApiKeyUrl = "https://api.nasa.gov/";
         private readonly ApplicationController controller;
         private bool suppressSettingsSync = true;
         private bool not_found = false;
@@ -34,8 +35,8 @@ namespace apod_wallpaper
             startWithWindowsCheckBox.CheckedChanged += settingsControl_Changed;
             everyTimeCheckBox.CheckedChanged += settingsControl_Changed;
             wallpaperStyleComboBox.SelectedIndexChanged += settingsControl_Changed;
-            setRefreshDateTimePicker.ValueChanged += settingsControl_Changed;
             apiKeyTextBox.TextChanged += settingsControl_Changed;
+            ConfigureToolTips();
         }
 
         private async void LoadSettings(object sender, EventArgs e)
@@ -44,15 +45,14 @@ namespace apod_wallpaper
             currentSettings = controller.GetSettings();
             downloadSetCheckBox.Checked = currentSettings.TrayDoubleClickAction;
             wallpaperStyleComboBox.SelectedIndex = currentSettings.WallpaperStyleIndex;
-            setRefreshDateTimePicker.Value = currentSettings.RefreshTime;
             everyTimeCheckBox.Checked = currentSettings.AutoRefreshEnabled;
             startWithWindowsCheckBox.Checked = currentSettings.StartWithWindows;
             apiKeyTextBox.Text = currentSettings.NasaApiKey;
             imagesFolderTextBox.Text = FileStorage.ImagesDirectory;
             controller.UpdateSessionImagesDirectory(imagesFolderTextBox.Text);
-            await controller.RefreshLocalImageIndexAsync().ConfigureAwait(true);
             suppressSettingsSync = false;
 
+            await controller.RefreshLocalImageIndexAsync().ConfigureAwait(true);
             await WarmUpCalendarMonthAsync(pictureDayDateTimePicker.Value.Date, true);
         }
 
@@ -161,35 +161,11 @@ namespace apod_wallpaper
                 PreviewPictureBox.Image = ApodResources.loading_image_progress;
                 loading_picture = true;
 
-                var monthState = await controller.GetCalendarMonthStateAsync(selectedDate, false).ConfigureAwait(true);
-                if (requestVersion != previewRequestVersion)
-                    return;
-
-                ApodCalendarDayState dayState;
-                if (monthState.TryGetDay(selectedDate, out dayState) && dayState.IsKnown && !dayState.IsSelectable)
-                {
-                    currentEntry = null;
-                    ShowUnavailableEntryState();
-                    return;
-                }
-
                 var workflowResult = await controller.LoadDayAsync(selectedDate).ConfigureAwait(true);
                 if (requestVersion != previewRequestVersion)
                     return;
 
                 currentEntry = workflowResult.Entry;
-
-                if (workflowResult.Status == ApodWorkflowStatus.Unavailable &&
-                    workflowResult.LatestPublishedDate.HasValue &&
-                    selectedDate > workflowResult.LatestPublishedDate.Value)
-                {
-                    pictureDayDateTimePicker.Value = workflowResult.LatestPublishedDate.Value;
-                    MessageBox.Show(workflowResult.Message,
-                                    "Date selection error",
-                                    MessageBoxButtons.OK,
-                                    MessageBoxIcon.Error);
-                    return;
-                }
 
                 if (!workflowResult.IsSuccess || string.IsNullOrWhiteSpace(workflowResult.PreviewLocation))
                 {
@@ -207,11 +183,6 @@ namespace apod_wallpaper
 
                 ShowUnavailableEntryState();
             }
-        }
-
-        private void SetRefreshDateTimePicker_ValueChanged(Object sender, EventArgs e)
-        {
-            PersistSettings();
         }
 
         private void everyTimeCheckBox_CheckedChanged(object sender, EventArgs e)
@@ -369,10 +340,35 @@ namespace apod_wallpaper
 
         private void getApiKeyButton_Click(object sender, EventArgs e)
         {
-            Process.Start(new ProcessStartInfo("https://api.nasa.gov/")
+            try
             {
-                UseShellExecute = true
-            });
+                Clipboard.SetText(NasaApiKeyUrl);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(NasaApiKeyUrl)
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("Unable to open NASA API key page.", ex);
+            }
+
+            MessageBox.Show(
+                "NASA API key page link has been copied to the clipboard." + Environment.NewLine +
+                "1. Open the page in your browser (VPN may be required in some regions)." + Environment.NewLine +
+                "2. Enter your email and generate a free key." + Environment.NewLine +
+                "3. Paste the key into the field above." + Environment.NewLine +
+                "DEMO_KEY is fine for testing, but your own key gives much higher limits.",
+                "NASA API key",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
         }
 
         private WallpaperStyle GetSelectedWallpaperStyle()
@@ -398,6 +394,7 @@ namespace apod_wallpaper
             }
 
             PreviewPictureBox.ImageLocation = null;
+            PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
             PreviewPictureBox.Image = ApodResources.image_not_found;
             not_found = true;
             pictureDayDateTimePicker.Enabled = true;
@@ -428,11 +425,11 @@ namespace apod_wallpaper
                 {
                     TrayDoubleClickAction = downloadSetCheckBox.Checked,
                     WallpaperStyleIndex = wallpaperStyleComboBox.SelectedIndex,
-                    RefreshTime = setRefreshDateTimePicker.Value,
                     AutoRefreshEnabled = everyTimeCheckBox.Checked,
                     StartWithWindows = startWithWindowsCheckBox.Checked,
                     ImagesDirectoryPath = imagesFolderTextBox.Text.Trim(),
                     NasaApiKey = apiKeyTextBox.Text.Trim(),
+                    LastAutoRefreshRunDate = currentSettings != null ? currentSettings.LastAutoRefreshRunDate : string.Empty,
                 };
 
                 controller.SaveSettings(currentSettings);
@@ -469,6 +466,21 @@ namespace apod_wallpaper
             catch
             {
             }
+        }
+
+        private void ConfigureToolTips()
+        {
+            toolTip.SetToolTip(downloadSetCheckBox, "When enabled, double-clicking the tray icon applies the latest available APOD. When disabled, double-click opens this window. Shift+DoubleClick on the tray icon always applies the latest APOD.");
+            toolTip.SetToolTip(startWithWindowsCheckBox, "Start APOD Wallpaper automatically when you sign in to Windows.");
+            toolTip.SetToolTip(pictureDayDateTimePicker, "Choose the APOD date to preview, download or apply as wallpaper.");
+            toolTip.SetToolTip(downloadButton, "Download the selected APOD image and apply it as wallpaper. Hold Shift to only download the image.");
+            toolTip.SetToolTip(everyTimeCheckBox, "Check automatically for today's APOD. DEMO_KEY checks about once per hour; a personal NASA API key checks about every 5 minutes until today's image becomes available.");
+            toolTip.SetToolTip(wallpaperStyleComboBox, "Choose how the wallpaper should be placed on your screen. Smart mode adapts vertical images automatically.");
+            toolTip.SetToolTip(apiKeyTextBox, "Paste your personal NASA APOD API key here. Changes are saved automatically.");
+            toolTip.SetToolTip(getApiKeyButton, "Open NASA API key page and copy the link. VPN may be needed in some regions.");
+            toolTip.SetToolTip(imagesFolderTextBox, "Folder where downloaded APOD images are stored. Changes are saved automatically.");
+            toolTip.SetToolTip(browseImagesFolderButton, "Choose another folder for downloaded APOD images.");
+            toolTip.SetToolTip(openImagesFolderButton, "Open the folder where APOD images are currently stored.");
         }
     }
 }

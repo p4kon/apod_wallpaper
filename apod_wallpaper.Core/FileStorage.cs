@@ -27,7 +27,7 @@ namespace apod_wallpaper
                 if (!string.IsNullOrWhiteSpace(customPath))
                     return customPath;
 
-                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "images");
+                return Path.Combine(ApplicationDataDirectory, "images");
             }
         }
 
@@ -35,7 +35,7 @@ namespace apod_wallpaper
         {
             get
             {
-                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cache");
+                return Path.Combine(ApplicationDataDirectory, "cache");
             }
         }
 

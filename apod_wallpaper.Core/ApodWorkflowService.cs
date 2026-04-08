@@ -13,17 +13,6 @@ namespace apod_wallpaper
             return Execute(date, () =>
             {
                 var latestPublishedDate = _wallpaperService.GetLatestPublishedDate();
-                if (date.Date > latestPublishedDate)
-                {
-                    return new ApodWorkflowResult
-                    {
-                        Status = ApodWorkflowStatus.Unavailable,
-                        RequestedDate = date.Date,
-                        LatestPublishedDate = latestPublishedDate,
-                        Message = "NASA has not published APOD for this date yet.",
-                    };
-                }
-
                 var preview = _wallpaperService.GetPreviewByDate(date, forceRefresh);
                 if (preview.Entry == null || !preview.Entry.HasImage || string.IsNullOrWhiteSpace(preview.PreviewLocation))
                 {
@@ -59,17 +48,6 @@ namespace apod_wallpaper
             return ExecuteAsync(date, async () =>
             {
                 var latestPublishedDate = await _wallpaperService.GetLatestPublishedDateAsync().ConfigureAwait(false);
-                if (date.Date > latestPublishedDate)
-                {
-                    return new ApodWorkflowResult
-                    {
-                        Status = ApodWorkflowStatus.Unavailable,
-                        RequestedDate = date.Date,
-                        LatestPublishedDate = latestPublishedDate,
-                        Message = "NASA has not published APOD for this date yet.",
-                    };
-                }
-
                 var preview = await _wallpaperService.GetPreviewByDateAsync(date, forceRefresh).ConfigureAwait(false);
                 if (preview.Entry == null || !preview.Entry.HasImage || string.IsNullOrWhiteSpace(preview.PreviewLocation))
                 {

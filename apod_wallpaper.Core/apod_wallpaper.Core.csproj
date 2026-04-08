@@ -42,84 +42,32 @@
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="..\apod_wallpaper\ApodCalendarDayState.cs">
-      <Link>ApodCalendarDayState.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodCalendarMonthState.cs">
-      <Link>ApodCalendarMonthState.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodCalendarStateService.cs">
-      <Link>ApodCalendarStateService.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodClient.cs">
-      <Link>ApodClient.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodCachedEntry.cs">
-      <Link>ApodCachedEntry.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodDataSource.cs">
-      <Link>ApodDataSource.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodDayAvailability.cs">
-      <Link>ApodDayAvailability.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodApplyResult.cs">
-      <Link>ApodApplyResult.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodDownloadResult.cs">
-      <Link>ApodDownloadResult.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodEntry.cs">
-      <Link>ApodEntry.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodErrorTranslator.cs">
-      <Link>ApodErrorTranslator.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodMetadataCache.cs">
-      <Link>ApodMetadataCache.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodPageImageExtractor.cs">
-      <Link>ApodPageImageExtractor.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodPreviewResult.cs">
-      <Link>ApodPreviewResult.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodWorkflowResult.cs">
-      <Link>ApodWorkflowResult.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodWorkflowService.cs">
-      <Link>ApodWorkflowService.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodWorkflowStatus.cs">
-      <Link>ApodWorkflowStatus.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodWallpaperService.cs">
-      <Link>ApodWallpaperService.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\AppLogger.cs">
-      <Link>AppLogger.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\FileStorage.cs">
-      <Link>FileStorage.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\DownloadedImageFile.cs">
-      <Link>DownloadedImageFile.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\Network.cs">
-      <Link>Network.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\Scheduler.cs">
-      <Link>Scheduler.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\ApodPageUrl.cs">
-      <Link>ApodPageUrl.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\Wallpaper.cs">
-      <Link>Wallpaper.cs</Link>
-    </Compile>
-    <Compile Include="..\apod_wallpaper\WallpaperService.cs">
-      <Link>WallpaperService.cs</Link>
-    </Compile>
+    <Compile Include="ApodCalendarDayState.cs" />
+    <Compile Include="ApodCalendarMonthState.cs" />
+    <Compile Include="ApodCalendarStateService.cs" />
+    <Compile Include="ApodClient.cs" />
+    <Compile Include="ApodCachedEntry.cs" />
+    <Compile Include="ApodDataSource.cs" />
+    <Compile Include="ApodDayAvailability.cs" />
+    <Compile Include="ApodApplyResult.cs" />
+    <Compile Include="ApodDownloadResult.cs" />
+    <Compile Include="ApodEntry.cs" />
+    <Compile Include="ApodErrorTranslator.cs" />
+    <Compile Include="ApodMetadataCache.cs" />
+    <Compile Include="ApodPageImageExtractor.cs" />
+    <Compile Include="ApodPreviewResult.cs" />
+    <Compile Include="ApodWorkflowResult.cs" />
+    <Compile Include="ApodWorkflowService.cs" />
+    <Compile Include="ApodWorkflowStatus.cs" />
+    <Compile Include="ApodWallpaperService.cs" />
+    <Compile Include="AppLogger.cs" />
+    <Compile Include="FileStorage.cs" />
+    <Compile Include="DownloadedImageFile.cs" />
+    <Compile Include="Network.cs" />
+    <Compile Include="Scheduler.cs" />
+    <Compile Include="ApodPageUrl.cs" />
+    <Compile Include="Wallpaper.cs" />
+    <Compile Include="WallpaperService.cs" />
     <Compile Include="SmartWallpaperComposer.cs" />
     <Compile Include="AppRuntimeSettings.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
