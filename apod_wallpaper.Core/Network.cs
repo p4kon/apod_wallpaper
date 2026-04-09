@@ -15,6 +15,7 @@ namespace apod_wallpaper
         private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
         private const string UserAgent = "apod_wallpaper/1.0";
+        private static readonly Lazy<HttpClient> SharedHttpClient = new Lazy<HttpClient>(CreateHttpClient, true);
 
         static Network()
         {
@@ -29,13 +30,7 @@ namespace apod_wallpaper
             return ExecuteWithRetry(
                 "text",
                 url,
-                () =>
-                {
-                    using (var client = CreateHttpClient())
-                    {
-                        return DownloadStringWithHttpClient(client, url);
-                    }
-                },
+                () => DownloadStringWithHttpClient(SharedHttpClient.Value, url),
                 DownloadStringWithWebRequest);
         }
 
@@ -44,13 +39,7 @@ namespace apod_wallpaper
             return ExecuteWithRetryAsync(
                 "text",
                 url,
-                async () =>
-                {
-                    using (var client = CreateHttpClient())
-                    {
-                        return await DownloadStringWithHttpClientAsync(client, url).ConfigureAwait(false);
-                    }
-                },
+                async () => await DownloadStringWithHttpClientAsync(SharedHttpClient.Value, url).ConfigureAwait(false),
                 async requestUrl => await Task.Run(() => DownloadStringWithWebRequest(requestUrl)).ConfigureAwait(false));
         }
 
@@ -59,18 +48,7 @@ namespace apod_wallpaper
             return ExecuteWithRetry(
                 "bitmap",
                 url,
-                () =>
-                {
-                    using (var client = CreateHttpClient())
-                    using (var response = client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult())
-                    using (var stream = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult())
-                    using (var bitmap = new Bitmap(stream))
-                    {
-                        response.EnsureSuccessStatusCode();
-                        AppLogger.Web("transport=httpclient kind=bitmap stage=success status=" + (int)response.StatusCode + " url=" + url);
-                        return new Bitmap(bitmap);
-                    }
-                },
+                () => DownloadBitmapWithHttpClient(SharedHttpClient.Value, url),
                 DownloadBitmapWithWebRequest);
         }
 
@@ -79,18 +57,7 @@ namespace apod_wallpaper
             return ExecuteWithRetryAsync(
                 "bitmap",
                 url,
-                async () =>
-                {
-                    using (var client = CreateHttpClient())
-                    using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
-                    using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
-                    using (var bitmap = new Bitmap(stream))
-                    {
-                        response.EnsureSuccessStatusCode();
-                        AppLogger.Web("transport=httpclient kind=bitmap stage=success status=" + (int)response.StatusCode + " url=" + url);
-                        return new Bitmap(bitmap);
-                    }
-                },
+                async () => await DownloadBitmapWithHttpClientAsync(SharedHttpClient.Value, url).ConfigureAwait(false),
                 async requestUrl => await Task.Run(() => DownloadBitmapWithWebRequest(requestUrl)).ConfigureAwait(false));
         }
 
@@ -109,6 +76,9 @@ namespace apod_wallpaper
                 {
                     lastException = ex;
                     AppLogger.Warn("Network primary attempt " + attempt + " failed for kind=" + kind + " url=" + url + ".", ex);
+
+                    if (!ShouldRetry(ex, attempt))
+                        break;
 
                     if (attempt < 3)
                         System.Threading.Thread.Sleep(RetryDelay);
@@ -142,6 +112,9 @@ namespace apod_wallpaper
                 {
                     lastException = ex;
                     AppLogger.Warn("Network primary attempt " + attempt + " failed for kind=" + kind + " url=" + url + ".", ex);
+
+                    if (!ShouldRetry(ex, attempt))
+                        break;
 
                     if (attempt < 3)
                         await Task.Delay(RetryDelay).ConfigureAwait(false);
@@ -200,7 +173,7 @@ namespace apod_wallpaper
             {
                 var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
                 AppLogger.Web("transport=httpclient kind=text stage=response status=" + (int)response.StatusCode + " url=" + url);
-                response.EnsureSuccessStatusCode();
+                EnsureSuccessfulStatusCode(response.StatusCode, url);
                 return NormalizeTextContent(content);
             }
         }
@@ -211,8 +184,38 @@ namespace apod_wallpaper
             {
                 var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 AppLogger.Web("transport=httpclient kind=text stage=response status=" + (int)response.StatusCode + " url=" + url);
-                response.EnsureSuccessStatusCode();
+                EnsureSuccessfulStatusCode(response.StatusCode, url);
                 return NormalizeTextContent(content);
+            }
+        }
+
+        private static Bitmap DownloadBitmapWithHttpClient(HttpClient client, string url)
+        {
+            using (var response = client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult())
+            {
+                AppLogger.Web("transport=httpclient kind=bitmap stage=response status=" + (int)response.StatusCode + " url=" + url);
+                EnsureSuccessfulStatusCode(response.StatusCode, url);
+
+                using (var stream = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult())
+                using (var bitmap = new Bitmap(stream))
+                {
+                    return new Bitmap(bitmap);
+                }
+            }
+        }
+
+        private static async Task<Bitmap> DownloadBitmapWithHttpClientAsync(HttpClient client, string url)
+        {
+            using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
+            {
+                AppLogger.Web("transport=httpclient kind=bitmap stage=response status=" + (int)response.StatusCode + " url=" + url);
+                EnsureSuccessfulStatusCode(response.StatusCode, url);
+
+                using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                using (var bitmap = new Bitmap(stream))
+                {
+                    return new Bitmap(bitmap);
+                }
             }
         }
 
@@ -258,6 +261,44 @@ namespace apod_wallpaper
             return normalized.TrimStart('\uFEFF', '\uFFFE');
         }
 
+        private static void EnsureSuccessfulStatusCode(HttpStatusCode statusCode, string url)
+        {
+            var numericStatusCode = (int)statusCode;
+            if (numericStatusCode >= 200 && numericStatusCode <= 299)
+                return;
+
+            throw new NetworkHttpStatusException(numericStatusCode, url);
+        }
+
+        private static bool ShouldRetry(Exception exception, int attempt)
+        {
+            if (attempt >= 3)
+                return false;
+
+            var statusException = exception as NetworkHttpStatusException;
+            if (statusException != null)
+            {
+                switch (statusException.StatusCode)
+                {
+                    case 408:
+                    case 425:
+                    case 429:
+                    case 500:
+                    case 502:
+                    case 503:
+                    case 504:
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+
+            return exception is HttpRequestException ||
+                   exception is WebException ||
+                   exception is IOException ||
+                   exception is TaskCanceledException;
+        }
+
         private static Bitmap DownloadBitmapWithWebRequest(string url)
         {
             var request = (HttpWebRequest)WebRequest.Create(url);
@@ -284,6 +325,20 @@ namespace apod_wallpaper
                 AppLogger.Warn("HttpWebRequest fallback returned HTTP " + (int)response.StatusCode + " for bitmap url=" + url + ".", ex);
                 return null;
             }
+        }
+
+        [Serializable]
+        private sealed class NetworkHttpStatusException : Exception
+        {
+            public NetworkHttpStatusException(int statusCode, string url)
+                : base("HTTP " + statusCode + " for " + url + ".")
+            {
+                StatusCode = statusCode;
+                Url = url;
+            }
+
+            public int StatusCode { get; }
+            public string Url { get; }
         }
     }
 }

@@ -17,6 +17,11 @@ namespace apod_wallpaper
 
         public ApodCalendarMonthState GetMonthState(DateTime month, bool refreshMissingDates)
         {
+            return GetMonthState(month, refreshMissingDates, MonthRefreshMode.Aggressive);
+        }
+
+        public ApodCalendarMonthState GetMonthState(DateTime month, bool refreshMissingDates, MonthRefreshMode refreshMode)
+        {
             var monthKey = new DateTime(month.Year, month.Month, 1);
 
             lock (_syncRoot)
@@ -27,7 +32,7 @@ namespace apod_wallpaper
             }
 
             var latestPublishedDate = _workflowService.GetLatestPublishedDate();
-            var monthStatus = _workflowService.GetMonthStatus(monthKey, refreshMissingDates);
+            var monthStatus = _workflowService.GetMonthStatus(monthKey, refreshMissingDates, latestPublishedDate, refreshMode);
             var monthState = new ApodCalendarMonthState(
                 monthKey,
                 latestPublishedDate,

@@ -8,17 +8,6 @@ namespace apod_wallpaper
     internal static class FileStorage
     {
         private static string _sessionImagesDirectoryOverride;
-        private static readonly string[] SupportedImageExtensions =
-        {
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".bmp",
-            ".gif",
-            ".tif",
-            ".tiff",
-        };
-
         public static string ImagesDirectory
         {
             get
@@ -97,23 +86,23 @@ namespace apod_wallpaper
 
         public static IReadOnlyList<string> GetKnownImagePaths(string baseName)
         {
-            return SupportedImageExtensions
+            return new[]
+            {
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".bmp",
+                ".gif",
+                ".tif",
+                ".tiff",
+            }
                 .Select(extension => Path.Combine(ImagesDirectory, baseName + extension))
                 .ToList();
         }
 
         public static string NormalizeImageExtension(string extension)
         {
-            if (string.IsNullOrWhiteSpace(extension))
-                return ".jpg";
-
-            var normalizedExtension = extension.StartsWith(".")
-                ? extension.Trim().ToLowerInvariant()
-                : "." + extension.Trim().ToLowerInvariant();
-
-            return SupportedImageExtensions.Contains(normalizedExtension)
-                ? normalizedExtension
-                : ".png";
+            return ImageFormatCatalog.NormalizeImageExtension(extension);
         }
 
         public static void SetSessionImagesDirectory(string path)

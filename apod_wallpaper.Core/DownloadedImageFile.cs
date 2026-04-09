@@ -19,7 +19,7 @@ namespace apod_wallpaper
         {
             this.image_url = image_url;
             this.extension = ResolveExtension(image_url);
-            this.format = ResolveFormat(this.extension);
+            this.format = ImageFormatCatalog.ResolveImageFormat(this.extension);
             this.name = baseName + this.extension;
         }
 
@@ -65,25 +65,5 @@ namespace apod_wallpaper
             return FileStorage.NormalizeImageExtension(extension);
         }
 
-        private static ImageFormat ResolveFormat(string extension)
-        {
-            switch (extension)
-            {
-                case ".jpg":
-                case ".jpeg":
-                    return ImageFormat.Jpeg;
-                case ".png":
-                    return ImageFormat.Png;
-                case ".bmp":
-                    return ImageFormat.Bmp;
-                case ".gif":
-                    return ImageFormat.Gif;
-                case ".tif":
-                case ".tiff":
-                    return ImageFormat.Tiff;
-                default:
-                    return ImageFormat.Png;
-            }
-        }
     }
 }

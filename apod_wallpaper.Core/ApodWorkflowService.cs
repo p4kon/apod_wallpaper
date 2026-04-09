@@ -12,7 +12,6 @@ namespace apod_wallpaper
         {
             return Execute(date, () =>
             {
-                var latestPublishedDate = _wallpaperService.GetLatestPublishedDate();
                 var preview = _wallpaperService.GetPreviewByDate(date, forceRefresh);
                 if (preview.Entry == null || !preview.Entry.HasImage || string.IsNullOrWhiteSpace(preview.PreviewLocation))
                 {
@@ -20,7 +19,6 @@ namespace apod_wallpaper
                     {
                         Status = ApodWorkflowStatus.Unavailable,
                         RequestedDate = date.Date,
-                        LatestPublishedDate = latestPublishedDate,
                         Entry = preview.Entry,
                         PostUrl = preview.PostUrl,
                         Message = "The selected APOD entry does not contain a downloadable image.",
@@ -33,7 +31,7 @@ namespace apod_wallpaper
                     Status = ApodWorkflowStatus.Success,
                     RequestedDate = date.Date,
                     ResolvedDate = ParseEntryDate(preview.Entry, date),
-                    LatestPublishedDate = latestPublishedDate,
+                    LatestPublishedDate = ParseEntryDate(preview.Entry, date),
                     Entry = preview.Entry,
                     PreviewLocation = preview.PreviewLocation,
                     PostUrl = preview.PostUrl,
@@ -47,7 +45,6 @@ namespace apod_wallpaper
         {
             return ExecuteAsync(date, async () =>
             {
-                var latestPublishedDate = await _wallpaperService.GetLatestPublishedDateAsync().ConfigureAwait(false);
                 var preview = await _wallpaperService.GetPreviewByDateAsync(date, forceRefresh).ConfigureAwait(false);
                 if (preview.Entry == null || !preview.Entry.HasImage || string.IsNullOrWhiteSpace(preview.PreviewLocation))
                 {
@@ -55,7 +52,6 @@ namespace apod_wallpaper
                     {
                         Status = ApodWorkflowStatus.Unavailable,
                         RequestedDate = date.Date,
-                        LatestPublishedDate = latestPublishedDate,
                         Entry = preview.Entry,
                         PostUrl = preview.PostUrl,
                         Message = "The selected APOD entry does not contain a downloadable image.",
@@ -68,7 +64,7 @@ namespace apod_wallpaper
                     Status = ApodWorkflowStatus.Success,
                     RequestedDate = date.Date,
                     ResolvedDate = ParseEntryDate(preview.Entry, date),
-                    LatestPublishedDate = latestPublishedDate,
+                    LatestPublishedDate = ParseEntryDate(preview.Entry, date),
                     Entry = preview.Entry,
                     PreviewLocation = preview.PreviewLocation,
                     PostUrl = preview.PostUrl,
@@ -213,6 +209,11 @@ namespace apod_wallpaper
         public IReadOnlyList<ApodDayAvailability> GetMonthStatus(DateTime month, bool refreshMissingDates)
         {
             return _wallpaperService.GetMonthStatus(month, refreshMissingDates);
+        }
+
+        public IReadOnlyList<ApodDayAvailability> GetMonthStatus(DateTime month, bool refreshMissingDates, DateTime latestPublishedDate, MonthRefreshMode refreshMode)
+        {
+            return _wallpaperService.GetMonthStatus(month, refreshMissingDates, latestPublishedDate, refreshMode);
         }
 
         public Task<IReadOnlyList<ApodDayAvailability>> GetMonthStatusAsync(DateTime month, bool refreshMissingDates)

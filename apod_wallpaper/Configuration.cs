@@ -12,6 +12,7 @@ namespace apod_wallpaper
     internal partial class ConfigurationForm : Form
     {
         private const string NasaApiKeyUrl = "https://api.nasa.gov/";
+        private const MonthRefreshMode CalendarWarmupMode = MonthRefreshMode.Balanced;
         private readonly ApplicationController controller;
         private bool suppressSettingsSync = true;
         private bool not_found = false;
@@ -27,6 +28,7 @@ namespace apod_wallpaper
         {
             this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
             InitializeComponent();
+            this.controller.WallpaperApplied += controller_WallpaperApplied;
             pictureDayDateTimePicker.Value = DateTime.UtcNow;
             wallpaperStyleComboBox.DataSource = Enum.GetValues(typeof(WallpaperStyle));
             pictureDayDateTimePicker.DropDown += pictureDayDateTimePicker_DropDown;
@@ -59,6 +61,12 @@ namespace apod_wallpaper
         private void SaveSettings(object sender, FormClosingEventArgs e)
         {
             PersistSettings();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            controller.WallpaperApplied -= controller_WallpaperApplied;
+            base.OnFormClosed(e);
         }
 
         public void DownloadWallpaper()
@@ -95,6 +103,7 @@ namespace apod_wallpaper
 
                 nonImageMedia = false;
                 UpdatePreviewImage(workflowResult.ImagePath);
+                MaybeDisableAutoRefreshForManualSelection(selectedDate);
             }
             catch (Exception ex)
             {
@@ -138,6 +147,7 @@ namespace apod_wallpaper
 
             nonImageMedia = false;
             UpdatePreviewImage(workflowResult.ImagePath);
+            MaybeDisableAutoRefreshForManualSelection(selectedDate);
         }
 
         private async void PictureDayDateTimePicker_ValueChanged(Object sender, EventArgs e)
@@ -440,6 +450,20 @@ namespace apod_wallpaper
             }
         }
 
+        private void MaybeDisableAutoRefreshForManualSelection(DateTime selectedDate)
+        {
+            if (download_only)
+                return;
+
+            if (selectedDate.Date == DateTime.Today)
+                return;
+
+            if (!everyTimeCheckBox.Checked)
+                return;
+
+            everyTimeCheckBox.Checked = false;
+        }
+
         private void UpdatePreviewImage(string imageLocation)
         {
             if (InvokeRequired)
@@ -461,7 +485,7 @@ namespace apod_wallpaper
         {
             try
             {
-                await controller.GetCalendarMonthStateAsync(month, refreshMissingDates).ConfigureAwait(true);
+                await controller.GetCalendarMonthStateAsync(month, refreshMissingDates, CalendarWarmupMode).ConfigureAwait(true);
             }
             catch
             {
@@ -474,13 +498,36 @@ namespace apod_wallpaper
             toolTip.SetToolTip(startWithWindowsCheckBox, "Start APOD Wallpaper automatically when you sign in to Windows.");
             toolTip.SetToolTip(pictureDayDateTimePicker, "Choose the APOD date to preview, download or apply as wallpaper.");
             toolTip.SetToolTip(downloadButton, "Download the selected APOD image and apply it as wallpaper. Hold Shift to only download the image.");
-            toolTip.SetToolTip(everyTimeCheckBox, "Check automatically for today's APOD. DEMO_KEY checks about once per hour; a personal NASA API key checks about every 5 minutes until today's image becomes available.");
+            toolTip.SetToolTip(everyTimeCheckBox, "Check automatically for the latest APOD image. DEMO_KEY checks about once per hour; a personal NASA API key checks about every 30 minutes until an image is available.");
             toolTip.SetToolTip(wallpaperStyleComboBox, "Choose how the wallpaper should be placed on your screen. Smart mode adapts vertical images automatically.");
             toolTip.SetToolTip(apiKeyTextBox, "Paste your personal NASA APOD API key here. Changes are saved automatically.");
             toolTip.SetToolTip(getApiKeyButton, "Open NASA API key page and copy the link. VPN may be needed in some regions.");
             toolTip.SetToolTip(imagesFolderTextBox, "Folder where downloaded APOD images are stored. Changes are saved automatically.");
             toolTip.SetToolTip(browseImagesFolderButton, "Choose another folder for downloaded APOD images.");
             toolTip.SetToolTip(openImagesFolderButton, "Open the folder where APOD images are currently stored.");
+        }
+
+        private void controller_WallpaperApplied(object sender, WallpaperAppliedEventArgs e)
+        {
+            if (e == null || e.Result == null || !e.Automatic || !e.Result.ResolvedDate.HasValue)
+                return;
+
+            var resolvedDate = e.Result.ResolvedDate.Value.Date;
+            if (InvokeRequired)
+            {
+                BeginInvoke((MethodInvoker)delegate { SyncAutoAppliedDate(resolvedDate); });
+                return;
+            }
+
+            SyncAutoAppliedDate(resolvedDate);
+        }
+
+        private void SyncAutoAppliedDate(DateTime resolvedDate)
+        {
+            if (pictureDayDateTimePicker.Value.Date == resolvedDate)
+                return;
+
+            pictureDayDateTimePicker.Value = resolvedDate;
         }
     }
 }

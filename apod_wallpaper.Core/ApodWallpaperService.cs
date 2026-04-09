@@ -10,6 +10,7 @@ namespace apod_wallpaper
     {
         private static readonly TimeSpan LatestEntryCacheDuration = TimeSpan.FromHours(2);
         private static readonly TimeSpan HousekeepingInterval = TimeSpan.FromHours(6);
+        private static readonly TimeSpan LatestImageLookback = TimeSpan.FromDays(7);
         private static DateTime _lastHousekeepingUtc = DateTime.MinValue;
         private static readonly object HousekeepingSyncRoot = new object();
         private readonly ApodClient _client = new ApodClient();
@@ -149,9 +150,13 @@ namespace apod_wallpaper
 
         public IReadOnlyList<ApodDayAvailability> GetMonthStatus(DateTime month, bool refreshMissingDates)
         {
+            return GetMonthStatus(month, refreshMissingDates, GetLatestPublishedDate(), MonthRefreshMode.Aggressive);
+        }
+
+        public IReadOnlyList<ApodDayAvailability> GetMonthStatus(DateTime month, bool refreshMissingDates, DateTime latestAvailableDate, MonthRefreshMode refreshMode)
+        {
             var monthStart = new DateTime(month.Year, month.Month, 1);
             var monthEnd = monthStart.AddMonths(1).AddDays(-1);
-            var latestAvailableDate = GetLatestPublishedDate();
             var fetchEnd = monthEnd <= latestAvailableDate ? monthEnd : latestAvailableDate;
 
             if (refreshMissingDates && fetchEnd >= monthStart)
@@ -180,9 +185,7 @@ namespace apod_wallpaper
                 if (shouldRefreshRange)
                 {
                     AppLogger.Web("scope=month_refresh month=" + monthStart.ToString("yyyy-MM") + " mode=sync refreshMissingDates=true");
-                    var entries = _client.GetEntries(monthStart, fetchEnd);
-                    _cache.UpsertRange(entries);
-                    AppLogger.Info("Refreshed APOD month availability for " + monthStart.ToString("yyyy-MM") + " entries=" + entries.Count + ".");
+                    RefreshMonthStatus(monthStart, fetchEnd, cachedEntriesForRange.Count, refreshMode);
                 }
             }
 
@@ -227,9 +230,13 @@ namespace apod_wallpaper
 
         public async Task<IReadOnlyList<ApodDayAvailability>> GetMonthStatusAsync(DateTime month, bool refreshMissingDates)
         {
+            return await GetMonthStatusAsync(month, refreshMissingDates, await GetLatestPublishedDateAsync().ConfigureAwait(false), MonthRefreshMode.Aggressive).ConfigureAwait(false);
+        }
+
+        public async Task<IReadOnlyList<ApodDayAvailability>> GetMonthStatusAsync(DateTime month, bool refreshMissingDates, DateTime latestAvailableDate, MonthRefreshMode refreshMode)
+        {
             var monthStart = new DateTime(month.Year, month.Month, 1);
             var monthEnd = monthStart.AddMonths(1).AddDays(-1);
-            var latestAvailableDate = await GetLatestPublishedDateAsync().ConfigureAwait(false);
             var fetchEnd = monthEnd <= latestAvailableDate ? monthEnd : latestAvailableDate;
 
             if (refreshMissingDates && fetchEnd >= monthStart)
@@ -258,9 +265,7 @@ namespace apod_wallpaper
                 if (shouldRefreshRange)
                 {
                     AppLogger.Web("scope=month_refresh month=" + monthStart.ToString("yyyy-MM") + " mode=async refreshMissingDates=true");
-                    var entries = await _client.GetEntriesAsync(monthStart, fetchEnd).ConfigureAwait(false);
-                    _cache.UpsertRange(entries);
-                    AppLogger.Info("Refreshed APOD month availability for " + monthStart.ToString("yyyy-MM") + " entries=" + entries.Count + ".");
+                    await RefreshMonthStatusAsync(monthStart, fetchEnd, cachedEntriesForRange.Count, refreshMode).ConfigureAwait(false);
                 }
             }
 
@@ -275,7 +280,7 @@ namespace apod_wallpaper
         public ApodPreviewResult GetPreviewByDate(DateTime date, bool forceRefresh = false)
         {
             var entry = GetEntryByDate(date, forceRefresh);
-            var localImagePath = TryGetLocalImagePath(date);
+            var localImagePath = entry.HasImage ? TryGetLocalImagePath(date) : null;
 
             return new ApodPreviewResult
             {
@@ -291,15 +296,8 @@ namespace apod_wallpaper
 
         public async Task<ApodPreviewResult> GetPreviewByDateAsync(DateTime date, bool forceRefresh = false)
         {
-            var localImagePath = TryGetLocalImagePath(date);
-            var entry = !string.IsNullOrWhiteSpace(localImagePath)
-                ? (_cache.Get(date)?.ToEntry() ?? new ApodEntry
-                {
-                    Date = date.ToString("yyyy-MM-dd"),
-                    MediaType = "image",
-                    ResolvedFromSource = "local_file",
-                })
-                : await GetEntryByDateAsync(date, forceRefresh).ConfigureAwait(false);
+            var entry = await GetEntryByDateAsync(date, forceRefresh).ConfigureAwait(false);
+            var localImagePath = entry.HasImage ? TryGetLocalImagePath(date) : null;
 
             return new ApodPreviewResult
             {
@@ -370,7 +368,7 @@ namespace apod_wallpaper
 
         public ApodApplyResult ApplyLatestPublishedWallpaper(WallpaperStyle style, bool forceRefresh = false)
         {
-            var latestEntry = GetLatestPublishedEntry(forceRefresh);
+            var latestEntry = GetLatestAvailableImageEntry(forceRefresh);
             var entryDate = DateTime.Parse(latestEntry.Date).Date;
             var downloadResult = EnsureImageDownloaded(latestEntry, entryDate);
             _wallpaperService.ApplyPreservingHistory(downloadResult.ImagePath, style);
@@ -386,7 +384,7 @@ namespace apod_wallpaper
 
         public async Task<ApodApplyResult> ApplyLatestPublishedWallpaperAsync(WallpaperStyle style, bool forceRefresh = false)
         {
-            var latestEntry = await GetLatestPublishedEntryAsync(forceRefresh).ConfigureAwait(false);
+            var latestEntry = await GetLatestAvailableImageEntryAsync(forceRefresh).ConfigureAwait(false);
             var entryDate = DateTime.Parse(latestEntry.Date).Date;
             var downloadResult = await EnsureImageDownloadedAsync(latestEntry, entryDate).ConfigureAwait(false);
             _wallpaperService.ApplyPreservingHistory(downloadResult.ImagePath, style);
@@ -540,7 +538,15 @@ namespace apod_wallpaper
 
         public DateTime GetLatestAvailableDate()
         {
-            return GetLatestPublishedDate();
+            try
+            {
+                var latestEntry = GetLatestAvailableImageEntry();
+                return DateTime.Parse(latestEntry.Date).Date;
+            }
+            catch
+            {
+                return GetLatestPublishedDate();
+            }
         }
 
         public DateTime GetLatestPublishedDate()
@@ -567,6 +573,47 @@ namespace apod_wallpaper
             {
                 return DateTime.UtcNow.Date;
             }
+        }
+
+        public async Task<DateTime> GetLatestAvailableDateAsync()
+        {
+            try
+            {
+                var latestEntry = await GetLatestAvailableImageEntryAsync().ConfigureAwait(false);
+                return DateTime.Parse(latestEntry.Date).Date;
+            }
+            catch
+            {
+                return await GetLatestPublishedDateAsync().ConfigureAwait(false);
+            }
+        }
+
+        private ApodEntry GetLatestAvailableImageEntry(bool forceRefresh = false)
+        {
+            var latestPublishedDate = GetLatestPublishedDate();
+            for (var offset = 0; offset <= LatestImageLookback.TotalDays; offset++)
+            {
+                var candidateDate = latestPublishedDate.AddDays(-offset);
+                var entry = GetEntryByDate(candidateDate, forceRefresh);
+                if (entry != null && entry.HasImage)
+                    return entry;
+            }
+
+            throw new InvalidOperationException("Unable to resolve a recent APOD entry with a downloadable image.");
+        }
+
+        private async Task<ApodEntry> GetLatestAvailableImageEntryAsync(bool forceRefresh = false)
+        {
+            var latestPublishedDate = await GetLatestPublishedDateAsync().ConfigureAwait(false);
+            for (var offset = 0; offset <= LatestImageLookback.TotalDays; offset++)
+            {
+                var candidateDate = latestPublishedDate.AddDays(-offset);
+                var entry = await GetEntryByDateAsync(candidateDate, forceRefresh).ConfigureAwait(false);
+                if (entry != null && entry.HasImage)
+                    return entry;
+            }
+
+            throw new InvalidOperationException("Unable to resolve a recent APOD entry with a downloadable image.");
         }
 
         private static bool ShouldRefreshCachedEntry(ApodCachedEntry cached, DateTime requestedDate)
@@ -632,6 +679,26 @@ namespace apod_wallpaper
         private static bool HasLocalImage(DateTime date)
         {
             return !string.IsNullOrWhiteSpace(FileStorage.TryFindExistingImagePath(ApodPageUrl.GetBaseName(date)));
+        }
+
+        private void RefreshMonthStatus(DateTime monthStart, DateTime fetchEnd, int cachedEntriesCount, MonthRefreshMode refreshMode)
+        {
+            if (refreshMode == MonthRefreshMode.Balanced && cachedEntriesCount > 0)
+                return;
+
+            var entries = _client.GetEntries(monthStart, fetchEnd);
+            _cache.UpsertRange(entries);
+            AppLogger.Info("Refreshed APOD month availability for " + monthStart.ToString("yyyy-MM") + " entries=" + entries.Count + " mode=" + refreshMode + ".");
+        }
+
+        private async Task RefreshMonthStatusAsync(DateTime monthStart, DateTime fetchEnd, int cachedEntriesCount, MonthRefreshMode refreshMode)
+        {
+            if (refreshMode == MonthRefreshMode.Balanced && cachedEntriesCount > 0)
+                return;
+
+            var entries = await _client.GetEntriesAsync(monthStart, fetchEnd).ConfigureAwait(false);
+            _cache.UpsertRange(entries);
+            AppLogger.Info("Refreshed APOD month availability for " + monthStart.ToString("yyyy-MM") + " entries=" + entries.Count + " mode=" + refreshMode + ".");
         }
 
         private IReadOnlyList<ApodDayAvailability> BuildMonthStatus(DateTime monthStart, DateTime monthEnd)

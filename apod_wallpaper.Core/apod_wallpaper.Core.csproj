@@ -54,6 +54,8 @@
     <Compile Include="ApodEntry.cs" />
     <Compile Include="ApodErrorTranslator.cs" />
     <Compile Include="ApodMetadataCache.cs" />
+    <Compile Include="ImageFormatCatalog.cs" />
+    <Compile Include="MonthRefreshMode.cs" />
     <Compile Include="ApodPageImageExtractor.cs" />
     <Compile Include="ApodPreviewResult.cs" />
     <Compile Include="ApodWorkflowResult.cs" />

@@ -99,6 +99,7 @@
     <Compile Include="Settings.cs" />
     <Compile Include="StartupService.cs" />
     <Compile Include="TrayApplicationContext.cs" />
+    <Compile Include="WallpaperAppliedEventArgs.cs" />
     <EmbeddedResource Include="Configuration.resx">
       <DependentUpon>Configuration.cs</DependentUpon>
       <SubType>Designer</SubType>

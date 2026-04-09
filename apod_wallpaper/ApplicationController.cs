@@ -11,6 +11,8 @@ namespace apod_wallpaper
         private readonly ApodCalendarStateService _calendarStateService;
         private bool _isInitialized;
 
+        internal event EventHandler<WallpaperAppliedEventArgs> WallpaperApplied;
+
         public ApplicationController()
         {
             _scheduler = new Scheduler();
@@ -53,12 +55,16 @@ namespace apod_wallpaper
             if (settings == null)
                 throw new ArgumentNullException(nameof(settings));
 
+            var previousAutoRefreshEnabled = Properties.Settings.Default.AutoRefreshEnabled;
+
             Properties.Settings.Default.TrayDoubleClickAction = settings.TrayDoubleClickAction;
             Properties.Settings.Default.StyleComboBox = settings.WallpaperStyleIndex;
             Properties.Settings.Default.AutoRefreshEnabled = settings.AutoRefreshEnabled;
             Properties.Settings.Default.StartWithWindows = settings.StartWithWindows;
             Properties.Settings.Default.ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath);
-            Properties.Settings.Default.LastAutoRefreshRunDate = Normalize(settings.LastAutoRefreshRunDate);
+            Properties.Settings.Default.LastAutoRefreshRunDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
+                ? string.Empty
+                : Normalize(settings.LastAutoRefreshRunDate);
             Properties.Settings.Default.NasaApiKey = string.IsNullOrWhiteSpace(settings.NasaApiKey)
                 ? "DEMO_KEY"
                 : settings.NasaApiKey.Trim();
@@ -104,6 +110,7 @@ namespace apod_wallpaper
         {
             var result = _workflowService.ApplyDay(date, style, forceRefresh);
             _calendarStateService.Clear();
+            RaiseWallpaperApplied(result, false);
             return result;
         }
 
@@ -116,6 +123,7 @@ namespace apod_wallpaper
         {
             var result = _workflowService.ApplyLatestPublished(style, forceRefresh);
             _calendarStateService.Clear();
+            RaiseWallpaperApplied(result, false);
             return result;
         }
 
@@ -141,12 +149,22 @@ namespace apod_wallpaper
 
         public ApodCalendarMonthState GetCalendarMonthState(DateTime month, bool refreshMissingDates)
         {
-            return _calendarStateService.GetMonthState(month, refreshMissingDates);
+            return GetCalendarMonthState(month, refreshMissingDates, MonthRefreshMode.Aggressive);
+        }
+
+        public ApodCalendarMonthState GetCalendarMonthState(DateTime month, bool refreshMissingDates, MonthRefreshMode refreshMode)
+        {
+            return _calendarStateService.GetMonthState(month, refreshMissingDates, refreshMode);
         }
 
         public Task<ApodCalendarMonthState> GetCalendarMonthStateAsync(DateTime month, bool refreshMissingDates)
         {
-            return Task.Run(() => _calendarStateService.GetMonthState(month, refreshMissingDates));
+            return GetCalendarMonthStateAsync(month, refreshMissingDates, MonthRefreshMode.Aggressive);
+        }
+
+        public Task<ApodCalendarMonthState> GetCalendarMonthStateAsync(DateTime month, bool refreshMissingDates, MonthRefreshMode refreshMode)
+        {
+            return Task.Run(() => _calendarStateService.GetMonthState(month, refreshMissingDates, refreshMode));
         }
 
         public async Task RefreshLocalImageIndexAsync()
@@ -206,6 +224,7 @@ namespace apod_wallpaper
         {
             var result = await _workflowService.ApplyDayAsync(date, style, forceRefresh).ConfigureAwait(false);
             _calendarStateService.Clear();
+            RaiseWallpaperApplied(result, false);
             return result;
         }
 
@@ -213,6 +232,7 @@ namespace apod_wallpaper
         {
             var result = await _workflowService.ApplyLatestPublishedAsync(style, forceRefresh).ConfigureAwait(false);
             _calendarStateService.Clear();
+            RaiseWallpaperApplied(result, false);
             return result;
         }
 
@@ -229,16 +249,14 @@ namespace apod_wallpaper
                 if (DateTime.TryParse(settings.LastAutoRefreshRunDate, out lastRunDate) && lastRunDate.Date == now.Date)
                     return;
 
-                var localToday = now.Date;
-                var result = ApplyDay(localToday, (WallpaperStyle)settings.WallpaperStyleIndex, true);
+                var result = _workflowService.ApplyLatestPublished((WallpaperStyle)settings.WallpaperStyleIndex, true);
                 if (!result.IsSuccess)
                     return;
 
-                if (!result.ResolvedDate.HasValue || result.ResolvedDate.Value.Date != localToday)
-                    return;
-
+                _calendarStateService.Clear();
                 Properties.Settings.Default.LastAutoRefreshRunDate = now.Date.ToString("yyyy-MM-dd");
                 Properties.Settings.Default.Save();
+                RaiseWallpaperApplied(result, true);
             }
             catch (Exception ex)
             {
@@ -251,12 +269,20 @@ namespace apod_wallpaper
             if (settings == null || string.IsNullOrWhiteSpace(settings.NasaApiKey) || string.Equals(settings.NasaApiKey.Trim(), "DEMO_KEY", StringComparison.OrdinalIgnoreCase))
                 return TimeSpan.FromHours(1);
 
-            return TimeSpan.FromMinutes(5);
+            return TimeSpan.FromMinutes(30);
         }
 
         private static string Normalize(string value)
         {
             return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+        }
+
+        private void RaiseWallpaperApplied(ApodWorkflowResult result, bool automatic)
+        {
+            if (result == null || !result.IsSuccess)
+                return;
+
+            WallpaperApplied?.Invoke(this, new WallpaperAppliedEventArgs(result, automatic));
         }
     }
 }

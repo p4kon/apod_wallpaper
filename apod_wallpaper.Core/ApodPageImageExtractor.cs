@@ -32,28 +32,39 @@ namespace apod_wallpaper
                 return false;
 
             var baseUri = new Uri(pageUrl, UriKind.Absolute);
+            var relevantHtml = ExtractRelevantHtml(html);
+            if (string.IsNullOrWhiteSpace(relevantHtml))
+                return false;
+
+            if (relevantHtml.IndexOf("<video", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                relevantHtml.IndexOf("type=\"video/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                relevantHtml.IndexOf("type='video/", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return false;
+            }
+
             var candidates = new List<Candidate>();
 
-            foreach (Match match in AnchorImageRegex.Matches(html))
+            foreach (Match match in AnchorImageRegex.Matches(relevantHtml))
             {
                 var href = ToAbsoluteUrl(baseUri, match.Groups["href"].Value);
                 var src = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
                 candidates.Add(new Candidate(src, href));
             }
 
-            foreach (Match match in AnchorHrefRegex.Matches(html))
+            foreach (Match match in AnchorHrefRegex.Matches(relevantHtml))
             {
                 var href = ToAbsoluteUrl(baseUri, match.Groups["href"].Value);
                 candidates.Add(new Candidate(null, href));
             }
 
-            foreach (Match match in ImageRegex.Matches(html))
+            foreach (Match match in ImageRegex.Matches(relevantHtml))
             {
                 var src = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
                 candidates.Add(new Candidate(src, src));
             }
 
-            foreach (Match match in ImagePathRegex.Matches(html))
+            foreach (Match match in ImagePathRegex.Matches(relevantHtml))
             {
                 var imagePath = ToAbsoluteUrl(baseUri, match.Groups["url"].Value);
                 candidates.Add(new Candidate(imagePath, imagePath));
@@ -72,6 +83,57 @@ namespace apod_wallpaper
             return !string.IsNullOrWhiteSpace(previewUrl) || !string.IsNullOrWhiteSpace(imageUrl);
         }
 
+        private static string ExtractRelevantHtml(string html)
+        {
+            if (string.IsNullOrWhiteSpace(html))
+                return html;
+
+            var startIndex = FindDateHeadingIndex(html);
+            if (startIndex < 0)
+                startIndex = 0;
+
+            var endIndex = html.IndexOf("</center>", startIndex, StringComparison.OrdinalIgnoreCase);
+            if (endIndex < 0)
+                endIndex = Math.Min(html.Length, startIndex + 4000);
+            else
+                endIndex += "</center>".Length;
+
+            if (endIndex <= startIndex)
+                return html;
+
+            return html.Substring(startIndex, endIndex - startIndex);
+        }
+
+        private static int FindDateHeadingIndex(string html)
+        {
+            var monthNames = new[]
+            {
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+            };
+
+            foreach (var monthName in monthNames)
+            {
+                var monthIndex = html.IndexOf(monthName, StringComparison.OrdinalIgnoreCase);
+                if (monthIndex <= 0)
+                    continue;
+
+                var yearIndex = monthIndex;
+                while (yearIndex > 0 && char.IsWhiteSpace(html[yearIndex - 1]))
+                    yearIndex--;
+
+                var scanIndex = yearIndex - 1;
+                while (scanIndex >= 0 && char.IsDigit(html[scanIndex]))
+                    scanIndex--;
+
+                var candidateStart = scanIndex + 1;
+                if (candidateStart >= 0 && candidateStart < monthIndex)
+                    return candidateStart;
+            }
+
+            return -1;
+        }
+
         public static bool LooksLikeImageUrl(string url)
         {
             if (string.IsNullOrWhiteSpace(url))
@@ -86,20 +148,7 @@ namespace apod_wallpaper
             if (string.IsNullOrWhiteSpace(extension))
                 return false;
 
-            switch (extension.ToLowerInvariant())
-            {
-                case ".jpg":
-                case ".jpeg":
-                case ".png":
-                case ".gif":
-                case ".bmp":
-                case ".webp":
-                case ".tif":
-                case ".tiff":
-                    return true;
-                default:
-                    return false;
-            }
+            return ImageFormatCatalog.IsSupportedImageExtension(extension);
         }
 
         private static string ToAbsoluteUrl(Uri baseUri, string candidate)
