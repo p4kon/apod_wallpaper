@@ -55,9 +55,10 @@ namespace apod_wallpaper
             if (cached != null)
             {
                 var cachedEntry = cached.ToEntry();
-                if (cachedEntry.HasImage || !string.IsNullOrWhiteSpace(localImagePath))
+                var hasUsableLocalImage = LocalImageValidator.IsUsableImageFile(localImagePath);
+                if (cachedEntry.HasImage || hasUsableLocalImage)
                 {
-                    cachedEntry.ResolvedFromSource = !string.IsNullOrWhiteSpace(localImagePath) ? "local_file" : "cache";
+                    cachedEntry.ResolvedFromSource = hasUsableLocalImage ? "local_file" : "cache";
                     return cachedEntry;
                 }
             }
@@ -420,7 +421,7 @@ namespace apod_wallpaper
 
             var baseName = ApodPageUrl.GetBaseName(date);
             var existingImagePath = FileStorage.TryFindExistingImagePath(baseName);
-            if (!string.IsNullOrWhiteSpace(existingImagePath) && File.Exists(existingImagePath))
+            if (LocalImageValidator.IsUsableImageFile(existingImagePath))
             {
                 _cache.Upsert(entry);
                 _cache.SaveLocalImagePath(date, existingImagePath);
@@ -432,6 +433,10 @@ namespace apod_wallpaper
                     DownloadedNow = false,
                     Source = ApodDataSource.LocalFile,
                 };
+            }
+            else if (!string.IsNullOrWhiteSpace(existingImagePath))
+            {
+                AppLogger.Warn("Ignoring invalid cached APOD image at " + existingImagePath + ".");
             }
 
             var image = new DownloadedImageFile(entry.BestImageUrl, baseName);
@@ -468,7 +473,7 @@ namespace apod_wallpaper
 
             var baseName = ApodPageUrl.GetBaseName(date);
             var existingImagePath = FileStorage.TryFindExistingImagePath(baseName);
-            if (!string.IsNullOrWhiteSpace(existingImagePath) && File.Exists(existingImagePath))
+            if (LocalImageValidator.IsUsableImageFile(existingImagePath))
             {
                 _cache.Upsert(entry);
                 _cache.SaveLocalImagePath(date, existingImagePath);
@@ -480,6 +485,10 @@ namespace apod_wallpaper
                     DownloadedNow = false,
                     Source = ApodDataSource.LocalFile,
                 };
+            }
+            else if (!string.IsNullOrWhiteSpace(existingImagePath))
+            {
+                AppLogger.Warn("Ignoring invalid cached APOD image at " + existingImagePath + ".");
             }
 
             var image = new DownloadedImageFile(entry.BestImageUrl, baseName);
