@@ -22,6 +22,7 @@ publish/
 *.publish.xml
 
 # Runtime-generated application data
+_verify/
 cache/
 images/
 logs/
@@ -39,7 +40,10 @@ apod_wallpaper.Core/obj/
 
 # Misc
 *.log
+*.cache
 *.tmp
 *.temp
+*.orig
+*.rej
 Thumbs.db
 Desktop.ini

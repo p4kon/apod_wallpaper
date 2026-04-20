@@ -8,6 +8,7 @@ namespace apod_wallpaper
     internal static class FileStorage
     {
         private static string _sessionImagesDirectoryOverride;
+
         public static string ImagesDirectory
         {
             get
@@ -16,7 +17,15 @@ namespace apod_wallpaper
                 if (!string.IsNullOrWhiteSpace(customPath))
                     return customPath;
 
-                return Path.Combine(ApplicationDataDirectory, "images");
+                return ResolveDefaultImagesDirectory();
+            }
+        }
+
+        public static string SmartImagesDirectory
+        {
+            get
+            {
+                return Path.Combine(ImagesDirectory, "smart");
             }
         }
 
@@ -59,6 +68,11 @@ namespace apod_wallpaper
             Directory.CreateDirectory(ImagesDirectory);
         }
 
+        public static void EnsureSmartImagesDirectory()
+        {
+            Directory.CreateDirectory(SmartImagesDirectory);
+        }
+
         public static void EnsureCacheDirectory()
         {
             Directory.CreateDirectory(CacheDirectory);
@@ -79,6 +93,11 @@ namespace apod_wallpaper
             return Path.Combine(ImagesDirectory, baseName + NormalizeImageExtension(extension));
         }
 
+        public static string GetSmartImagePath(string fileName)
+        {
+            return Path.Combine(SmartImagesDirectory, fileName);
+        }
+
         public static string TryFindExistingImagePath(string baseName)
         {
             return GetKnownImagePaths(baseName).FirstOrDefault(File.Exists);
@@ -93,6 +112,7 @@ namespace apod_wallpaper
                 ".png",
                 ".bmp",
                 ".gif",
+                ".webp",
                 ".tif",
                 ".tiff",
             }
@@ -117,6 +137,31 @@ namespace apod_wallpaper
                 return sessionPath;
 
             return NormalizePath(AppRuntimeSettings.ImagesDirectoryPath);
+        }
+
+        private static string ResolveDefaultImagesDirectory()
+        {
+            var executableImagesDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "images");
+            if (CanUseDirectory(executableImagesDirectory))
+                return executableImagesDirectory;
+
+            return Path.Combine(ApplicationDataDirectory, "images");
+        }
+
+        private static bool CanUseDirectory(string path)
+        {
+            try
+            {
+                Directory.CreateDirectory(path);
+                var probePath = Path.Combine(path, ".write-test-" + Guid.NewGuid().ToString("N") + ".tmp");
+                File.WriteAllText(probePath, "ok");
+                File.Delete(probePath);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static string NormalizePath(string path)

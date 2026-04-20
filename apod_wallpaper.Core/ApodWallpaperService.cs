@@ -31,15 +31,22 @@ namespace apod_wallpaper
 
         public ApodEntry GetEntryByDate(DateTime date, bool forceRefresh = false)
         {
+            var localImagePath = TryGetLocalImagePath(date);
             var cached = !forceRefresh ? _cache.Get(date) : null;
             if (cached != null)
             {
                 var cachedEntry = cached.ToEntry();
-                if (cachedEntry.HasImage)
+                var hasUsableLocalImage = LocalImageValidator.IsUsableImageFile(localImagePath);
+                if (cachedEntry.HasImage || hasUsableLocalImage)
                 {
-                    cachedEntry.ResolvedFromSource = "cache";
+                    cachedEntry.ResolvedFromSource = hasUsableLocalImage ? "local_file" : "cache";
                     return cachedEntry;
                 }
+            }
+
+            if (!forceRefresh && LocalImageValidator.IsUsableImageFile(localImagePath))
+            {
+                return CreateLocalFileEntry(date);
             }
 
             var entry = _client.GetEntry(date);
@@ -61,6 +68,11 @@ namespace apod_wallpaper
                     cachedEntry.ResolvedFromSource = hasUsableLocalImage ? "local_file" : "cache";
                     return cachedEntry;
                 }
+            }
+
+            if (!forceRefresh && LocalImageValidator.IsUsableImageFile(localImagePath))
+            {
+                return CreateLocalFileEntry(date);
             }
 
             var entry = await _client.GetEntryAsync(date).ConfigureAwait(false);
@@ -528,21 +540,43 @@ namespace apod_wallpaper
             return Task.Run((Action)RefreshLocalImageIndex);
         }
 
+        public bool HasUsableLocalImage(DateTime date)
+        {
+            return !string.IsNullOrWhiteSpace(TryGetLocalImagePath(date));
+        }
+
         private string TryGetLocalImagePath(DateTime date)
         {
             var baseName = ApodPageUrl.GetBaseName(date);
             var expectedPath = FileStorage.TryFindExistingImagePath(baseName);
-            if (!string.IsNullOrWhiteSpace(expectedPath) && File.Exists(expectedPath))
+            if (LocalImageValidator.IsUsableImageFile(expectedPath))
             {
                 _cache.SaveLocalImagePath(date, expectedPath);
                 return expectedPath;
             }
+            else if (!string.IsNullOrWhiteSpace(expectedPath))
+            {
+                AppLogger.Warn("Ignoring invalid APOD image candidate at " + expectedPath + ".");
+            }
 
             var cached = _cache.Get(date);
-            if (cached != null && !string.IsNullOrWhiteSpace(cached.LocalImagePath) && File.Exists(cached.LocalImagePath))
+            if (cached != null && LocalImageValidator.IsUsableImageFile(cached.LocalImagePath))
                 return cached.LocalImagePath;
+            if (cached != null && !string.IsNullOrWhiteSpace(cached.LocalImagePath))
+                AppLogger.Warn("Ignoring invalid cached APOD image path at " + cached.LocalImagePath + ".");
 
             return null;
+        }
+
+        private static ApodEntry CreateLocalFileEntry(DateTime date)
+        {
+            return new ApodEntry
+            {
+                Date = date.ToString("yyyy-MM-dd"),
+                MediaType = "image",
+                ResolvedFromSource = "local_file",
+                IsFallbackImage = false,
+            };
         }
 
         public DateTime GetLatestAvailableDate()
@@ -595,6 +629,11 @@ namespace apod_wallpaper
             {
                 return await GetLatestPublishedDateAsync().ConfigureAwait(false);
             }
+        }
+
+        public Task<ApiKeyValidationState> ValidateApiKeyAsync(string apiKey)
+        {
+            return _client.ValidateApiKeyAsync(apiKey);
         }
 
         private ApodEntry GetLatestAvailableImageEntry(bool forceRefresh = false)

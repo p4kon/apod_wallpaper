@@ -29,6 +29,7 @@ namespace apod_wallpaper
             this.everyTimeCheckBox = new System.Windows.Forms.CheckBox();
             this.apiKeyLabel = new System.Windows.Forms.Label();
             this.apiKeyTextBox = new System.Windows.Forms.TextBox();
+            this.apiKeyStatusLabel = new System.Windows.Forms.Label();
             this.apiKeyInfoLabel = new System.Windows.Forms.Label();
             this.getApiKeyButton = new System.Windows.Forms.Button();
             this.imagesFolderLabel = new System.Windows.Forms.Label();
@@ -105,17 +106,22 @@ namespace apod_wallpaper
             this.apiKeyTextBox.Name = "apiKeyTextBox";
             this.apiKeyTextBox.Size = new System.Drawing.Size(291, 20);
             this.apiKeyTextBox.TabIndex = 12;
-            this.apiKeyInfoLabel.Location = new System.Drawing.Point(12, 424);
+            this.apiKeyStatusLabel.ForeColor = System.Drawing.Color.Firebrick;
+            this.apiKeyStatusLabel.Location = new System.Drawing.Point(12, 421);
+            this.apiKeyStatusLabel.Name = "apiKeyStatusLabel";
+            this.apiKeyStatusLabel.Size = new System.Drawing.Size(291, 17);
+            this.apiKeyStatusLabel.TabIndex = 13;
+            this.apiKeyInfoLabel.Location = new System.Drawing.Point(12, 442);
             this.apiKeyInfoLabel.Name = "apiKeyInfoLabel";
             this.apiKeyInfoLabel.Size = new System.Drawing.Size(291, 49);
-            this.apiKeyInfoLabel.TabIndex = 13;
+            this.apiKeyInfoLabel.TabIndex = 14;
             this.apiKeyInfoLabel.Text = "DEMO_KEY is fine for testing, but it is limited to 30 requests per hour per IP an" +
     "d 50 per day. Your own free NASA API key raises the default limit to 1000 reques" +
     "ts per hour. In some regions the NASA site may require VPN.";
-            this.getApiKeyButton.Location = new System.Drawing.Point(174, 478);
+            this.getApiKeyButton.Location = new System.Drawing.Point(174, 494);
             this.getApiKeyButton.Name = "getApiKeyButton";
             this.getApiKeyButton.Size = new System.Drawing.Size(129, 23);
-            this.getApiKeyButton.TabIndex = 14;
+            this.getApiKeyButton.TabIndex = 15;
             this.getApiKeyButton.Text = "Get NASA API Key";
             this.getApiKeyButton.UseVisualStyleBackColor = true;
             this.getApiKeyButton.Click += new System.EventHandler(this.getApiKeyButton_Click);
@@ -145,13 +151,14 @@ namespace apod_wallpaper
             this.openImagesFolderButton.Click += new System.EventHandler(this.openImagesFolderButton_Click);
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(315, 513);
+            this.ClientSize = new System.Drawing.Size(315, 529);
             this.Controls.Add(this.openImagesFolderButton);
             this.Controls.Add(this.browseImagesFolderButton);
             this.Controls.Add(this.imagesFolderTextBox);
             this.Controls.Add(this.imagesFolderLabel);
             this.Controls.Add(this.getApiKeyButton);
             this.Controls.Add(this.apiKeyInfoLabel);
+            this.Controls.Add(this.apiKeyStatusLabel);
             this.Controls.Add(this.apiKeyTextBox);
             this.Controls.Add(this.apiKeyLabel);
             this.Controls.Add(this.everyTimeCheckBox);
@@ -185,6 +192,7 @@ namespace apod_wallpaper
         private System.Windows.Forms.CheckBox everyTimeCheckBox;
         private System.Windows.Forms.Label apiKeyLabel;
         private System.Windows.Forms.TextBox apiKeyTextBox;
+        private System.Windows.Forms.Label apiKeyStatusLabel;
         private System.Windows.Forms.Label apiKeyInfoLabel;
         private System.Windows.Forms.Button getApiKeyButton;
         private System.Windows.Forms.Label imagesFolderLabel;

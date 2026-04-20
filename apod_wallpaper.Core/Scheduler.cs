@@ -9,6 +9,7 @@ namespace apod_wallpaper
         private static readonly TimeSpan DefaultPollingInterval = TimeSpan.FromMinutes(5);
         private Timer _timer;
         private Action _scheduledTask;
+        private int _taskIsRunning;
 
         public bool IsRunning { get; private set; }
         public DateTime? NextRun { get; private set; }
@@ -68,6 +69,9 @@ namespace apod_wallpaper
 
         private void RunScheduledTask(object state)
         {
+            if (Interlocked.Exchange(ref _taskIsRunning, 1) == 1)
+                return;
+
             Action task;
 
             lock (_syncRoot)
@@ -84,6 +88,7 @@ namespace apod_wallpaper
             }
             finally
             {
+                Interlocked.Exchange(ref _taskIsRunning, 0);
                 lock (_syncRoot)
                 {
                     if (IsRunning)

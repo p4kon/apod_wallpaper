@@ -231,14 +231,34 @@ namespace apod_wallpaper
             return _wallpaperService.GetLatestPublishedDate();
         }
 
+        public DateTime GetLatestAvailableDate()
+        {
+            return _wallpaperService.GetLatestAvailableDate();
+        }
+
         public Task<DateTime> GetLatestPublishedDateAsync()
         {
             return _wallpaperService.GetLatestPublishedDateAsync();
         }
 
+        public Task<DateTime> GetLatestAvailableDateAsync()
+        {
+            return _wallpaperService.GetLatestAvailableDateAsync();
+        }
+
+        public Task<ApiKeyValidationState> ValidateApiKeyAsync(string apiKey)
+        {
+            return _wallpaperService.ValidateApiKeyAsync(apiKey);
+        }
+
         public Task RefreshLocalImageIndexAsync()
         {
             return _wallpaperService.RefreshLocalImageIndexAsync();
+        }
+
+        public bool HasUsableLocalImage(DateTime date)
+        {
+            return _wallpaperService.HasUsableLocalImage(date);
         }
 
         private static ApodWorkflowResult Execute(DateTime requestedDate, Func<ApodWorkflowResult> action)
