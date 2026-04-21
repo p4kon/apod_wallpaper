@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace apod_wallpaper
 {
-    internal sealed class ApodClient
+    internal sealed class ApodClient : IApodClient
     {
         private const string DemoApiKey = "DEMO_KEY";
         private const string Endpoint = "https://api.nasa.gov/planetary/apod";

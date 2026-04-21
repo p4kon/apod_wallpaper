@@ -6,7 +6,7 @@ using System.Runtime.Serialization.Json;
 
 namespace apod_wallpaper
 {
-    internal sealed class ApodMetadataCache
+    internal sealed class ApodMetadataCache : IApodMetadataCache
     {
         private readonly object _syncRoot = new object();
         private Dictionary<DateTime, ApodCachedEntry> _entriesByDate;

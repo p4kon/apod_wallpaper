@@ -6,7 +6,7 @@
       <Value Profile="(Default)">False</Value>
     </Setting>
     <Setting Name="StyleComboBox" Type="System.Int32" Scope="User">
-      <Value Profile="(Default)">1</Value>
+      <Value Profile="(Default)">6</Value>
     </Setting>
     <Setting Name="NasaApiKey" Type="System.String" Scope="User">
       <Value Profile="(Default)">DEMO_KEY</Value>

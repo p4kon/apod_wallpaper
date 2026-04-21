@@ -31,7 +31,7 @@ namespace apod_wallpaper.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("1")]
+        [global::System.Configuration.DefaultSettingValueAttribute("6")]
         public int StyleComboBox {
             get {
                 return ((int)(this["StyleComboBox"]));

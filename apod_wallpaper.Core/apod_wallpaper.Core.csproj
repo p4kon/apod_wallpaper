@@ -43,6 +43,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ApiKeyValidationState.cs" />
+    <Compile Include="IApodClient.cs" />
+    <Compile Include="IApodMetadataCache.cs" />
+    <Compile Include="IWallpaperApplier.cs" />
     <Compile Include="ApodCalendarDayState.cs" />
     <Compile Include="ApodCalendarMonthState.cs" />
     <Compile Include="ApodCalendarStateService.cs" />

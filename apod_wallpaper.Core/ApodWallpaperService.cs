@@ -13,14 +13,22 @@ namespace apod_wallpaper
         private static readonly TimeSpan LatestImageLookback = TimeSpan.FromDays(7);
         private static DateTime _lastHousekeepingUtc = DateTime.MinValue;
         private static readonly object HousekeepingSyncRoot = new object();
-        private readonly ApodClient _client = new ApodClient();
-        private readonly ApodMetadataCache _cache = new ApodMetadataCache();
-        private readonly WallpaperService _wallpaperService = new WallpaperService();
+        private readonly IApodClient _client;
+        private readonly IApodMetadataCache _cache;
+        private readonly IWallpaperApplier _wallpaperService;
         private ApodEntry _latestEntry;
         private DateTime _latestEntryFetchedAtUtc;
 
         public ApodWallpaperService()
+            : this(new ApodClient(), new ApodMetadataCache(), new WallpaperService())
         {
+        }
+
+        internal ApodWallpaperService(IApodClient client, IApodMetadataCache cache, IWallpaperApplier wallpaperService)
+        {
+            _client = client ?? throw new ArgumentNullException(nameof(client));
+            _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+            _wallpaperService = wallpaperService ?? throw new ArgumentNullException(nameof(wallpaperService));
             RunHousekeepingIfNeeded();
         }
 

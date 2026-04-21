@@ -12,6 +12,7 @@
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <RunSmokeTestsOnBuild Condition="'$(RunSmokeTestsOnBuild)' == ''">true</RunSmokeTestsOnBuild>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -51,5 +52,8 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
+  <Target Name="RunSmokeTests" AfterTargets="Build" Condition="'$(RunSmokeTestsOnBuild)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <Exec Command="&quot;$(TargetPath)&quot;" />
+  </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

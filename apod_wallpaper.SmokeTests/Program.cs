@@ -1,8 +1,10 @@
 using System;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace apod_wallpaper.SmokeTests
 {
@@ -23,6 +25,12 @@ namespace apod_wallpaper.SmokeTests
             Run("HTML extractor handles annotated image page", HtmlExtractorHandlesAnnotatedImagePage);
             Run("Runtime settings fall back to DEMO_KEY for invalid key", InvalidApiKeyFallsBackToDemoKey);
             Run("Local image is preferred for preview", LocalImageIsPreferredForPreview);
+            Run("ApplyLatestPublished walks back through video days", ApplyLatestPublishedFallsBackAcrossVideoDays);
+            Run("Smart composer stretches near screen ratio images", SmartComposerUsesStretchForNearScreenRatio);
+            Run("Smart composer creates single focus image for square content", SmartComposerCreatesSingleFocusForSquareImages);
+            Run("Scheduler uses hourly polling for DEMO_KEY", SchedulerUsesHourlyPollingForDemoKey);
+            Run("Scheduler uses 30 minute polling for personal key", SchedulerUsesThirtyMinutePollingForPersonalKey);
+            Run("Wallpaper service rejects invalid local file", WallpaperServiceRejectsInvalidLocalFile);
 
             Console.WriteLine(_failures == 0
                 ? "Smoke tests passed."
@@ -262,6 +270,207 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             }
         }
 
+        private static void ApplyLatestPublishedFallsBackAcrossVideoDays()
+        {
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_smoke_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+
+            var snapshot = CaptureSettings();
+            try
+            {
+                var today = DateTime.Today;
+                var yesterday = today.AddDays(-1);
+                var imageDate = today.AddDays(-2);
+                var localImagePath = Path.Combine(tempDirectory, imageDate.ToString("yyyy-MM-dd") + ".jpg");
+
+                using (var bitmap = new Bitmap(12, 12))
+                {
+                    bitmap.Save(localImagePath, System.Drawing.Imaging.ImageFormat.Jpeg);
+                }
+
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(tempDirectory);
+
+                var fakeClient = new FakeApodClient(
+                    CreateVideoEntry(today),
+                    new System.Collections.Generic.Dictionary<DateTime, apod_wallpaper.ApodEntry>
+                    {
+                        { today, CreateVideoEntry(today) },
+                        { yesterday, CreateVideoEntry(yesterday) },
+                        { imageDate, CreateImageEntry(imageDate) },
+                    });
+                var fakeCache = new InMemoryApodMetadataCache();
+                var fakeWallpaperApplier = new FakeWallpaperApplier();
+                var service = new apod_wallpaper.ApodWallpaperService(fakeClient, fakeCache, fakeWallpaperApplier);
+                var workflow = new apod_wallpaper.ApodWorkflowService(service);
+
+                var result = workflow.ApplyLatestPublished(apod_wallpaper.WallpaperStyle.Smart, true);
+
+                Assert(result.Status == apod_wallpaper.ApodWorkflowStatus.Success, "Expected ApplyLatestPublished to succeed.");
+                Assert(result.ResolvedDate == imageDate, "Expected ApplyLatestPublished to fall back to the nearest image date.");
+                Assert(string.Equals(result.ImagePath, localImagePath, StringComparison.OrdinalIgnoreCase), "Expected fallback image path to point to the local image.");
+                Assert(fakeWallpaperApplier.LastAppliedImagePath == localImagePath, "Expected wallpaper applier to receive the fallback local image.");
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                try
+                {
+                    if (Directory.Exists(tempDirectory))
+                        Directory.Delete(tempDirectory, true);
+                }
+                catch
+                {
+                }
+
+                RestoreSettings(snapshot);
+            }
+        }
+
+        private static void SmartComposerUsesStretchForNearScreenRatio()
+        {
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_smoke_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+
+            try
+            {
+                var screenBounds = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
+                var imagePath = Path.Combine(tempDirectory, "near-screen.jpg");
+
+                using (var bitmap = new Bitmap(screenBounds.Width, screenBounds.Height))
+                {
+                    bitmap.Save(imagePath, System.Drawing.Imaging.ImageFormat.Jpeg);
+                }
+
+                var composition = apod_wallpaper.SmartWallpaperComposer.Prepare(imagePath);
+
+                Assert(composition.Style == apod_wallpaper.WallpaperStyle.Stretch, "Expected near-screen-ratio image to use Stretch.");
+                Assert(composition.Strategy == "stretch_near_screen_ratio", "Expected near-screen-ratio strategy.");
+                Assert(string.Equals(composition.ImagePath, imagePath, StringComparison.OrdinalIgnoreCase), "Expected original image path for stretch strategy.");
+            }
+            finally
+            {
+                TryDeleteDirectory(tempDirectory);
+            }
+        }
+
+        private static void SmartComposerCreatesSingleFocusForSquareImages()
+        {
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_smoke_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+            var snapshot = CaptureSettings();
+
+            try
+            {
+                var imagePath = Path.Combine(tempDirectory, "square.jpg");
+
+                using (var bitmap = new Bitmap(1200, 1200))
+                {
+                    bitmap.Save(imagePath, System.Drawing.Imaging.ImageFormat.Jpeg);
+                }
+
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(tempDirectory);
+                var composition = apod_wallpaper.SmartWallpaperComposer.Prepare(imagePath);
+
+                Assert(composition.Style == apod_wallpaper.WallpaperStyle.Fill, "Expected square image to use Fill after smart composition.");
+                Assert(composition.Strategy == "single_focus_background", "Expected square image to use single focus strategy.");
+                Assert(File.Exists(composition.ImagePath), "Expected composed smart wallpaper file to exist.");
+                Assert(composition.ImagePath.IndexOf(Path.Combine("smart", string.Empty), StringComparison.OrdinalIgnoreCase) >= 0, "Expected smart image to be stored in the smart subfolder.");
+            }
+            finally
+            {
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(tempDirectory);
+            }
+        }
+
+        private static void SchedulerUsesHourlyPollingForDemoKey()
+        {
+            var snapshot = CaptureSettings();
+            apod_wallpaper.ApplicationController controller = null;
+            try
+            {
+                controller = new apod_wallpaper.ApplicationController();
+                controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
+                {
+                    TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
+                    WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
+                    AutoRefreshEnabled = true,
+                    StartWithWindows = snapshot.StartWithWindows,
+                    ImagesDirectoryPath = snapshot.ImagesDirectoryPath,
+                    NasaApiKey = "DEMO_KEY",
+                    NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Unknown.ToString(),
+                    LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
+                    LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
+                });
+
+                controller.Initialize();
+                Assert(controller.Scheduler.PollingInterval == TimeSpan.FromHours(1), "Expected DEMO_KEY polling interval to be one hour.");
+            }
+            finally
+            {
+                if (controller != null)
+                    controller.Dispose();
+                RestoreSettings(snapshot);
+            }
+        }
+
+        private static void SchedulerUsesThirtyMinutePollingForPersonalKey()
+        {
+            var snapshot = CaptureSettings();
+            apod_wallpaper.ApplicationController controller = null;
+            try
+            {
+                controller = new apod_wallpaper.ApplicationController();
+                controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
+                {
+                    TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
+                    WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
+                    AutoRefreshEnabled = true,
+                    StartWithWindows = snapshot.StartWithWindows,
+                    ImagesDirectoryPath = snapshot.ImagesDirectoryPath,
+                    NasaApiKey = "personal-key",
+                    NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Valid.ToString(),
+                    LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
+                    LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
+                });
+
+                controller.Initialize();
+                Assert(controller.Scheduler.PollingInterval == TimeSpan.FromMinutes(30), "Expected personal key polling interval to be 30 minutes.");
+            }
+            finally
+            {
+                if (controller != null)
+                    controller.Dispose();
+                RestoreSettings(snapshot);
+            }
+        }
+
+        private static void WallpaperServiceRejectsInvalidLocalFile()
+        {
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_smoke_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+            var invalidImagePath = Path.Combine(tempDirectory, "broken.jpg");
+            File.WriteAllText(invalidImagePath, "not-an-image");
+
+            try
+            {
+                var service = new apod_wallpaper.WallpaperService();
+                try
+                {
+                    service.ApplyPreservingHistory(invalidImagePath, apod_wallpaper.WallpaperStyle.Fill);
+                    throw new InvalidOperationException("Expected wallpaper service to reject an invalid local file.");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    Assert(ex.Message.IndexOf("invalid", StringComparison.OrdinalIgnoreCase) >= 0, "Expected invalid file error message.");
+                }
+            }
+            finally
+            {
+                TryDeleteDirectory(tempDirectory);
+            }
+        }
+
         private static apod_wallpaper.ApplicationSettingsSnapshot CaptureSettings()
         {
             return new apod_wallpaper.ApplicationController().GetSettings();
@@ -272,10 +481,120 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             new apod_wallpaper.ApplicationController().SaveSettings(snapshot);
         }
 
+        private static void TryDeleteDirectory(string path)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                    Directory.Delete(path, true);
+            }
+            catch
+            {
+            }
+        }
+
         private static void Assert(bool condition, string message)
         {
             if (!condition)
                 throw new InvalidOperationException(message);
+        }
+
+        private static apod_wallpaper.ApodEntry CreateVideoEntry(DateTime date)
+        {
+            return new apod_wallpaper.ApodEntry
+            {
+                Date = date.ToString("yyyy-MM-dd"),
+                MediaType = "video",
+                Url = "https://example.test/video.mp4",
+                HdUrl = null,
+                ResolvedFromSource = "api",
+            };
+        }
+
+        private static apod_wallpaper.ApodEntry CreateImageEntry(DateTime date)
+        {
+            return new apod_wallpaper.ApodEntry
+            {
+                Date = date.ToString("yyyy-MM-dd"),
+                MediaType = "image",
+                Url = "https://example.test/" + date.ToString("yyyy-MM-dd") + "_preview.jpg",
+                HdUrl = "https://example.test/" + date.ToString("yyyy-MM-dd") + "_full.jpg",
+                ResolvedFromSource = "api",
+            };
+        }
+
+        private sealed class FakeApodClient : apod_wallpaper.IApodClient
+        {
+            private readonly apod_wallpaper.ApodEntry _latestEntry;
+            private readonly System.Collections.Generic.Dictionary<DateTime, apod_wallpaper.ApodEntry> _entries;
+
+            public FakeApodClient(apod_wallpaper.ApodEntry latestEntry, System.Collections.Generic.Dictionary<DateTime, apod_wallpaper.ApodEntry> entries)
+            {
+                _latestEntry = latestEntry;
+                _entries = entries;
+            }
+
+            public apod_wallpaper.ApodEntry GetEntry(DateTime date) => _entries[date.Date];
+            public Task<apod_wallpaper.ApodEntry> GetEntryAsync(DateTime date) => Task.FromResult(GetEntry(date));
+            public apod_wallpaper.ApodEntry GetLatestEntry() => _latestEntry;
+            public Task<apod_wallpaper.ApodEntry> GetLatestEntryAsync() => Task.FromResult(_latestEntry);
+            public System.Collections.Generic.IReadOnlyList<apod_wallpaper.ApodEntry> GetEntries(DateTime startDate, DateTime endDate) => new[] { _latestEntry };
+            public Task<System.Collections.Generic.IReadOnlyList<apod_wallpaper.ApodEntry>> GetEntriesAsync(DateTime startDate, DateTime endDate) => Task.FromResult(GetEntries(startDate, endDate));
+            public Task<apod_wallpaper.ApiKeyValidationState> ValidateApiKeyAsync(string apiKey) => Task.FromResult(apod_wallpaper.ApiKeyValidationState.Valid);
+        }
+
+        private sealed class InMemoryApodMetadataCache : apod_wallpaper.IApodMetadataCache
+        {
+            private readonly System.Collections.Generic.Dictionary<DateTime, apod_wallpaper.ApodCachedEntry> _entries = new System.Collections.Generic.Dictionary<DateTime, apod_wallpaper.ApodCachedEntry>();
+
+            public apod_wallpaper.ApodCachedEntry Get(DateTime date)
+            {
+                apod_wallpaper.ApodCachedEntry entry;
+                _entries.TryGetValue(date.Date, out entry);
+                return entry;
+            }
+
+            public System.Collections.Generic.IReadOnlyList<apod_wallpaper.ApodCachedEntry> GetRange(DateTime startDate, DateTime endDate)
+            {
+                return _entries.Values.ToArray();
+            }
+
+            public void Upsert(apod_wallpaper.ApodEntry entry)
+            {
+                if (entry == null || string.IsNullOrWhiteSpace(entry.Date))
+                    return;
+
+                _entries[DateTime.Parse(entry.Date).Date] = apod_wallpaper.ApodCachedEntry.FromEntry(entry);
+            }
+
+            public void UpsertRange(System.Collections.Generic.IEnumerable<apod_wallpaper.ApodEntry> entries)
+            {
+                foreach (var entry in entries)
+                    Upsert(entry);
+            }
+
+            public void SaveLocalImagePath(DateTime date, string localImagePath)
+            {
+                apod_wallpaper.ApodCachedEntry entry;
+                if (_entries.TryGetValue(date.Date, out entry))
+                    entry.LocalImagePath = localImagePath;
+            }
+
+            public void SyncLocalImagePaths()
+            {
+            }
+        }
+
+        private sealed class FakeWallpaperApplier : apod_wallpaper.IWallpaperApplier
+        {
+            public string LastAppliedImagePath { get; private set; }
+            public apod_wallpaper.WallpaperStyle LastAppliedStyle { get; private set; }
+
+            public void ApplyPreservingHistory(string imagePath, apod_wallpaper.WallpaperStyle style)
+            {
+                LastAppliedImagePath = imagePath;
+                LastAppliedStyle = style;
+            }
         }
     }
 }

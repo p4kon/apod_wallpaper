@@ -6,7 +6,17 @@ namespace apod_wallpaper
 {
     internal sealed class ApodWorkflowService
     {
-        private readonly ApodWallpaperService _wallpaperService = new ApodWallpaperService();
+        private readonly ApodWallpaperService _wallpaperService;
+
+        public ApodWorkflowService()
+            : this(new ApodWallpaperService())
+        {
+        }
+
+        internal ApodWorkflowService(ApodWallpaperService wallpaperService)
+        {
+            _wallpaperService = wallpaperService ?? throw new ArgumentNullException(nameof(wallpaperService));
+        }
 
         public ApodWorkflowResult LoadDay(DateTime date, bool forceRefresh = false)
         {

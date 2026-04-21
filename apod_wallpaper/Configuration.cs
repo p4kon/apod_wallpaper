@@ -13,6 +13,16 @@ namespace apod_wallpaper
     {
         private const string NasaApiKeyUrl = "https://api.nasa.gov/";
         private const MonthRefreshMode CalendarWarmupMode = MonthRefreshMode.Balanced;
+        private static readonly WallpaperStyle[] WallpaperStyleDisplayOrder =
+        {
+            WallpaperStyle.Smart,
+            WallpaperStyle.Fill,
+            WallpaperStyle.Fit,
+            WallpaperStyle.Stretch,
+            WallpaperStyle.Tile,
+            WallpaperStyle.Center,
+            WallpaperStyle.Span,
+        };
         private readonly ApplicationController controller;
         private bool suppressSettingsSync = true;
         private bool not_found = false;
@@ -32,7 +42,7 @@ namespace apod_wallpaper
             this.controller.WallpaperApplied += controller_WallpaperApplied;
             pictureDayDateTimePicker.MaxDate = DateTime.Today;
             pictureDayDateTimePicker.Value = DateTime.Today;
-            wallpaperStyleComboBox.DataSource = Enum.GetValues(typeof(WallpaperStyle));
+            wallpaperStyleComboBox.DataSource = WallpaperStyleDisplayOrder;
             pictureDayDateTimePicker.DropDown += pictureDayDateTimePicker_DropDown;
             imagesFolderTextBox.TextChanged += imagesFolderTextBox_TextChanged;
             downloadSetCheckBox.CheckedChanged += settingsControl_Changed;
@@ -48,7 +58,10 @@ namespace apod_wallpaper
             suppressSettingsSync = true;
             currentSettings = controller.GetSettings();
             downloadSetCheckBox.Checked = currentSettings.TrayDoubleClickAction;
-            wallpaperStyleComboBox.SelectedIndex = currentSettings.WallpaperStyleIndex;
+            var currentStyle = Enum.IsDefined(typeof(WallpaperStyle), currentSettings.WallpaperStyleIndex)
+                ? (WallpaperStyle)currentSettings.WallpaperStyleIndex
+                : WallpaperStyle.Smart;
+            wallpaperStyleComboBox.SelectedItem = currentStyle;
             everyTimeCheckBox.Checked = currentSettings.AutoRefreshEnabled;
             startWithWindowsCheckBox.Checked = currentSettings.StartWithWindows;
             apiKeyTextBox.Text = currentSettings.NasaApiKey;
@@ -447,7 +460,7 @@ namespace apod_wallpaper
                 currentSettings = new ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = downloadSetCheckBox.Checked,
-                    WallpaperStyleIndex = wallpaperStyleComboBox.SelectedIndex,
+                    WallpaperStyleIndex = (int)GetSelectedWallpaperStyle(),
                     AutoRefreshEnabled = everyTimeCheckBox.Checked,
                     StartWithWindows = startWithWindowsCheckBox.Checked,
                     ImagesDirectoryPath = imagesFolderTextBox.Text.Trim(),

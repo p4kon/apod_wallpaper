@@ -2,7 +2,7 @@ using System;
 
 namespace apod_wallpaper
 {
-    internal sealed class WallpaperService
+    internal sealed class WallpaperService : IWallpaperApplier
     {
         public void ApplyPreservingHistory(string imagePath, WallpaperStyle style)
         {
