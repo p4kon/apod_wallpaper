@@ -21,6 +21,7 @@ using System.Runtime.InteropServices;
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
 [assembly: Guid("f3e29f2c-7d62-482c-83fd-6ebba0cc4b99")]
+[assembly: InternalsVisibleTo("apod_wallpaper.SmokeTests")]
 
 // Version information for an assembly consists of the following four values:
 //

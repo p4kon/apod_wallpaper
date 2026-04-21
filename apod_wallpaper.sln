@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "apod_wallpaper", "apod_wall
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "apod_wallpaper.Core", "apod_wallpaper.Core\apod_wallpaper.Core.csproj", "{A5E9275F-FB85-4509-81A7-8B4AEE2A6B6F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "apod_wallpaper.SmokeTests", "apod_wallpaper.SmokeTests\apod_wallpaper.SmokeTests.csproj", "{B0D81B69-01A0-4F11-9B17-1CBF2F0DD3A7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{A5E9275F-FB85-4509-81A7-8B4AEE2A6B6F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A5E9275F-FB85-4509-81A7-8B4AEE2A6B6F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A5E9275F-FB85-4509-81A7-8B4AEE2A6B6F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0D81B69-01A0-4F11-9B17-1CBF2F0DD3A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0D81B69-01A0-4F11-9B17-1CBF2F0DD3A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0D81B69-01A0-4F11-9B17-1CBF2F0DD3A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0D81B69-01A0-4F11-9B17-1CBF2F0DD3A7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

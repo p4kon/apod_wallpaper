@@ -175,6 +175,9 @@ namespace apod_wallpaper
                         return ApiKeyValidationState.Invalid;
                 }
 
+                if (statusCode == 401 || statusCode == 403)
+                    return ApiKeyValidationState.Invalid;
+
                 AppLogger.Warn("NASA API key validation returned HTTP " + statusCode + ".", ex);
                 return ApiKeyValidationState.Unknown;
             }

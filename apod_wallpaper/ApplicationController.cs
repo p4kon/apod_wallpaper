@@ -93,6 +93,9 @@ namespace apod_wallpaper
 
             Properties.Settings.Default.Save();
 
+            if (apiKeyChanged)
+                ResetApiKeyValidationRuntimeState();
+
             ApplyRuntimeSettings();
             _calendarStateService.Clear();
             ConfigureScheduler(settings);
@@ -496,6 +499,17 @@ namespace apod_wallpaper
             Properties.Settings.Default.NasaApiKeyValidationState = validationState.ToString();
             Properties.Settings.Default.Save();
             ApplyRuntimeSettings();
+        }
+
+        private void ResetApiKeyValidationRuntimeState()
+        {
+            lock (_apiKeyValidationSync)
+            {
+                _apiKeyValidationTask = null;
+                _apiKeyValidationTaskKey = null;
+                _lastUnknownApiValidationKey = null;
+                _lastUnknownApiValidationUtc = DateTime.MinValue;
+            }
         }
 
         private void RaiseWallpaperApplied(ApodWorkflowResult result, bool automatic)
