@@ -1,4 +1,6 @@
 using System;
+using System.Drawing;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,6 +18,11 @@ namespace apod_wallpaper.SmokeTests
             Run("Future date is unavailable async", FutureDateIsUnavailableAsync);
             Run("API key change resets validation state", ApiKeyChangeResetsValidationState);
             Run("Preferred display date uses last applied date", PreferredDisplayDateUsesLastAppliedDate);
+            Run("HTML extractor resolves preview and full image", HtmlExtractorResolvesImagePage);
+            Run("HTML extractor rejects video page", HtmlExtractorRejectsVideoPage);
+            Run("HTML extractor handles annotated image page", HtmlExtractorHandlesAnnotatedImagePage);
+            Run("Runtime settings fall back to DEMO_KEY for invalid key", InvalidApiKeyFallsBackToDemoKey);
+            Run("Local image is preferred for preview", LocalImageIsPreferredForPreview);
 
             Console.WriteLine(_failures == 0
                 ? "Smoke tests passed."
@@ -136,6 +143,121 @@ namespace apod_wallpaper.SmokeTests
             }
             finally
             {
+                RestoreSettings(snapshot);
+            }
+        }
+
+        private static void HtmlExtractorResolvesImagePage()
+        {
+            const string html =
+@"2026 April 8
+<br>
+<a href=""image/2604/earthset_original.jpg"">
+<IMG SRC=""image/2604/earthset_700.jpg"" style=""max-width:100%""></a>
+</center>";
+
+            string previewUrl;
+            string imageUrl;
+            var result = apod_wallpaper.ApodPageImageExtractor.TryExtract(
+                html,
+                "https://apod.nasa.gov/apod/ap260408.html",
+                out previewUrl,
+                out imageUrl);
+
+            Assert(result, "Expected extractor to resolve an image page.");
+            Assert(previewUrl == "https://apod.nasa.gov/apod/image/2604/earthset_700.jpg", "Unexpected preview URL.");
+            Assert(imageUrl == "https://apod.nasa.gov/apod/image/2604/earthset_original.jpg", "Unexpected full image URL.");
+        }
+
+        private static void HtmlExtractorRejectsVideoPage()
+        {
+            const string html =
+@"2026 April 9
+<br>
+<video width=""960"" height=""540"" controls autoplay muted>
+<source src=""image/2604/comet_plunge.mp4"" type=""video/mp4"">
+</video>
+</center>";
+
+            string previewUrl;
+            string imageUrl;
+            var result = apod_wallpaper.ApodPageImageExtractor.TryExtract(
+                html,
+                "https://apod.nasa.gov/apod/ap260409.html",
+                out previewUrl,
+                out imageUrl);
+
+            Assert(!result, "Expected extractor to reject a video page.");
+            Assert(string.IsNullOrEmpty(previewUrl), "Preview URL should be empty for video pages.");
+            Assert(string.IsNullOrEmpty(imageUrl), "Image URL should be empty for video pages.");
+        }
+
+        private static void HtmlExtractorHandlesAnnotatedImagePage()
+        {
+            const string html =
+@"2026 March 15
+<br>
+<a href=""image/2603/MayanMilkyWay_Fernandez_1600.jpg""
+onMouseOver=""if (document.images) document.imagename1.src='image/2603/MayanMilkyWay_Fernandez_1080_annotated.jpg';""
+onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilkyWay_Fernandez_1080.jpg';"">
+<IMG SRC=""image/2603/MayanMilkyWay_Fernandez_1080.jpg"" name=imagename1 style=""max-width:100%""></a>
+</center>";
+
+            string previewUrl;
+            string imageUrl;
+            var result = apod_wallpaper.ApodPageImageExtractor.TryExtract(
+                html,
+                "https://apod.nasa.gov/apod/ap260315.html",
+                out previewUrl,
+                out imageUrl);
+
+            Assert(result, "Expected extractor to resolve an annotated image page.");
+            Assert(previewUrl == "https://apod.nasa.gov/apod/image/2603/MayanMilkyWay_Fernandez_1080.jpg", "Unexpected preview URL for annotated image page.");
+            Assert(imageUrl == "https://apod.nasa.gov/apod/image/2603/MayanMilkyWay_Fernandez_1600.jpg", "Unexpected full image URL for annotated image page.");
+        }
+
+        private static void InvalidApiKeyFallsBackToDemoKey()
+        {
+            apod_wallpaper.AppRuntimeSettings.Configure("invalid-key", null, apod_wallpaper.ApiKeyValidationState.Invalid);
+            Assert(apod_wallpaper.AppRuntimeSettings.NasaApiKey == "DEMO_KEY", "Expected DEMO_KEY fallback for invalid API key.");
+            Assert(apod_wallpaper.AppRuntimeSettings.RawNasaApiKey == "invalid-key", "Expected raw API key to remain available.");
+        }
+
+        private static void LocalImageIsPreferredForPreview()
+        {
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_smoke_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+
+            var snapshot = CaptureSettings();
+            try
+            {
+                var date = new DateTime(2026, 4, 18);
+                var imagePath = Path.Combine(tempDirectory, "2026-04-18.jpg");
+                using (var bitmap = new Bitmap(8, 8))
+                {
+                    bitmap.Save(imagePath, System.Drawing.Imaging.ImageFormat.Jpeg);
+                }
+
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(tempDirectory);
+                var workflow = new apod_wallpaper.ApodWorkflowService();
+                var result = workflow.LoadDay(date, false);
+
+                Assert(result.Status == apod_wallpaper.ApodWorkflowStatus.Success, "Expected local preview workflow to succeed.");
+                Assert(result.IsLocalFile, "Expected local file to be used for preview.");
+                Assert(string.Equals(result.PreviewLocation, imagePath, StringComparison.OrdinalIgnoreCase), "Expected preview location to be the local image path.");
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                try
+                {
+                    if (Directory.Exists(tempDirectory))
+                        Directory.Delete(tempDirectory, true);
+                }
+                catch
+                {
+                }
+
                 RestoreSettings(snapshot);
             }
         }
