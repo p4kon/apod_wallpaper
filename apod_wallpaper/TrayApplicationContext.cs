@@ -47,9 +47,17 @@ namespace apod_wallpaper
         {
             Thread thread = new Thread(() =>
             {
-                var workflowResult = controller.ApplyLatestPublished(controller.GetSelectedWallpaperStyle());
-                if (!workflowResult.IsSuccess)
-                    ShowTrayError(workflowResult.Message);
+                try
+                {
+                    var workflowResult = controller.ApplyLatestPublished(controller.GetSelectedWallpaperStyle());
+                    if (!workflowResult.IsSuccess)
+                        ShowTrayError(workflowResult.Message);
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Warn("Tray double-click apply failed.", ex);
+                    ShowTrayError(ApodErrorTranslator.ToUserMessage(ex));
+                }
             });
             thread.IsBackground = true;
             thread.Start();
@@ -57,6 +65,9 @@ namespace apod_wallpaper
 
         void ShowConfig(object sender, EventArgs e)
         {
+            if (!configWindow.Visible)
+                configWindow.SyncDisplayedDate(controller.GetPreferredDisplayDate());
+
             if (configWindow.Visible)
                 configWindow.Focus();
             else

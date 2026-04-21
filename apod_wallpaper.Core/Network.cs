@@ -27,18 +27,30 @@ namespace apod_wallpaper
 
         public static string DownloadString(string url)
         {
+            return DownloadString(url, NetworkRetryProfile.Default);
+        }
+
+        public static string DownloadString(string url, NetworkRetryProfile retryProfile)
+        {
             return ExecuteWithRetry(
                 "text",
                 url,
+                retryProfile,
                 () => DownloadStringWithHttpClient(SharedHttpClient.Value, url),
                 DownloadStringWithWebRequest);
         }
 
         public static Task<string> DownloadStringAsync(string url)
         {
+            return DownloadStringAsync(url, NetworkRetryProfile.Default);
+        }
+
+        public static Task<string> DownloadStringAsync(string url, NetworkRetryProfile retryProfile)
+        {
             return ExecuteWithRetryAsync(
                 "text",
                 url,
+                retryProfile,
                 async () => await DownloadStringWithHttpClientAsync(SharedHttpClient.Value, url).ConfigureAwait(false),
                 async requestUrl => await Task.Run(() => DownloadStringWithWebRequest(requestUrl)).ConfigureAwait(false));
         }
@@ -48,6 +60,7 @@ namespace apod_wallpaper
             return ExecuteWithRetry(
                 "bitmap",
                 url,
+                NetworkRetryProfile.Default,
                 () => DownloadBitmapWithHttpClient(SharedHttpClient.Value, url),
                 DownloadBitmapWithWebRequest);
         }
@@ -57,15 +70,17 @@ namespace apod_wallpaper
             return ExecuteWithRetryAsync(
                 "bitmap",
                 url,
+                NetworkRetryProfile.Default,
                 async () => await DownloadBitmapWithHttpClientAsync(SharedHttpClient.Value, url).ConfigureAwait(false),
                 async requestUrl => await Task.Run(() => DownloadBitmapWithWebRequest(requestUrl)).ConfigureAwait(false));
         }
 
-        private static T ExecuteWithRetry<T>(string kind, string url, Func<T> primaryAction, Func<string, T> fallbackAction)
+        private static T ExecuteWithRetry<T>(string kind, string url, NetworkRetryProfile retryProfile, Func<T> primaryAction, Func<string, T> fallbackAction)
         {
             Exception lastException = null;
+            var maxAttempts = ResolvePrimaryAttempts(kind, url, retryProfile);
 
-            for (var attempt = 1; attempt <= 3; attempt++)
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
                 try
                 {
@@ -77,10 +92,10 @@ namespace apod_wallpaper
                     lastException = ex;
                     AppLogger.Warn("Network primary attempt " + attempt + " failed for kind=" + kind + " url=" + url + ".", ex);
 
-                    if (!ShouldRetry(ex, attempt))
+                    if (!ShouldRetry(ex, attempt, maxAttempts))
                         break;
 
-                    if (attempt < 3)
+                    if (attempt < maxAttempts)
                         System.Threading.Thread.Sleep(RetryDelay);
                 }
             }
@@ -97,11 +112,12 @@ namespace apod_wallpaper
             }
         }
 
-        private static async Task<T> ExecuteWithRetryAsync<T>(string kind, string url, Func<Task<T>> primaryAction, Func<string, Task<T>> fallbackAction)
+        private static async Task<T> ExecuteWithRetryAsync<T>(string kind, string url, NetworkRetryProfile retryProfile, Func<Task<T>> primaryAction, Func<string, Task<T>> fallbackAction)
         {
             Exception lastException = null;
+            var maxAttempts = ResolvePrimaryAttempts(kind, url, retryProfile);
 
-            for (var attempt = 1; attempt <= 3; attempt++)
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
                 try
                 {
@@ -113,10 +129,10 @@ namespace apod_wallpaper
                     lastException = ex;
                     AppLogger.Warn("Network primary attempt " + attempt + " failed for kind=" + kind + " url=" + url + ".", ex);
 
-                    if (!ShouldRetry(ex, attempt))
+                    if (!ShouldRetry(ex, attempt, maxAttempts))
                         break;
 
-                    if (attempt < 3)
+                    if (attempt < maxAttempts)
                         await Task.Delay(RetryDelay).ConfigureAwait(false);
                 }
             }
@@ -270,9 +286,34 @@ namespace apod_wallpaper
             throw new NetworkHttpStatusException(numericStatusCode, url);
         }
 
-        private static bool ShouldRetry(Exception exception, int attempt)
+        private static int ResolvePrimaryAttempts(string kind, string url, NetworkRetryProfile retryProfile)
         {
-            if (attempt >= 3)
+            if (!string.Equals(kind, "text", StringComparison.OrdinalIgnoreCase))
+                return 3;
+
+            if (!IsNasaApiRequest(url))
+                return 3;
+
+            switch (retryProfile)
+            {
+                case NetworkRetryProfile.NasaApiDemo:
+                    return 1;
+                case NetworkRetryProfile.NasaApiAuthenticated:
+                    return 3;
+                default:
+                    return 3;
+            }
+        }
+
+        private static bool IsNasaApiRequest(string url)
+        {
+            return !string.IsNullOrWhiteSpace(url) &&
+                   url.IndexOf("api.nasa.gov/planetary/apod", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool ShouldRetry(Exception exception, int attempt, int maxAttempts)
+        {
+            if (attempt >= maxAttempts)
                 return false;
 
             var statusException = exception as NetworkHttpStatusException;

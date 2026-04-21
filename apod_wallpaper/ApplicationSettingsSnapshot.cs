@@ -9,8 +9,10 @@ namespace apod_wallpaper
         public bool AutoRefreshEnabled { get; set; }
         public bool StartWithWindows { get; set; }
         public string NasaApiKey { get; set; }
+        public string NasaApiKeyValidationState { get; set; }
         public string ImagesDirectoryPath { get; set; }
         public string LastAutoRefreshRunDate { get; set; }
+        public string LastAutoRefreshAppliedDate { get; set; }
 
         public ApplicationSettingsSnapshot Clone()
         {
@@ -21,8 +23,10 @@ namespace apod_wallpaper
                 AutoRefreshEnabled = AutoRefreshEnabled,
                 StartWithWindows = StartWithWindows,
                 NasaApiKey = NasaApiKey,
+                NasaApiKeyValidationState = NasaApiKeyValidationState,
                 ImagesDirectoryPath = ImagesDirectoryPath,
                 LastAutoRefreshRunDate = LastAutoRefreshRunDate,
+                LastAutoRefreshAppliedDate = LastAutoRefreshAppliedDate,
             };
         }
     }

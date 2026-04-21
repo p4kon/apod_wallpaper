@@ -11,6 +11,9 @@
     <Setting Name="NasaApiKey" Type="System.String" Scope="User">
       <Value Profile="(Default)">DEMO_KEY</Value>
     </Setting>
+    <Setting Name="NasaApiKeyValidationState" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Unknown</Value>
+    </Setting>
     <Setting Name="AutoRefreshEnabled" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>
@@ -21,6 +24,9 @@
       <Value Profile="(Default)"></Value>
     </Setting>
     <Setting Name="LastAutoRefreshRunDate" Type="System.String" Scope="User">
+      <Value Profile="(Default)"></Value>
+    </Setting>
+    <Setting Name="LastAutoRefreshAppliedDate" Type="System.String" Scope="User">
       <Value Profile="(Default)"></Value>
     </Setting>
   </Settings>

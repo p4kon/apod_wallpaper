@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Net;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Linq;
@@ -18,10 +19,11 @@ namespace apod_wallpaper
         public ApodEntry GetEntry(DateTime date)
         {
             var requestUrl = BuildSingleRequestUrl(date);
+            var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=single date=" + date.ToString("yyyy-MM-dd") + " url=" + requestUrl);
             try
             {
-                var entry = Deserialize<ApodEntry>(Network.DownloadString(requestUrl), "NASA APOD API response could not be parsed.");
+                var entry = Deserialize<ApodEntry>(Network.DownloadString(requestUrl, retryProfile), "NASA APOD API response could not be parsed.");
                 entry.ResolvedFromSource = "api";
                 return NormalizeEntry(entry, date);
             }
@@ -35,10 +37,11 @@ namespace apod_wallpaper
         public async Task<ApodEntry> GetEntryAsync(DateTime date)
         {
             var requestUrl = BuildSingleRequestUrl(date);
+            var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=single_async date=" + date.ToString("yyyy-MM-dd") + " url=" + requestUrl);
             try
             {
-                var entry = Deserialize<ApodEntry>(await Network.DownloadStringAsync(requestUrl).ConfigureAwait(false), "NASA APOD API response could not be parsed.");
+                var entry = Deserialize<ApodEntry>(await Network.DownloadStringAsync(requestUrl, retryProfile).ConfigureAwait(false), "NASA APOD API response could not be parsed.");
                 entry.ResolvedFromSource = "api";
                 return await NormalizeEntryAsync(entry, date).ConfigureAwait(false);
             }
@@ -52,10 +55,11 @@ namespace apod_wallpaper
         public ApodEntry GetLatestEntry()
         {
             var requestUrl = BuildLatestRequestUrl();
+            var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=latest url=" + requestUrl);
             try
             {
-                var entry = Deserialize<ApodEntry>(Network.DownloadString(requestUrl), "NASA APOD API response could not be parsed.");
+                var entry = Deserialize<ApodEntry>(Network.DownloadString(requestUrl, retryProfile), "NASA APOD API response could not be parsed.");
                 entry.ResolvedFromSource = "api";
                 return NormalizeEntry(entry, null);
             }
@@ -69,10 +73,11 @@ namespace apod_wallpaper
         public async Task<ApodEntry> GetLatestEntryAsync()
         {
             var requestUrl = BuildLatestRequestUrl();
+            var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=latest_async url=" + requestUrl);
             try
             {
-                var entry = Deserialize<ApodEntry>(await Network.DownloadStringAsync(requestUrl).ConfigureAwait(false), "NASA APOD API response could not be parsed.");
+                var entry = Deserialize<ApodEntry>(await Network.DownloadStringAsync(requestUrl, retryProfile).ConfigureAwait(false), "NASA APOD API response could not be parsed.");
                 entry.ResolvedFromSource = "api";
                 return await NormalizeEntryAsync(entry, null).ConfigureAwait(false);
             }
@@ -86,10 +91,11 @@ namespace apod_wallpaper
         public IReadOnlyList<ApodEntry> GetEntries(DateTime startDate, DateTime endDate)
         {
             var requestUrl = BuildRangeRequestUrl(startDate, endDate);
+            var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=range start=" + startDate.ToString("yyyy-MM-dd") + " end=" + endDate.ToString("yyyy-MM-dd") + " url=" + requestUrl);
             try
             {
-                var entries = Deserialize<List<ApodEntry>>(Network.DownloadString(requestUrl), "NASA APOD API range response could not be parsed.");
+                var entries = Deserialize<List<ApodEntry>>(Network.DownloadString(requestUrl, retryProfile), "NASA APOD API range response could not be parsed.");
                 return entries.Select(entry => NormalizeEntry(entry, null)).ToList();
             }
             catch (Exception ex)
@@ -102,10 +108,11 @@ namespace apod_wallpaper
         public async Task<IReadOnlyList<ApodEntry>> GetEntriesAsync(DateTime startDate, DateTime endDate)
         {
             var requestUrl = BuildRangeRequestUrl(startDate, endDate);
+            var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=range_async start=" + startDate.ToString("yyyy-MM-dd") + " end=" + endDate.ToString("yyyy-MM-dd") + " url=" + requestUrl);
             try
             {
-                var entries = Deserialize<List<ApodEntry>>(await Network.DownloadStringAsync(requestUrl).ConfigureAwait(false), "NASA APOD API range response could not be parsed.");
+                var entries = Deserialize<List<ApodEntry>>(await Network.DownloadStringAsync(requestUrl, retryProfile).ConfigureAwait(false), "NASA APOD API range response could not be parsed.");
                 var normalizedEntries = new List<ApodEntry>(entries.Count);
                 foreach (var entry in entries)
                     normalizedEntries.Add(await NormalizeEntryAsync(entry, null).ConfigureAwait(false));
@@ -116,6 +123,65 @@ namespace apod_wallpaper
             {
                 AppLogger.Warn("NASA APOD async range request failed for " + startDate.ToString("yyyy-MM-dd") + " - " + endDate.ToString("yyyy-MM-dd") + ".", ex);
                 return await GetEntriesOneByOneAsync(startDate, endDate).ConfigureAwait(false);
+            }
+        }
+
+        public async Task<ApiKeyValidationState> ValidateApiKeyAsync(string apiKey)
+        {
+            if (string.IsNullOrWhiteSpace(apiKey) || string.Equals(apiKey.Trim(), DemoApiKey, StringComparison.OrdinalIgnoreCase))
+                return ApiKeyValidationState.Unknown;
+
+            var requestUrl = string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}?api_key={1}",
+                Endpoint,
+                Uri.EscapeDataString(apiKey.Trim()));
+
+            AppLogger.Web("source=nasa_api scope=validate url=" + requestUrl);
+
+            try
+            {
+                var request = (HttpWebRequest)WebRequest.Create(requestUrl);
+                request.Method = "GET";
+                request.UserAgent = "apod_wallpaper/1.0";
+                request.Timeout = 15000;
+                request.ReadWriteTimeout = 15000;
+                request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                request.Proxy = WebRequest.DefaultWebProxy;
+                if (request.Proxy != null)
+                    request.Proxy.Credentials = CredentialCache.DefaultCredentials;
+
+                using (var response = (HttpWebResponse)await request.GetResponseAsync().ConfigureAwait(false))
+                using (var stream = response.GetResponseStream())
+                using (var reader = new StreamReader(stream ?? Stream.Null, Encoding.UTF8))
+                {
+                    var json = reader.ReadToEnd();
+                    if (LooksLikeInvalidApiKeyResponse(json))
+                        return ApiKeyValidationState.Invalid;
+
+                    Deserialize<ApodEntry>(json, "NASA APOD API validation response could not be parsed.");
+                    return ApiKeyValidationState.Valid;
+                }
+            }
+            catch (WebException ex) when (ex.Response is HttpWebResponse response)
+            {
+                var statusCode = (int)response.StatusCode;
+                using (response)
+                using (var stream = response.GetResponseStream())
+                using (var reader = new StreamReader(stream ?? Stream.Null, Encoding.UTF8))
+                {
+                    var body = reader.ReadToEnd();
+                    if (LooksLikeInvalidApiKeyResponse(body))
+                        return ApiKeyValidationState.Invalid;
+                }
+
+                AppLogger.Warn("NASA API key validation returned HTTP " + statusCode + ".", ex);
+                return ApiKeyValidationState.Unknown;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("NASA API key validation failed.", ex);
+                return ApiKeyValidationState.Unknown;
             }
         }
 
@@ -304,6 +370,26 @@ namespace apod_wallpaper
                 return configuredApiKey.Trim();
 
             return DemoApiKey;
+        }
+
+        private static bool LooksLikeInvalidApiKeyResponse(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return false;
+
+            var normalized = json.ToLowerInvariant();
+            return normalized.Contains("api_key_invalid") ||
+                   normalized.Contains("invalid api key") ||
+                   normalized.Contains("an invalid api key was supplied") ||
+                   normalized.Contains("\"error\"") && normalized.Contains("api key");
+        }
+
+        private static NetworkRetryProfile ResolveApiRetryProfile()
+        {
+            var apiKey = ResolveApiKey();
+            return string.Equals(apiKey, DemoApiKey, StringComparison.OrdinalIgnoreCase)
+                ? NetworkRetryProfile.NasaApiDemo
+                : NetworkRetryProfile.NasaApiAuthenticated;
         }
 
         private static ApodEntry CreateEntryFromApodPage(DateTime date)

@@ -16,8 +16,11 @@ namespace apod_wallpaper
 
     internal static class SmartWallpaperComposer
     {
-        private const double LandscapeTolerance = 0.18;
-        private const double PortraitThreshold = 0.82;
+        private const double NearMatchStretchTolerance = 0.10;
+        private const double WiderThanScreenThreshold = 1.10;
+        private const double PortraitCollageThreshold = 0.52;
+        private const double SingleFocusScale = 0.82;
+        private const double SingleFocusMaxHeightScale = 0.86;
 
         public static SmartWallpaperComposition Prepare(string originalImagePath)
         {
@@ -29,18 +32,29 @@ namespace apod_wallpaper
             {
                 var imageAspect = image.Width / (double)image.Height;
                 var screenAspect = screenBounds.Width / (double)screenBounds.Height;
+                var normalizedAspectRatio = imageAspect / screenAspect;
 
-                if (Math.Abs(imageAspect - screenAspect) <= LandscapeTolerance)
+                if (Math.Abs(1d - normalizedAspectRatio) <= NearMatchStretchTolerance)
+                {
+                    return new SmartWallpaperComposition
+                    {
+                        ImagePath = originalImagePath,
+                        Style = WallpaperStyle.Stretch,
+                        Strategy = "stretch_near_screen_ratio",
+                    };
+                }
+
+                if (normalizedAspectRatio > WiderThanScreenThreshold)
                 {
                     return new SmartWallpaperComposition
                     {
                         ImagePath = originalImagePath,
                         Style = WallpaperStyle.Fill,
-                        Strategy = "fill_near_screen_ratio",
+                        Strategy = "fill_wider_than_screen",
                     };
                 }
 
-                if (imageAspect < PortraitThreshold)
+                if (normalizedAspectRatio < PortraitCollageThreshold)
                 {
                     var composedPath = ComposePortraitWallpaper(originalImagePath, image, screenBounds);
                     return new SmartWallpaperComposition
@@ -51,21 +65,19 @@ namespace apod_wallpaper
                     };
                 }
 
+                var singleFocusPath = ComposeSingleFocusWallpaper(originalImagePath, image, screenBounds);
                 return new SmartWallpaperComposition
                 {
-                    ImagePath = originalImagePath,
-                    Style = WallpaperStyle.Fit,
-                    Strategy = "fit_preserve_image",
+                    ImagePath = singleFocusPath,
+                    Style = WallpaperStyle.Fill,
+                    Strategy = "single_focus_background",
                 };
             }
         }
 
         private static string ComposePortraitWallpaper(string originalImagePath, Image sourceImage, Rectangle screenBounds)
         {
-            Directory.CreateDirectory(FileStorage.CacheDirectory);
-            var targetPath = Path.Combine(
-                FileStorage.CacheDirectory,
-                Path.GetFileNameWithoutExtension(originalImagePath) + ".smart.jpg");
+            var targetPath = BuildSmartTargetPath(originalImagePath, screenBounds, "collage");
 
             using (var canvas = new Bitmap(screenBounds.Width, screenBounds.Height))
             using (var graphics = Graphics.FromImage(canvas))
@@ -82,6 +94,37 @@ namespace apod_wallpaper
             }
 
             return targetPath;
+        }
+
+        private static string ComposeSingleFocusWallpaper(string originalImagePath, Image sourceImage, Rectangle screenBounds)
+        {
+            var targetPath = BuildSmartTargetPath(originalImagePath, screenBounds, "single");
+
+            using (var canvas = new Bitmap(screenBounds.Width, screenBounds.Height))
+            using (var graphics = Graphics.FromImage(canvas))
+            {
+                graphics.SmoothingMode = SmoothingMode.HighQuality;
+                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                graphics.Clear(Color.Black);
+
+                DrawDimmedBackground(graphics, sourceImage, screenBounds);
+                DrawSingleFocusImage(graphics, sourceImage, screenBounds);
+
+                canvas.Save(targetPath, ImageFormat.Jpeg);
+            }
+
+            return targetPath;
+        }
+
+        private static string BuildSmartTargetPath(string originalImagePath, Rectangle screenBounds, string strategy)
+        {
+            FileStorage.EnsureSmartImagesDirectory();
+            return FileStorage.GetSmartImagePath(
+                Path.GetFileNameWithoutExtension(originalImagePath) +
+                "." + strategy +
+                "." + screenBounds.Width + "x" + screenBounds.Height +
+                ".smart.jpg");
         }
 
         private static void DrawDimmedBackground(Graphics graphics, Image sourceImage, Rectangle screenBounds)
@@ -145,6 +188,36 @@ namespace apod_wallpaper
                     graphics.DrawImage(sourceImage, targetRect);
                 }
             }
+        }
+
+        private static void DrawSingleFocusImage(Graphics graphics, Image sourceImage, Rectangle screenBounds)
+        {
+            var sourceAspect = sourceImage.Width / (double)sourceImage.Height;
+            var maxWidth = (int)Math.Round(screenBounds.Width * SingleFocusScale);
+            var maxHeight = (int)Math.Round(screenBounds.Height * SingleFocusMaxHeightScale);
+
+            var targetWidth = Math.Min(maxWidth, (int)Math.Round(maxHeight * sourceAspect));
+            var targetHeight = (int)Math.Round(targetWidth / sourceAspect);
+
+            if (targetHeight > maxHeight)
+            {
+                targetHeight = maxHeight;
+                targetWidth = (int)Math.Round(targetHeight * sourceAspect);
+            }
+
+            var targetRect = new Rectangle(
+                (screenBounds.Width - targetWidth) / 2,
+                (screenBounds.Height - targetHeight) / 2,
+                targetWidth,
+                targetHeight);
+
+            using (var shadowBrush = new SolidBrush(Color.FromArgb(90, 0, 0, 0)))
+            {
+                var shadowRect = new Rectangle(targetRect.X + 12, targetRect.Y + 12, targetRect.Width, targetRect.Height);
+                graphics.FillRectangle(shadowBrush, shadowRect);
+            }
+
+            graphics.DrawImage(sourceImage, targetRect);
         }
     }
 }

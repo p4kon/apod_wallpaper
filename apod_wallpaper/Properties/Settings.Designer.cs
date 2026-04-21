@@ -52,6 +52,18 @@ namespace apod_wallpaper.Properties {
                 this["NasaApiKey"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Unknown")]
+        public string NasaApiKeyValidationState {
+            get {
+                return ((string)(this["NasaApiKeyValidationState"]));
+            }
+            set {
+                this["NasaApiKeyValidationState"] = value;
+            }
+        }
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
@@ -98,6 +110,18 @@ namespace apod_wallpaper.Properties {
             }
             set {
                 this["LastAutoRefreshRunDate"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string LastAutoRefreshAppliedDate {
+            get {
+                return ((string)(this["LastAutoRefreshAppliedDate"]));
+            }
+            set {
+                this["LastAutoRefreshAppliedDate"] = value;
             }
         }
     }

@@ -19,6 +19,7 @@ namespace apod_wallpaper
         private bool nonImageMedia = false;
         private bool loading_picture = false;
         private bool download_only = false;
+        private bool applyingWallpaperStyleChange = false;
         private int previewRequestVersion;
         private ApodEntry currentEntry;
         private ApplicationSettingsSnapshot currentSettings;
@@ -29,7 +30,8 @@ namespace apod_wallpaper
             this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
             InitializeComponent();
             this.controller.WallpaperApplied += controller_WallpaperApplied;
-            pictureDayDateTimePicker.Value = DateTime.UtcNow;
+            pictureDayDateTimePicker.MaxDate = DateTime.Today;
+            pictureDayDateTimePicker.Value = DateTime.Today;
             wallpaperStyleComboBox.DataSource = Enum.GetValues(typeof(WallpaperStyle));
             pictureDayDateTimePicker.DropDown += pictureDayDateTimePicker_DropDown;
             imagesFolderTextBox.TextChanged += imagesFolderTextBox_TextChanged;
@@ -51,7 +53,13 @@ namespace apod_wallpaper
             startWithWindowsCheckBox.Checked = currentSettings.StartWithWindows;
             apiKeyTextBox.Text = currentSettings.NasaApiKey;
             imagesFolderTextBox.Text = FileStorage.ImagesDirectory;
+            var preferredDate = controller.GetPreferredDisplayDate();
+            if (preferredDate > pictureDayDateTimePicker.MaxDate)
+                preferredDate = pictureDayDateTimePicker.MaxDate.Date;
+            pictureDayDateTimePicker.Value = preferredDate;
             controller.UpdateSessionImagesDirectory(imagesFolderTextBox.Text);
+            UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
+            currentSettings = controller.GetSettings();
             suppressSettingsSync = false;
 
             await controller.RefreshLocalImageIndexAsync().ConfigureAwait(true);
@@ -129,6 +137,8 @@ namespace apod_wallpaper
             {
                 workflowResult = await controller.ApplyDayAsync(selectedDate, GetSelectedWallpaperStyle()).ConfigureAwait(true);
             }
+            currentSettings = controller.GetSettings();
+            UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
 
             currentEntry = workflowResult.Entry;
             if (!workflowResult.IsSuccess)
@@ -154,7 +164,6 @@ namespace apod_wallpaper
         {
             not_found = false;
             nonImageMedia = false;
-            pictureDayDateTimePicker.Enabled = false;
             downloadButton.Enabled = false;
             await PictureShowPreviewAsync();
         }
@@ -172,6 +181,8 @@ namespace apod_wallpaper
                 loading_picture = true;
 
                 var workflowResult = await controller.LoadDayAsync(selectedDate).ConfigureAwait(true);
+                currentSettings = controller.GetSettings();
+                UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
                 if (requestVersion != previewRequestVersion)
                     return;
 
@@ -340,6 +351,9 @@ namespace apod_wallpaper
             var activeForm = ActiveForm;
             if (activeForm != null)
                 activeForm.Focus();
+
+            if (!suppressSettingsSync)
+                _ = ReapplySelectedWallpaperStyleAsync();
         }
 
         private void downloadButton_MouseHover(object sender, EventArgs e)
@@ -407,7 +421,6 @@ namespace apod_wallpaper
             PreviewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
             PreviewPictureBox.Image = ApodResources.image_not_found;
             not_found = true;
-            pictureDayDateTimePicker.Enabled = true;
             downloadButton.Enabled = false;
             loading_picture = false;
         }
@@ -439,10 +452,14 @@ namespace apod_wallpaper
                     StartWithWindows = startWithWindowsCheckBox.Checked,
                     ImagesDirectoryPath = imagesFolderTextBox.Text.Trim(),
                     NasaApiKey = apiKeyTextBox.Text.Trim(),
+                    NasaApiKeyValidationState = currentSettings != null ? currentSettings.NasaApiKeyValidationState : ApiKeyValidationState.Unknown.ToString(),
                     LastAutoRefreshRunDate = currentSettings != null ? currentSettings.LastAutoRefreshRunDate : string.Empty,
+                    LastAutoRefreshAppliedDate = currentSettings != null ? currentSettings.LastAutoRefreshAppliedDate : string.Empty,
                 };
 
                 controller.SaveSettings(currentSettings);
+                currentSettings = controller.GetSettings();
+                UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
             }
             catch (Exception ex)
             {
@@ -476,7 +493,6 @@ namespace apod_wallpaper
             PreviewPictureBox.Image = null;
             PreviewPictureBox.ImageLocation = imageLocation;
             not_found = false;
-            pictureDayDateTimePicker.Enabled = true;
             downloadButton.Enabled = true;
             loading_picture = false;
         }
@@ -499,7 +515,7 @@ namespace apod_wallpaper
             toolTip.SetToolTip(pictureDayDateTimePicker, "Choose the APOD date to preview, download or apply as wallpaper.");
             toolTip.SetToolTip(downloadButton, "Download the selected APOD image and apply it as wallpaper. Hold Shift to only download the image.");
             toolTip.SetToolTip(everyTimeCheckBox, "Check automatically for the latest APOD image. DEMO_KEY checks about once per hour; a personal NASA API key checks about every 30 minutes until an image is available.");
-            toolTip.SetToolTip(wallpaperStyleComboBox, "Choose how the wallpaper should be placed on your screen. Smart mode adapts vertical images automatically.");
+            toolTip.SetToolTip(wallpaperStyleComboBox, "Choose how the wallpaper should be placed on your screen. Smart mode adapts to the current monitor ratio and changing the mode reapplies the selected wallpaper automatically.");
             toolTip.SetToolTip(apiKeyTextBox, "Paste your personal NASA APOD API key here. Changes are saved automatically.");
             toolTip.SetToolTip(getApiKeyButton, "Open NASA API key page and copy the link. VPN may be needed in some regions.");
             toolTip.SetToolTip(imagesFolderTextBox, "Folder where downloaded APOD images are stored. Changes are saved automatically.");
@@ -528,6 +544,66 @@ namespace apod_wallpaper
                 return;
 
             pictureDayDateTimePicker.Value = resolvedDate;
+        }
+
+        internal void SyncDisplayedDate(DateTime preferredDate)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((MethodInvoker)delegate { SyncDisplayedDate(preferredDate); });
+                return;
+            }
+
+            pictureDayDateTimePicker.MaxDate = DateTime.Today;
+            var targetDate = preferredDate.Date;
+            if (targetDate > pictureDayDateTimePicker.MaxDate.Date)
+                targetDate = pictureDayDateTimePicker.MaxDate.Date;
+            if (targetDate < pictureDayDateTimePicker.MinDate.Date)
+                targetDate = pictureDayDateTimePicker.MinDate.Date;
+
+            if (pictureDayDateTimePicker.Value.Date != targetDate)
+                pictureDayDateTimePicker.Value = targetDate;
+        }
+
+        private void UpdateApiKeyValidationIndicator(ApiKeyValidationState validationState)
+        {
+            switch (validationState)
+            {
+                case ApiKeyValidationState.Invalid:
+                    apiKeyStatusLabel.Text = "The current NASA API key looks invalid. DEMO_KEY fallback is active.";
+                    break;
+                default:
+                    apiKeyStatusLabel.Text = string.Empty;
+                    break;
+            }
+        }
+
+        private async Task ReapplySelectedWallpaperStyleAsync()
+        {
+            if (applyingWallpaperStyleChange || suppressSettingsSync || loading_picture || not_found || currentEntry == null || !currentEntry.HasImage)
+                return;
+
+            applyingWallpaperStyleChange = true;
+            try
+            {
+                var selectedDate = pictureDayDateTimePicker.Value.Date;
+                var workflowResult = await controller.ApplyDayAsync(selectedDate, GetSelectedWallpaperStyle()).ConfigureAwait(true);
+                UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
+                if (!workflowResult.IsSuccess)
+                    return;
+
+                currentEntry = workflowResult.Entry;
+                UpdatePreviewImage(workflowResult.ImagePath);
+                MaybeDisableAutoRefreshForManualSelection(selectedDate);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn("Unable to reapply wallpaper after wallpaper mode change.", ex);
+            }
+            finally
+            {
+                applyingWallpaperStyleChange = false;
+            }
         }
     }
 }

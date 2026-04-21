@@ -10,6 +10,10 @@ namespace apod_wallpaper
 
         public ApodWorkflowResult LoadDay(DateTime date, bool forceRefresh = false)
         {
+            var futureDateResult = CreateFutureDateUnavailableResult(date);
+            if (futureDateResult != null)
+                return futureDateResult;
+
             return Execute(date, () =>
             {
                 var preview = _wallpaperService.GetPreviewByDate(date, forceRefresh);
@@ -43,6 +47,10 @@ namespace apod_wallpaper
 
         public Task<ApodWorkflowResult> LoadDayAsync(DateTime date, bool forceRefresh = false)
         {
+            var futureDateResult = CreateFutureDateUnavailableResult(date);
+            if (futureDateResult != null)
+                return Task.FromResult(futureDateResult);
+
             return ExecuteAsync(date, async () =>
             {
                 var preview = await _wallpaperService.GetPreviewByDateAsync(date, forceRefresh).ConfigureAwait(false);
@@ -76,6 +84,10 @@ namespace apod_wallpaper
 
         public ApodWorkflowResult DownloadDay(DateTime date, bool forceRefresh = false)
         {
+            var futureDateResult = CreateFutureDateUnavailableResult(date);
+            if (futureDateResult != null)
+                return futureDateResult;
+
             return Execute(date, () =>
             {
                 var download = _wallpaperService.DownloadImageByDate(date, forceRefresh);
@@ -97,6 +109,10 @@ namespace apod_wallpaper
 
         public Task<ApodWorkflowResult> DownloadDayAsync(DateTime date, bool forceRefresh = false)
         {
+            var futureDateResult = CreateFutureDateUnavailableResult(date);
+            if (futureDateResult != null)
+                return Task.FromResult(futureDateResult);
+
             return ExecuteAsync(date, async () =>
             {
                 var download = await _wallpaperService.DownloadImageByDateAsync(date, forceRefresh).ConfigureAwait(false);
@@ -118,6 +134,10 @@ namespace apod_wallpaper
 
         public ApodWorkflowResult ApplyDay(DateTime date, WallpaperStyle style, bool forceRefresh = false)
         {
+            var futureDateResult = CreateFutureDateUnavailableResult(date);
+            if (futureDateResult != null)
+                return futureDateResult;
+
             return Execute(date, () =>
             {
                 var apply = _wallpaperService.ApplyWallpaperByDate(date, style, forceRefresh);
@@ -139,6 +159,10 @@ namespace apod_wallpaper
 
         public Task<ApodWorkflowResult> ApplyDayAsync(DateTime date, WallpaperStyle style, bool forceRefresh = false)
         {
+            var futureDateResult = CreateFutureDateUnavailableResult(date);
+            if (futureDateResult != null)
+                return Task.FromResult(futureDateResult);
+
             return ExecuteAsync(date, async () =>
             {
                 var apply = await _wallpaperService.ApplyWallpaperByDateAsync(date, style, forceRefresh).ConfigureAwait(false);
@@ -231,14 +255,34 @@ namespace apod_wallpaper
             return _wallpaperService.GetLatestPublishedDate();
         }
 
+        public DateTime GetLatestAvailableDate()
+        {
+            return _wallpaperService.GetLatestAvailableDate();
+        }
+
         public Task<DateTime> GetLatestPublishedDateAsync()
         {
             return _wallpaperService.GetLatestPublishedDateAsync();
         }
 
+        public Task<DateTime> GetLatestAvailableDateAsync()
+        {
+            return _wallpaperService.GetLatestAvailableDateAsync();
+        }
+
+        public Task<ApiKeyValidationState> ValidateApiKeyAsync(string apiKey)
+        {
+            return _wallpaperService.ValidateApiKeyAsync(apiKey);
+        }
+
         public Task RefreshLocalImageIndexAsync()
         {
             return _wallpaperService.RefreshLocalImageIndexAsync();
+        }
+
+        public bool HasUsableLocalImage(DateTime date)
+        {
+            return _wallpaperService.HasUsableLocalImage(date);
         }
 
         private static ApodWorkflowResult Execute(DateTime requestedDate, Func<ApodWorkflowResult> action)
@@ -285,6 +329,21 @@ namespace apod_wallpaper
             return entry != null && DateTime.TryParse(entry.Date, out parsedDate)
                 ? parsedDate.Date
                 : fallbackDate.Date;
+        }
+
+        private static ApodWorkflowResult CreateFutureDateUnavailableResult(DateTime requestedDate)
+        {
+            var localToday = DateTime.Now.Date;
+            if (requestedDate.Date <= localToday)
+                return null;
+
+            return new ApodWorkflowResult
+            {
+                Status = ApodWorkflowStatus.Unavailable,
+                RequestedDate = requestedDate.Date,
+                Message = "NASA has not published APOD for this date yet.",
+                Source = ApodDataSource.Unknown,
+            };
         }
     }
 }
