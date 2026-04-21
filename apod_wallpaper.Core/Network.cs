@@ -60,6 +60,7 @@ namespace apod_wallpaper
             return ExecuteWithRetry(
                 "bitmap",
                 url,
+                NetworkRetryProfile.Default,
                 () => DownloadBitmapWithHttpClient(SharedHttpClient.Value, url),
                 DownloadBitmapWithWebRequest);
         }
@@ -69,6 +70,7 @@ namespace apod_wallpaper
             return ExecuteWithRetryAsync(
                 "bitmap",
                 url,
+                NetworkRetryProfile.Default,
                 async () => await DownloadBitmapWithHttpClientAsync(SharedHttpClient.Value, url).ConfigureAwait(false),
                 async requestUrl => await Task.Run(() => DownloadBitmapWithWebRequest(requestUrl)).ConfigureAwait(false));
         }

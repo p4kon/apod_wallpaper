@@ -72,19 +72,18 @@ namespace apod_wallpaper
             if (Interlocked.Exchange(ref _taskIsRunning, 1) == 1)
                 return;
 
-            Action task;
+            Action task = null;
 
             lock (_syncRoot)
             {
-                if (!IsRunning)
-                    return;
-
-                task = _scheduledTask;
+                if (IsRunning)
+                    task = _scheduledTask;
             }
 
             try
             {
-                task();
+                if (task != null)
+                    task();
             }
             finally
             {

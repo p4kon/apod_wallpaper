@@ -165,6 +165,7 @@ namespace apod_wallpaper
             }
             catch (WebException ex) when (ex.Response is HttpWebResponse response)
             {
+                var statusCode = (int)response.StatusCode;
                 using (response)
                 using (var stream = response.GetResponseStream())
                 using (var reader = new StreamReader(stream ?? Stream.Null, Encoding.UTF8))
@@ -174,7 +175,7 @@ namespace apod_wallpaper
                         return ApiKeyValidationState.Invalid;
                 }
 
-                AppLogger.Warn("NASA API key validation returned HTTP " + (int)response.StatusCode + ".", ex);
+                AppLogger.Warn("NASA API key validation returned HTTP " + statusCode + ".", ex);
                 return ApiKeyValidationState.Unknown;
             }
             catch (Exception ex)

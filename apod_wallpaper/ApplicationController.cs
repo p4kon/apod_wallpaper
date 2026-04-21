@@ -16,6 +16,8 @@ namespace apod_wallpaper
         private bool _isInitialized;
         private Task<ApiKeyValidationState> _apiKeyValidationTask;
         private string _apiKeyValidationTaskKey;
+        private DateTime _lastUnknownApiValidationUtc = DateTime.MinValue;
+        private string _lastUnknownApiValidationKey;
 
         internal event EventHandler<WallpaperAppliedEventArgs> WallpaperApplied;
 
@@ -202,8 +204,18 @@ namespace apod_wallpaper
             if (currentState == ApiKeyValidationState.Invalid || currentState == ApiKeyValidationState.Valid)
                 return currentState;
 
-            Task<ApiKeyValidationState> validationTask;
             var normalizedKey = Normalize(settings.NasaApiKey);
+            lock (_apiKeyValidationSync)
+            {
+                if (!string.IsNullOrWhiteSpace(_lastUnknownApiValidationKey) &&
+                    string.Equals(_lastUnknownApiValidationKey, normalizedKey, StringComparison.Ordinal) &&
+                    DateTime.UtcNow - _lastUnknownApiValidationUtc < TimeSpan.FromMinutes(10))
+                {
+                    return ApiKeyValidationState.Unknown;
+                }
+            }
+
+            Task<ApiKeyValidationState> validationTask;
             lock (_apiKeyValidationSync)
             {
                 if (_apiKeyValidationTask != null &&
@@ -230,7 +242,22 @@ namespace apod_wallpaper
             }
 
             if (validationState != ApiKeyValidationState.Unknown)
+            {
                 SaveApiKeyValidationState(validationState);
+                lock (_apiKeyValidationSync)
+                {
+                    _lastUnknownApiValidationKey = null;
+                    _lastUnknownApiValidationUtc = DateTime.MinValue;
+                }
+            }
+            else
+            {
+                lock (_apiKeyValidationSync)
+                {
+                    _lastUnknownApiValidationKey = normalizedKey;
+                    _lastUnknownApiValidationUtc = DateTime.UtcNow;
+                }
+            }
 
             return validationState;
         }
@@ -264,6 +291,15 @@ namespace apod_wallpaper
         public bool ShouldApplyOnTrayDoubleClick()
         {
             return Properties.Settings.Default.TrayDoubleClickAction;
+        }
+
+        public DateTime GetPreferredDisplayDate()
+        {
+            var lastAppliedDate = ParseDate(Properties.Settings.Default.LastAutoRefreshAppliedDate);
+            if (lastAppliedDate.HasValue && lastAppliedDate.Value <= DateTime.Today)
+                return lastAppliedDate.Value;
+
+            return DateTime.Today;
         }
 
         public WallpaperStyle GetSelectedWallpaperStyle()
@@ -435,6 +471,9 @@ namespace apod_wallpaper
 
         private void EnsureApiKeyValidationIfNeeded(DateTime date, bool forceRefresh)
         {
+            if (date.Date > DateTime.Today)
+                return;
+
             if (!forceRefresh && _workflowService.HasUsableLocalImage(date))
                 return;
 
@@ -443,6 +482,9 @@ namespace apod_wallpaper
 
         private Task EnsureApiKeyValidationIfNeededAsync(DateTime date, bool forceRefresh)
         {
+            if (date.Date > DateTime.Today)
+                return Task.CompletedTask;
+
             if (!forceRefresh && _workflowService.HasUsableLocalImage(date))
                 return Task.CompletedTask;
 

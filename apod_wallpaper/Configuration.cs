@@ -30,7 +30,8 @@ namespace apod_wallpaper
             this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
             InitializeComponent();
             this.controller.WallpaperApplied += controller_WallpaperApplied;
-            pictureDayDateTimePicker.Value = DateTime.UtcNow;
+            pictureDayDateTimePicker.MaxDate = DateTime.Today;
+            pictureDayDateTimePicker.Value = DateTime.Today;
             wallpaperStyleComboBox.DataSource = Enum.GetValues(typeof(WallpaperStyle));
             pictureDayDateTimePicker.DropDown += pictureDayDateTimePicker_DropDown;
             imagesFolderTextBox.TextChanged += imagesFolderTextBox_TextChanged;
@@ -52,6 +53,10 @@ namespace apod_wallpaper
             startWithWindowsCheckBox.Checked = currentSettings.StartWithWindows;
             apiKeyTextBox.Text = currentSettings.NasaApiKey;
             imagesFolderTextBox.Text = FileStorage.ImagesDirectory;
+            var preferredDate = controller.GetPreferredDisplayDate();
+            if (preferredDate > pictureDayDateTimePicker.MaxDate)
+                preferredDate = pictureDayDateTimePicker.MaxDate.Date;
+            pictureDayDateTimePicker.Value = preferredDate;
             controller.UpdateSessionImagesDirectory(imagesFolderTextBox.Text);
             UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
             currentSettings = controller.GetSettings();
@@ -122,9 +127,6 @@ namespace apod_wallpaper
         {
             var selectedDate = pictureDayDateTimePicker.Value.Date;
             download_only = Control.ModifierKeys == Keys.Shift;
-            await controller.EnsureApiKeyValidationAsync().ConfigureAwait(true);
-            currentSettings = controller.GetSettings();
-            UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
 
             ApodWorkflowResult workflowResult;
             if (download_only)
@@ -135,6 +137,8 @@ namespace apod_wallpaper
             {
                 workflowResult = await controller.ApplyDayAsync(selectedDate, GetSelectedWallpaperStyle()).ConfigureAwait(true);
             }
+            currentSettings = controller.GetSettings();
+            UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
 
             currentEntry = workflowResult.Entry;
             if (!workflowResult.IsSuccess)
@@ -540,6 +544,25 @@ namespace apod_wallpaper
                 return;
 
             pictureDayDateTimePicker.Value = resolvedDate;
+        }
+
+        internal void SyncDisplayedDate(DateTime preferredDate)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((MethodInvoker)delegate { SyncDisplayedDate(preferredDate); });
+                return;
+            }
+
+            pictureDayDateTimePicker.MaxDate = DateTime.Today;
+            var targetDate = preferredDate.Date;
+            if (targetDate > pictureDayDateTimePicker.MaxDate.Date)
+                targetDate = pictureDayDateTimePicker.MaxDate.Date;
+            if (targetDate < pictureDayDateTimePicker.MinDate.Date)
+                targetDate = pictureDayDateTimePicker.MinDate.Date;
+
+            if (pictureDayDateTimePicker.Value.Date != targetDate)
+                pictureDayDateTimePicker.Value = targetDate;
         }
 
         private void UpdateApiKeyValidationIndicator(ApiKeyValidationState validationState)
