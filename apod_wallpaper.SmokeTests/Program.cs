@@ -31,6 +31,8 @@ namespace apod_wallpaper.SmokeTests
             Run("Scheduler uses hourly polling for DEMO_KEY", SchedulerUsesHourlyPollingForDemoKey);
             Run("Scheduler uses 30 minute polling for personal key", SchedulerUsesThirtyMinutePollingForPersonalKey);
             Run("Wallpaper service rejects invalid local file", WallpaperServiceRejectsInvalidLocalFile);
+            Run("Scheduler day lock skips repeated checks for today", SchedulerDayLockSkipsRepeatedChecks);
+            Run("Scheduler day lock does not skip when no applied date", SchedulerDayLockRequiresAppliedDate);
 
             Console.WriteLine(_failures == 0
                 ? "Smoke tests passed."
@@ -469,6 +471,20 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             {
                 TryDeleteDirectory(tempDirectory);
             }
+        }
+
+        private static void SchedulerDayLockSkipsRepeatedChecks()
+        {
+            var today = DateTime.Today;
+            var shouldSkip = apod_wallpaper.ApplicationController.ShouldSkipSchedulerForToday(today, today.AddDays(-1), today);
+            Assert(shouldSkip, "Expected scheduler day lock to skip repeated checks when today's run already completed.");
+        }
+
+        private static void SchedulerDayLockRequiresAppliedDate()
+        {
+            var today = DateTime.Today;
+            var shouldSkip = apod_wallpaper.ApplicationController.ShouldSkipSchedulerForToday(today, null, today);
+            Assert(!shouldSkip, "Expected scheduler day lock to require a successfully applied date.");
         }
 
         private static apod_wallpaper.ApplicationSettingsSnapshot CaptureSettings()

@@ -378,14 +378,23 @@ namespace apod_wallpaper
                 if (!settings.AutoRefreshEnabled)
                     return;
 
-                EnsureApiKeyValidation();
-
                 var now = DateTime.Now;
                 var localToday = now.Date;
-                var latestPublishedDate = _workflowService.GetLatestPublishedDate().Date;
-                var latestAvailableDate = _workflowService.GetLatestAvailableDate().Date;
                 var lastRunDate = ParseDate(settings.LastAutoRefreshRunDate);
                 var lastAppliedDate = ParseDate(settings.LastAutoRefreshAppliedDate);
+
+                // Day-level short circuit: once scheduler has already finished successfully for local "today",
+                // do not burn extra API/HTML checks until the next day.
+                if (ShouldSkipSchedulerForToday(lastRunDate, lastAppliedDate, localToday))
+                {
+                    AppLogger.Info("Scheduler skipped because today's auto-check already completed.");
+                    return;
+                }
+
+                EnsureApiKeyValidation();
+
+                var latestPublishedDate = _workflowService.GetLatestPublishedDate().Date;
+                var latestAvailableDate = _workflowService.GetLatestAvailableDate().Date;
                 var latestPublicationIsForToday = latestPublishedDate >= localToday;
 
                 if (latestPublicationIsForToday &&
@@ -414,9 +423,7 @@ namespace apod_wallpaper
                     : latestAvailableDate;
 
                 Properties.Settings.Default.LastAutoRefreshAppliedDate = resolvedDate.ToString("yyyy-MM-dd");
-                Properties.Settings.Default.LastAutoRefreshRunDate = latestPublicationIsForToday && resolvedDate == latestPublishedDate
-                    ? localToday.ToString("yyyy-MM-dd")
-                    : string.Empty;
+                Properties.Settings.Default.LastAutoRefreshRunDate = localToday.ToString("yyyy-MM-dd");
                 Properties.Settings.Default.Save();
                 RaiseWallpaperApplied(result, true);
             }
@@ -518,6 +525,13 @@ namespace apod_wallpaper
                 return;
 
             WallpaperApplied?.Invoke(this, new WallpaperAppliedEventArgs(result, automatic));
+        }
+
+        internal static bool ShouldSkipSchedulerForToday(DateTime? lastRunDate, DateTime? lastAppliedDate, DateTime localToday)
+        {
+            return lastRunDate.HasValue &&
+                   lastRunDate.Value == localToday.Date &&
+                   lastAppliedDate.HasValue;
         }
     }
 }
