@@ -4,9 +4,8 @@ namespace apod_wallpaper
 {
     public interface IApplicationSessionFacade
     {
-        event EventHandler<WallpaperAppliedEventArgs> WallpaperApplied;
-
         OperationResult<ApplicationSettingsSnapshot> Initialize();
+        OperationResult<IEventSubscription> SubscribeWallpaperApplied(EventHandler<WallpaperAppliedEventArgs> handler);
         OperationResult Shutdown();
     }
 }

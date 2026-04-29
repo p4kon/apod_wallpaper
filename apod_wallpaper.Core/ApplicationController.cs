@@ -55,6 +55,18 @@ namespace apod_wallpaper
             }, OperationErrorCode.InitializationFailed, "Unable to initialize the application controller.");
         }
 
+        public OperationResult<IEventSubscription> SubscribeWallpaperApplied(EventHandler<WallpaperAppliedEventArgs> handler)
+        {
+            return ExecuteOperation<IEventSubscription>(() =>
+            {
+                if (handler == null)
+                    throw new ArgumentNullException(nameof(handler));
+
+                WallpaperApplied += handler;
+                return new WallpaperAppliedSubscription(this, handler);
+            }, OperationErrorCode.StateUpdateFailed, "Unable to subscribe to wallpaper applied events.");
+        }
+
         public OperationResult<ApplicationSettingsSnapshot> GetSettings()
         {
             return ExecuteOperation(BuildSettingsSnapshot, OperationErrorCode.SettingsReadFailed, "Unable to load saved application settings.");
@@ -731,6 +743,14 @@ namespace apod_wallpaper
             WallpaperApplied?.Invoke(this, new WallpaperAppliedEventArgs(result, automatic));
         }
 
+        private void UnsubscribeWallpaperApplied(EventHandler<WallpaperAppliedEventArgs> handler)
+        {
+            if (handler == null)
+                return;
+
+            WallpaperApplied -= handler;
+        }
+
         internal static bool ShouldSkipSchedulerForToday(DateTime? lastRunDate, DateTime? lastAppliedDate, DateTime localToday)
         {
             return lastRunDate.HasValue &&
@@ -741,6 +761,25 @@ namespace apod_wallpaper
         private static OperationError CreateOperationError(OperationErrorCode code, string message, Exception exception, bool retryable)
         {
             return new OperationError(code, message, retryable, exception != null ? exception.GetType().Name + ": " + exception.Message : null);
+        }
+
+        private sealed class WallpaperAppliedSubscription : IEventSubscription
+        {
+            private readonly ApplicationController _owner;
+            private EventHandler<WallpaperAppliedEventArgs> _handler;
+
+            public WallpaperAppliedSubscription(ApplicationController owner, EventHandler<WallpaperAppliedEventArgs> handler)
+            {
+                _owner = owner;
+                _handler = handler;
+            }
+
+            public void Dispose()
+            {
+                var handler = Interlocked.Exchange(ref _handler, null);
+                if (handler != null)
+                    _owner.UnsubscribeWallpaperApplied(handler);
+            }
         }
     }
 }

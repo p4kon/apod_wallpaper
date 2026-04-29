@@ -12,7 +12,8 @@ namespace apod_wallpaper
         private readonly IApplicationSettingsFacade settingsFacade;
         private readonly IApodWorkflowFacade workflowFacade;
         private readonly IApplicationDiagnosticsFacade diagnosticsFacade;
-        private readonly ConfigurationForm configWindow;
+        private readonly IApplicationBackendFacade backendFacade;
+        private ConfigurationForm configWindow;
 
         internal TrayApplicationContext(IApplicationBackendFacade backend)
         {
@@ -23,7 +24,7 @@ namespace apod_wallpaper
             settingsFacade = backend;
             workflowFacade = backend;
             diagnosticsFacade = backend;
-            configWindow = new ConfigurationForm(backend);
+            backendFacade = backend;
             MenuItem configMenuItem = new MenuItem("Configuration", new EventHandler(ShowConfig));
             MenuItem exitMenuItem = new MenuItem("Exit", new EventHandler(Exit));
             Icon apod_icon = new Icon(ApodResources.apod_icon, 32, 32);
@@ -95,21 +96,24 @@ namespace apod_wallpaper
 
         void ShowConfig(object sender, EventArgs e)
         {
-            if (!configWindow.Visible)
+            var window = EnsureConfigurationWindow();
+            if (!window.Visible)
             {
                 var preferredDateResult = settingsFacade.GetPreferredDisplayDate();
                 if (preferredDateResult.Succeeded)
-                    configWindow.SyncDisplayedDate(preferredDateResult.Value);
+                    window.SyncDisplayedDate(preferredDateResult.Value);
             }
 
-            if (configWindow.Visible)
-                configWindow.Focus();
+            if (window.Visible)
+                window.Focus();
             else
-                configWindow.ShowDialog();
+                window.ShowDialog();
         }
 
         void Exit(object sender, EventArgs e)
         {
+            DisposeConfigurationWindow();
+            trayIcon.DoubleClick -= TrayDoubleClickAction;
             var shutdownResult = sessionFacade.Shutdown();
             if (!shutdownResult.Succeeded)
                 diagnosticsFacade.LogWarning(shutdownResult.Error != null ? shutdownResult.Error.Message : "Controller shutdown failed.");
@@ -128,6 +132,37 @@ namespace apod_wallpaper
             trayIcon.BalloonTipTitle = "APOD Wallpaper";
             trayIcon.BalloonTipText = message;
             trayIcon.ShowBalloonTip(4000);
+        }
+
+        private ConfigurationForm EnsureConfigurationWindow()
+        {
+            if (configWindow == null || configWindow.IsDisposed)
+            {
+                configWindow = new ConfigurationForm(backendFacade);
+                configWindow.FormClosed += ConfigurationWindow_FormClosed;
+            }
+
+            return configWindow;
+        }
+
+        private void ConfigurationWindow_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            if (configWindow != null)
+            {
+                configWindow.FormClosed -= ConfigurationWindow_FormClosed;
+                configWindow = null;
+            }
+        }
+
+        private void DisposeConfigurationWindow()
+        {
+            if (configWindow == null)
+                return;
+
+            configWindow.FormClosed -= ConfigurationWindow_FormClosed;
+            if (!configWindow.IsDisposed)
+                configWindow.Dispose();
+            configWindow = null;
         }
 
         private string GetUserFriendlyErrorMessage(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")

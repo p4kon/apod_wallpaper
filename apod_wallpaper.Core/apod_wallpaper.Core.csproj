@@ -53,6 +53,7 @@
     <Compile Include="OperationResult.cs" />
     <Compile Include="OperationResultOfT.cs" />
     <Compile Include="IApplicationSessionFacade.cs" />
+    <Compile Include="IEventSubscription.cs" />
     <Compile Include="IApplicationSettingsFacade.cs" />
     <Compile Include="IApplicationStorageFacade.cs" />
     <Compile Include="IApplicationSettingsStore.cs" />

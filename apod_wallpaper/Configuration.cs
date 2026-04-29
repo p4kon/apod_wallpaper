@@ -28,6 +28,7 @@ namespace apod_wallpaper
         private readonly IApodCalendarFacade calendarFacade;
         private readonly IApplicationDiagnosticsFacade diagnosticsFacade;
         private readonly IApplicationSessionFacade sessionFacade;
+        private readonly IEventSubscription wallpaperAppliedSubscription;
         private bool suppressSettingsSync = true;
         private bool not_found = false;
         private bool nonImageMedia = false;
@@ -51,7 +52,9 @@ namespace apod_wallpaper
             diagnosticsFacade = backend;
             sessionFacade = backend;
             InitializeComponent();
-            sessionFacade.WallpaperApplied += controller_WallpaperApplied;
+            wallpaperAppliedSubscription = GetValueOrThrow(
+                sessionFacade.SubscribeWallpaperApplied(controller_WallpaperApplied),
+                "Unable to subscribe to wallpaper applied events.");
             pictureDayDateTimePicker.MaxDate = DateTime.Today;
             pictureDayDateTimePicker.Value = DateTime.Today;
             wallpaperStyleComboBox.DataSource = WallpaperStyleDisplayOrder;
@@ -112,7 +115,7 @@ namespace apod_wallpaper
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            sessionFacade.WallpaperApplied -= controller_WallpaperApplied;
+            wallpaperAppliedSubscription.Dispose();
             base.OnFormClosed(e);
         }
 

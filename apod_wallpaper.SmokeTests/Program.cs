@@ -46,6 +46,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Storage layout resolves all backend paths centrally", StorageLayoutResolvesAllPathsCentrally);
                 Run("Portable storage mode keeps app data near executable", PortableStorageModeUsesPortableLayout);
                 Run("Public facade methods use operation results", PublicFacadeMethodsUseOperationResults);
+                Run("WallpaperApplied subscription disposes cleanly", WallpaperAppliedSubscriptionDisposesCleanly);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -668,6 +669,31 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             }
 
             return false;
+        }
+
+        private static void WallpaperAppliedSubscriptionDisposesCleanly()
+        {
+            var controller = CreateController();
+            EventHandler<apod_wallpaper.WallpaperAppliedEventArgs> handler = delegate { };
+
+            var subscribeResult = controller.SubscribeWallpaperApplied(handler);
+            Assert(subscribeResult.Succeeded, "Expected wallpaper subscription to succeed.");
+            Assert(subscribeResult.Value != null, "Expected wallpaper subscription token.");
+
+            var eventField = typeof(apod_wallpaper.ApplicationController).GetField(
+                "WallpaperApplied",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert(eventField != null, "Expected to inspect WallpaperApplied backing field.");
+
+            var afterSubscribe = eventField.GetValue(controller) as Delegate;
+            Assert(afterSubscribe != null && afterSubscribe.GetInvocationList().Length == 1,
+                "Expected one wallpaper handler after subscription.");
+
+            subscribeResult.Value.Dispose();
+
+            var afterDispose = eventField.GetValue(controller) as Delegate;
+            Assert(afterDispose == null || afterDispose.GetInvocationList().Length == 0,
+                "Expected wallpaper handler to be removed after disposing subscription.");
         }
 
         private static apod_wallpaper.ApplicationSettingsSnapshot CaptureSettings()
