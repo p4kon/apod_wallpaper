@@ -5,11 +5,12 @@ using System.Threading.Tasks;
 
 namespace apod_wallpaper
 {
-    internal sealed class ApplicationController : IApplicationBackendFacade, IDisposable
+    public sealed class ApplicationController : IApplicationBackendFacade, IDisposable
     {
         private const string DemoApiKey = "DEMO_KEY";
+        private readonly IApplicationSettingsStore _settingsStore;
+        private readonly IStartupRegistrationService _startupRegistrationService;
         private readonly Scheduler _scheduler;
-        private readonly StartupService _startupService;
         private readonly ApodWorkflowService _workflowService;
         private readonly ApodCalendarStateService _calendarStateService;
         private readonly object _apiKeyValidationSync = new object();
@@ -24,10 +25,11 @@ namespace apod_wallpaper
 
         public event EventHandler<WallpaperAppliedEventArgs> WallpaperApplied;
 
-        public ApplicationController()
+        public ApplicationController(IApplicationSettingsStore settingsStore, IStartupRegistrationService startupRegistrationService)
         {
+            _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
+            _startupRegistrationService = startupRegistrationService ?? throw new ArgumentNullException(nameof(startupRegistrationService));
             _scheduler = new Scheduler();
-            _startupService = new StartupService();
             _workflowService = new ApodWorkflowService();
             _calendarStateService = new ApodCalendarStateService(_workflowService);
         }
@@ -346,14 +348,14 @@ namespace apod_wallpaper
 
         public OperationResult<bool> ShouldApplyOnTrayDoubleClick()
         {
-            return ExecuteOperation(() => Properties.Settings.Default.TrayDoubleClickAction, OperationErrorCode.SettingsReadFailed, "Unable to read tray double-click behavior.");
+            return ExecuteOperation(() => BuildSettingsSnapshot().TrayDoubleClickAction, OperationErrorCode.SettingsReadFailed, "Unable to read tray double-click behavior.");
         }
 
         public OperationResult<DateTime> GetPreferredDisplayDate()
         {
             return ExecuteOperation(() =>
             {
-                var lastAppliedDate = ParseDate(Properties.Settings.Default.LastAutoRefreshAppliedDate);
+                var lastAppliedDate = ParseDate(BuildSettingsSnapshot().LastAutoRefreshAppliedDate);
                 if (lastAppliedDate.HasValue && lastAppliedDate.Value <= DateTime.Today)
                     return lastAppliedDate.Value;
 
@@ -363,7 +365,7 @@ namespace apod_wallpaper
 
         public OperationResult<WallpaperStyle> GetSelectedWallpaperStyle()
         {
-            return ExecuteOperation(() => (WallpaperStyle)Properties.Settings.Default.StyleComboBox, OperationErrorCode.SettingsReadFailed, "Unable to read the selected wallpaper style.");
+            return ExecuteOperation(() => (WallpaperStyle)BuildSettingsSnapshot().WallpaperStyleIndex, OperationErrorCode.SettingsReadFailed, "Unable to read the selected wallpaper style.");
         }
 
         public OperationResult Shutdown()
@@ -384,18 +386,13 @@ namespace apod_wallpaper
         {
             EnsureLegacyApiKeyMigrated();
 
-            return new ApplicationSettingsSnapshot
-            {
-                TrayDoubleClickAction = Properties.Settings.Default.TrayDoubleClickAction,
-                WallpaperStyleIndex = Properties.Settings.Default.StyleComboBox,
-                AutoRefreshEnabled = Properties.Settings.Default.AutoRefreshEnabled,
-                StartWithWindows = Properties.Settings.Default.StartWithWindows,
-                NasaApiKey = GetStoredApiKeyForDisplay(),
-                NasaApiKeyValidationState = Properties.Settings.Default.NasaApiKeyValidationState,
-                ImagesDirectoryPath = Properties.Settings.Default.ImagesDirectoryPath,
-                LastAutoRefreshRunDate = Properties.Settings.Default.LastAutoRefreshRunDate,
-                LastAutoRefreshAppliedDate = Properties.Settings.Default.LastAutoRefreshAppliedDate,
-            };
+            var settings = _settingsStore.Load() ?? new ApplicationSettingsSnapshot();
+            settings.NasaApiKey = GetStoredApiKeyForDisplay();
+            settings.NasaApiKeyValidationState = NormalizeValidationState(settings.NasaApiKeyValidationState);
+            settings.ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath);
+            settings.LastAutoRefreshRunDate = Normalize(settings.LastAutoRefreshRunDate);
+            settings.LastAutoRefreshAppliedDate = Normalize(settings.LastAutoRefreshAppliedDate);
+            return settings;
         }
 
         private void SaveSettingsCore(ApplicationSettingsSnapshot settings)
@@ -405,32 +402,33 @@ namespace apod_wallpaper
 
             EnsureLegacyApiKeyMigrated();
 
-            var previousAutoRefreshEnabled = Properties.Settings.Default.AutoRefreshEnabled;
+            var persistedSettings = _settingsStore.Load() ?? new ApplicationSettingsSnapshot();
+            var previousAutoRefreshEnabled = persistedSettings.AutoRefreshEnabled;
             var previousApiKey = Normalize(GetStoredApiKeyForDisplay());
             var normalizedApiKey = NormalizeApiKeyForDisplay(settings.NasaApiKey);
             var apiKeyChanged = !string.Equals(previousApiKey, normalizedApiKey, StringComparison.Ordinal);
             var effectiveValidationState = apiKeyChanged
                 ? ApiKeyValidationState.Unknown.ToString()
                 : (string.IsNullOrWhiteSpace(settings.NasaApiKeyValidationState)
-                    ? NormalizeValidationState(Properties.Settings.Default.NasaApiKeyValidationState)
+                    ? NormalizeValidationState(persistedSettings.NasaApiKeyValidationState)
                     : NormalizeValidationState(settings.NasaApiKeyValidationState));
 
-            Properties.Settings.Default.TrayDoubleClickAction = settings.TrayDoubleClickAction;
-            Properties.Settings.Default.StyleComboBox = settings.WallpaperStyleIndex;
-            Properties.Settings.Default.AutoRefreshEnabled = settings.AutoRefreshEnabled;
-            Properties.Settings.Default.StartWithWindows = settings.StartWithWindows;
-            Properties.Settings.Default.ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath);
-            Properties.Settings.Default.NasaApiKey = string.Empty;
-            Properties.Settings.Default.NasaApiKeyValidationState = effectiveValidationState;
-            Properties.Settings.Default.LastAutoRefreshRunDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
-                ? string.Empty
-                : Normalize(settings.LastAutoRefreshRunDate);
-            Properties.Settings.Default.LastAutoRefreshAppliedDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
-                ? string.Empty
-                : Normalize(settings.LastAutoRefreshAppliedDate);
-
             SaveStoredApiKey(settings.NasaApiKey);
-            Properties.Settings.Default.Save();
+            _settingsStore.Save(new ApplicationSettingsSnapshot
+            {
+                TrayDoubleClickAction = settings.TrayDoubleClickAction,
+                WallpaperStyleIndex = settings.WallpaperStyleIndex,
+                AutoRefreshEnabled = settings.AutoRefreshEnabled,
+                StartWithWindows = settings.StartWithWindows,
+                NasaApiKeyValidationState = effectiveValidationState,
+                ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath),
+                LastAutoRefreshRunDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
+                    ? string.Empty
+                    : Normalize(settings.LastAutoRefreshRunDate),
+                LastAutoRefreshAppliedDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
+                    ? string.Empty
+                    : Normalize(settings.LastAutoRefreshAppliedDate),
+            });
 
             if (apiKeyChanged)
                 ResetApiKeyValidationRuntimeState();
@@ -438,19 +436,20 @@ namespace apod_wallpaper
             ApplyRuntimeSettings();
             _calendarStateService.Clear();
             ConfigureScheduler(settings);
-            _startupService.SetStartWithWindows(settings.StartWithWindows);
+            _startupRegistrationService.SetStartWithWindows(settings.StartWithWindows);
         }
 
         private ApiKeyValidationState GetApiKeyValidationStateCore()
         {
-            return ParseValidationState(Properties.Settings.Default.NasaApiKeyValidationState);
+            return ParseValidationState((_settingsStore.Load() ?? new ApplicationSettingsSnapshot()).NasaApiKeyValidationState);
         }
 
         private void ApplyRuntimeSettings()
         {
             EnsureLegacyApiKeyMigrated();
-            RuntimeSettingsSync.ApplyCurrentSettings();
-            FileStorage.SetSessionImagesDirectory(Properties.Settings.Default.ImagesDirectoryPath);
+            var settings = BuildSettingsSnapshot();
+            AppRuntimeSettings.Configure(settings.NasaApiKey, settings.ImagesDirectoryPath, ParseValidationState(settings.NasaApiKeyValidationState));
+            FileStorage.SetSessionImagesDirectory(settings.ImagesDirectoryPath);
         }
 
         private void ConfigureScheduler(ApplicationSettingsSnapshot settings)
@@ -565,9 +564,9 @@ namespace apod_wallpaper
                     ? result.ResolvedDate.Value.Date
                     : latestAvailableDate;
 
-                Properties.Settings.Default.LastAutoRefreshAppliedDate = resolvedDate.ToString("yyyy-MM-dd");
-                Properties.Settings.Default.LastAutoRefreshRunDate = localToday.ToString("yyyy-MM-dd");
-                Properties.Settings.Default.Save();
+                settings.LastAutoRefreshAppliedDate = resolvedDate.ToString("yyyy-MM-dd");
+                settings.LastAutoRefreshRunDate = localToday.ToString("yyyy-MM-dd");
+                _settingsStore.Save(settings);
                 RaiseWallpaperApplied(result, true);
             }
             catch (Exception ex)
@@ -646,8 +645,9 @@ namespace apod_wallpaper
 
         private void SaveApiKeyValidationState(ApiKeyValidationState validationState)
         {
-            Properties.Settings.Default.NasaApiKeyValidationState = validationState.ToString();
-            Properties.Settings.Default.Save();
+            var settings = _settingsStore.Load() ?? new ApplicationSettingsSnapshot();
+            settings.NasaApiKeyValidationState = validationState.ToString();
+            _settingsStore.Save(settings);
             ApplyRuntimeSettings();
         }
 
@@ -661,18 +661,14 @@ namespace apod_wallpaper
                 if (_legacyApiKeyMigrated)
                     return;
 
-                var legacyApiKey = Normalize(Properties.Settings.Default.NasaApiKey);
+                var legacyApiKey = Normalize(_settingsStore.LoadLegacyApiKey());
                 if (!string.IsNullOrWhiteSpace(legacyApiKey) &&
                     !string.Equals(legacyApiKey, DemoApiKey, StringComparison.OrdinalIgnoreCase))
                 {
                     UserSecretStore.SaveNasaApiKey(legacyApiKey);
                 }
 
-                if (!string.IsNullOrWhiteSpace(Properties.Settings.Default.NasaApiKey))
-                {
-                    Properties.Settings.Default.NasaApiKey = string.Empty;
-                    Properties.Settings.Default.Save();
-                }
+                _settingsStore.ClearLegacyApiKey();
 
                 _legacyApiKeyMigrated = true;
             }

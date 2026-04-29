@@ -80,7 +80,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ApplicationController.cs" />
     <Compile Include="Configuration.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -88,13 +87,13 @@
       <DependentUpon>Configuration.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.cs" />
+    <Compile Include="PropertiesSettingsStore.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ApodResources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>ApodResources.resx</DependentUpon>
     </Compile>
-    <Compile Include="RuntimeSettingsSync.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="StartupService.cs" />
     <Compile Include="TrayApplicationContext.cs" />

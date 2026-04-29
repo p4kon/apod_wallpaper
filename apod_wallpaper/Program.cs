@@ -15,7 +15,9 @@ namespace apod_wallpaper
             {
                 if (createdNew)
                 {
-                    IApplicationBackendFacade controller = new ApplicationController();
+                    IApplicationBackendFacade controller = new ApplicationController(
+                        new PropertiesSettingsStore(),
+                        new StartupService());
                     var initialization = controller.Initialize();
                     if (!initialization.Succeeded)
                     {

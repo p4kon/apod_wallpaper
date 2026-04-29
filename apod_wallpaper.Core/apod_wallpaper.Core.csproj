@@ -45,16 +45,19 @@
   <ItemGroup>
     <Compile Include="ApiKeyValidationState.cs" />
     <Compile Include="ApplicationSettingsSnapshot.cs" />
+    <Compile Include="ApplicationController.cs" />
     <Compile Include="OperationErrorCode.cs" />
     <Compile Include="OperationError.cs" />
     <Compile Include="OperationResult.cs" />
     <Compile Include="OperationResultOfT.cs" />
     <Compile Include="IApplicationSessionFacade.cs" />
     <Compile Include="IApplicationSettingsFacade.cs" />
+    <Compile Include="IApplicationSettingsStore.cs" />
     <Compile Include="IApodWorkflowFacade.cs" />
     <Compile Include="IApodCalendarFacade.cs" />
     <Compile Include="IApplicationDiagnosticsFacade.cs" />
     <Compile Include="IApplicationBackendFacade.cs" />
+    <Compile Include="IStartupRegistrationService.cs" />
     <Compile Include="IApodClient.cs" />
     <Compile Include="IApodMetadataCache.cs" />
     <Compile Include="IWallpaperApplier.cs" />

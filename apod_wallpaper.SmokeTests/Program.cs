@@ -117,7 +117,7 @@ namespace apod_wallpaper.SmokeTests
             var snapshot = CaptureSettings();
             try
             {
-                var controller = new apod_wallpaper.ApplicationController();
+                var controller = CreateController();
                 var firstSaveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
@@ -164,7 +164,7 @@ namespace apod_wallpaper.SmokeTests
                 apod_wallpaper.Properties.Settings.Default.LastAutoRefreshAppliedDate = expectedDate;
                 apod_wallpaper.Properties.Settings.Default.Save();
 
-                var controller = new apod_wallpaper.ApplicationController();
+                var controller = CreateController();
                 Assert(GetValueOrThrow(controller.GetPreferredDisplayDate(), "Unable to resolve preferred display date.") == DateTime.Today.AddDays(-1),
                     "Expected preferred display date to use the last auto-applied date.");
             }
@@ -408,7 +408,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             apod_wallpaper.ApplicationController controller = null;
             try
             {
-                controller = new apod_wallpaper.ApplicationController();
+                controller = CreateController();
                 var saveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
@@ -440,7 +440,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             apod_wallpaper.ApplicationController controller = null;
             try
             {
-                controller = new apod_wallpaper.ApplicationController();
+                controller = CreateController();
                 var saveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
@@ -512,7 +512,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             try
             {
                 ResetSecretStore();
-                var controller = new apod_wallpaper.ApplicationController();
+                var controller = CreateController();
                 var saveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
@@ -547,7 +547,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                 apod_wallpaper.Properties.Settings.Default.NasaApiKey = "legacy-plaintext-key";
                 apod_wallpaper.Properties.Settings.Default.Save();
 
-                var controller = new apod_wallpaper.ApplicationController();
+                var controller = CreateController();
                 var initialization = controller.Initialize();
                 Assert(initialization.Succeeded, "Expected controller initialization to succeed during legacy API key migration.");
                 Assert(apod_wallpaper.UserSecretStore.GetNasaApiKey() == "legacy-plaintext-key", "Expected legacy API key to migrate into protected storage.");
@@ -562,13 +562,20 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
 
         private static apod_wallpaper.ApplicationSettingsSnapshot CaptureSettings()
         {
-            return GetValueOrThrow(new apod_wallpaper.ApplicationController().GetSettings(), "Unable to capture current application settings.");
+            return GetValueOrThrow(CreateController().GetSettings(), "Unable to capture current application settings.");
         }
 
         private static void RestoreSettings(apod_wallpaper.ApplicationSettingsSnapshot snapshot)
         {
-            var restoreResult = new apod_wallpaper.ApplicationController().SaveSettings(snapshot);
+            var restoreResult = CreateController().SaveSettings(snapshot);
             Assert(restoreResult.Succeeded, "Expected settings restore to succeed.");
+        }
+
+        private static apod_wallpaper.ApplicationController CreateController()
+        {
+            return new apod_wallpaper.ApplicationController(
+                new apod_wallpaper.PropertiesSettingsStore(),
+                new apod_wallpaper.StartupService());
         }
 
         private static T GetValueOrThrow<T>(apod_wallpaper.OperationResult<T> result, string fallbackMessage)

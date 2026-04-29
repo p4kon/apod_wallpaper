@@ -2,7 +2,7 @@ using Microsoft.Win32;
 
 namespace apod_wallpaper
 {
-    internal sealed class StartupService
+    internal sealed class StartupService : IStartupRegistrationService
     {
         private const string RunRegistryPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
         private const string AppName = "apod_wallpaper";
