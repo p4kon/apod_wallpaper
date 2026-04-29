@@ -1,6 +1,6 @@
 namespace apod_wallpaper
 {
-    public sealed class ApodPreviewResult
+    internal sealed class ApodPreviewResult
     {
         public ApodEntry Entry { get; set; }
         public string PreviewLocation { get; set; }

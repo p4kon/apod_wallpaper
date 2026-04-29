@@ -2,7 +2,7 @@ using System;
 
 namespace apod_wallpaper
 {
-    public sealed class ApodDayAvailability
+    internal sealed class ApodDayAvailability
     {
         public DateTime Date { get; set; }
         public bool IsKnown { get; set; }

@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -44,6 +45,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Legacy API key migrates to protected storage", LegacyApiKeyMigratesToProtectedStorage);
                 Run("Storage layout resolves all backend paths centrally", StorageLayoutResolvesAllPathsCentrally);
                 Run("Portable storage mode keeps app data near executable", PortableStorageModeUsesPortableLayout);
+                Run("Public facade methods use operation results", PublicFacadeMethodsUseOperationResults);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -625,6 +627,47 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             {
                 apod_wallpaper.FileStorage.SetStorageModeOverride(null);
             }
+        }
+
+        private static void PublicFacadeMethodsUseOperationResults()
+        {
+            var facadeType = typeof(apod_wallpaper.IApplicationBackendFacade);
+            var invalidMethods = facadeType
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                .Where(method => !UsesOperationResultContract(method.ReturnType))
+                .Select(method => method.Name + ": " + method.ReturnType.FullName)
+                .ToArray();
+
+            Assert(invalidMethods.Length == 0,
+                "Expected all public facade methods to use OperationResult contracts. Invalid methods: " + string.Join(", ", invalidMethods));
+        }
+
+        private static bool UsesOperationResultContract(Type returnType)
+        {
+            if (returnType == typeof(apod_wallpaper.OperationResult))
+                return true;
+
+            if (returnType.IsGenericType &&
+                returnType.GetGenericTypeDefinition() == typeof(apod_wallpaper.OperationResult<>))
+            {
+                return true;
+            }
+
+            if (returnType.IsGenericType &&
+                returnType.GetGenericTypeDefinition() == typeof(Task<>))
+            {
+                var taskInnerType = returnType.GetGenericArguments()[0];
+                if (taskInnerType == typeof(apod_wallpaper.OperationResult))
+                    return true;
+
+                if (taskInnerType.IsGenericType &&
+                    taskInnerType.GetGenericTypeDefinition() == typeof(apod_wallpaper.OperationResult<>))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static apod_wallpaper.ApplicationSettingsSnapshot CaptureSettings()

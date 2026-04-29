@@ -3,7 +3,7 @@ using System.Threading;
 
 namespace apod_wallpaper
 {
-    public sealed class Scheduler : IDisposable
+    internal sealed class Scheduler : IDisposable
     {
         private readonly object _syncRoot = new object();
         private static readonly TimeSpan DefaultPollingInterval = TimeSpan.FromMinutes(5);

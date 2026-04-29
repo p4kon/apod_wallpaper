@@ -1,6 +1,6 @@
 namespace apod_wallpaper
 {
-    public static class AppRuntimeSettings
+    internal static class AppRuntimeSettings
     {
         private const string DemoApiKey = "DEMO_KEY";
 

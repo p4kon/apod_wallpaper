@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace apod_wallpaper
 {
-    public static class ApodPageUrl
+    internal static class ApodPageUrl
     {
         private static readonly CultureInfo EnglishCulture = new CultureInfo("en-US", false);
         private const string ApodBaseUrl = "https://apod.nasa.gov/apod/";
