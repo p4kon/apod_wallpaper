@@ -11,34 +11,49 @@ namespace apod_wallpaper.SmokeTests
     internal static class Program
     {
         private static int _failures;
+        private static string _secretStoreDirectory;
 
         [STAThread]
         private static int Main()
         {
-            Run("Scheduler restarts after stop inside callback", SchedulerRestartsAfterStopInsideCallback);
-            Run("Future date is unavailable sync", FutureDateIsUnavailableSync);
-            Run("Future date is unavailable async", FutureDateIsUnavailableAsync);
-            Run("API key change resets validation state", ApiKeyChangeResetsValidationState);
-            Run("Preferred display date uses last applied date", PreferredDisplayDateUsesLastAppliedDate);
-            Run("HTML extractor resolves preview and full image", HtmlExtractorResolvesImagePage);
-            Run("HTML extractor rejects video page", HtmlExtractorRejectsVideoPage);
-            Run("HTML extractor handles annotated image page", HtmlExtractorHandlesAnnotatedImagePage);
-            Run("Runtime settings fall back to DEMO_KEY for invalid key", InvalidApiKeyFallsBackToDemoKey);
-            Run("Local image is preferred for preview", LocalImageIsPreferredForPreview);
-            Run("ApplyLatestPublished walks back through video days", ApplyLatestPublishedFallsBackAcrossVideoDays);
-            Run("Smart composer stretches near screen ratio images", SmartComposerUsesStretchForNearScreenRatio);
-            Run("Smart composer creates single focus image for square content", SmartComposerCreatesSingleFocusForSquareImages);
-            Run("Scheduler uses hourly polling for DEMO_KEY", SchedulerUsesHourlyPollingForDemoKey);
-            Run("Scheduler uses 30 minute polling for personal key", SchedulerUsesThirtyMinutePollingForPersonalKey);
-            Run("Wallpaper service rejects invalid local file", WallpaperServiceRejectsInvalidLocalFile);
-            Run("Scheduler day lock skips repeated checks for today", SchedulerDayLockSkipsRepeatedChecks);
-            Run("Scheduler day lock does not skip when no applied date", SchedulerDayLockRequiresAppliedDate);
+            _secretStoreDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_smoke_secrets_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_secretStoreDirectory);
+            apod_wallpaper.UserSecretStore.SetSecretDirectoryOverride(_secretStoreDirectory);
 
-            Console.WriteLine(_failures == 0
-                ? "Smoke tests passed."
-                : "Smoke tests failed: " + _failures);
+            try
+            {
+                Run("Scheduler restarts after stop inside callback", SchedulerRestartsAfterStopInsideCallback);
+                Run("Future date is unavailable sync", FutureDateIsUnavailableSync);
+                Run("Future date is unavailable async", FutureDateIsUnavailableAsync);
+                Run("API key change resets validation state", ApiKeyChangeResetsValidationState);
+                Run("Preferred display date uses last applied date", PreferredDisplayDateUsesLastAppliedDate);
+                Run("HTML extractor resolves preview and full image", HtmlExtractorResolvesImagePage);
+                Run("HTML extractor rejects video page", HtmlExtractorRejectsVideoPage);
+                Run("HTML extractor handles annotated image page", HtmlExtractorHandlesAnnotatedImagePage);
+                Run("Runtime settings fall back to DEMO_KEY for invalid key", InvalidApiKeyFallsBackToDemoKey);
+                Run("Local image is preferred for preview", LocalImageIsPreferredForPreview);
+                Run("ApplyLatestPublished walks back through video days", ApplyLatestPublishedFallsBackAcrossVideoDays);
+                Run("Smart composer stretches near screen ratio images", SmartComposerUsesStretchForNearScreenRatio);
+                Run("Smart composer creates single focus image for square content", SmartComposerCreatesSingleFocusForSquareImages);
+                Run("Scheduler uses hourly polling for DEMO_KEY", SchedulerUsesHourlyPollingForDemoKey);
+                Run("Scheduler uses 30 minute polling for personal key", SchedulerUsesThirtyMinutePollingForPersonalKey);
+                Run("Wallpaper service rejects invalid local file", WallpaperServiceRejectsInvalidLocalFile);
+                Run("Scheduler day lock skips repeated checks for today", SchedulerDayLockSkipsRepeatedChecks);
+                Run("Scheduler day lock does not skip when no applied date", SchedulerDayLockRequiresAppliedDate);
+                Run("API key is stored outside plaintext settings", ApiKeyIsStoredOutsidePlaintextSettings);
+                Run("Legacy API key migrates to protected storage", LegacyApiKeyMigratesToProtectedStorage);
 
-            return _failures == 0 ? 0 : 1;
+                Console.WriteLine(_failures == 0
+                    ? "Smoke tests passed."
+                    : "Smoke tests failed: " + _failures);
+
+                return _failures == 0 ? 0 : 1;
+            }
+            finally
+            {
+                apod_wallpaper.UserSecretStore.ClearSecretDirectoryOverride();
+                TryDeleteDirectory(_secretStoreDirectory);
+            }
         }
 
         private static void Run(string name, Action test)
@@ -491,6 +506,60 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             Assert(!shouldSkip, "Expected scheduler day lock to require a successfully applied date.");
         }
 
+        private static void ApiKeyIsStoredOutsidePlaintextSettings()
+        {
+            var snapshot = CaptureSettings();
+            try
+            {
+                ResetSecretStore();
+                var controller = new apod_wallpaper.ApplicationController();
+                var saveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
+                {
+                    TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
+                    WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
+                    AutoRefreshEnabled = snapshot.AutoRefreshEnabled,
+                    StartWithWindows = snapshot.StartWithWindows,
+                    ImagesDirectoryPath = snapshot.ImagesDirectoryPath,
+                    NasaApiKey = "protected-test-key",
+                    NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Valid.ToString(),
+                    LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
+                    LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
+                });
+
+                Assert(saveResult.Succeeded, "Expected protected API key save to succeed.");
+                Assert(apod_wallpaper.UserSecretStore.GetNasaApiKey() == "protected-test-key", "Expected API key to be stored in protected storage.");
+                Assert(string.IsNullOrWhiteSpace(apod_wallpaper.Properties.Settings.Default.NasaApiKey), "Expected plaintext settings slot to stay empty.");
+                Assert(GetValueOrThrow(controller.GetSettings(), "Unable to read settings after protected save.").NasaApiKey == "protected-test-key", "Expected facade settings to surface the protected API key.");
+            }
+            finally
+            {
+                RestoreSettings(snapshot);
+                ResetSecretStore();
+            }
+        }
+
+        private static void LegacyApiKeyMigratesToProtectedStorage()
+        {
+            var snapshot = CaptureSettings();
+            try
+            {
+                ResetSecretStore();
+                apod_wallpaper.Properties.Settings.Default.NasaApiKey = "legacy-plaintext-key";
+                apod_wallpaper.Properties.Settings.Default.Save();
+
+                var controller = new apod_wallpaper.ApplicationController();
+                var initialization = controller.Initialize();
+                Assert(initialization.Succeeded, "Expected controller initialization to succeed during legacy API key migration.");
+                Assert(apod_wallpaper.UserSecretStore.GetNasaApiKey() == "legacy-plaintext-key", "Expected legacy API key to migrate into protected storage.");
+                Assert(string.IsNullOrWhiteSpace(apod_wallpaper.Properties.Settings.Default.NasaApiKey), "Expected legacy plaintext setting to be cleared after migration.");
+            }
+            finally
+            {
+                RestoreSettings(snapshot);
+                ResetSecretStore();
+            }
+        }
+
         private static apod_wallpaper.ApplicationSettingsSnapshot CaptureSettings()
         {
             return GetValueOrThrow(new apod_wallpaper.ApplicationController().GetSettings(), "Unable to capture current application settings.");
@@ -523,6 +592,12 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             catch
             {
             }
+        }
+
+        private static void ResetSecretStore()
+        {
+            TryDeleteDirectory(_secretStoreDirectory);
+            Directory.CreateDirectory(_secretStoreDirectory);
         }
 
         private static void Assert(bool condition, string message)

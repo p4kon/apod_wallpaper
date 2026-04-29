@@ -7,13 +7,16 @@ namespace apod_wallpaper
 {
     internal sealed class ApplicationController : IDisposable
     {
+        private const string DemoApiKey = "DEMO_KEY";
         private readonly Scheduler _scheduler;
         private readonly StartupService _startupService;
         private readonly ApodWorkflowService _workflowService;
         private readonly ApodCalendarStateService _calendarStateService;
         private readonly object _apiKeyValidationSync = new object();
+        private readonly object _secretMigrationSync = new object();
         private int _scheduledUpdateInProgress;
         private bool _isInitialized;
+        private bool _legacyApiKeyMigrated;
         private Task<ApiKeyValidationState> _apiKeyValidationTask;
         private string _apiKeyValidationTaskKey;
         private DateTime _lastUnknownApiValidationUtc = DateTime.MinValue;
@@ -40,6 +43,7 @@ namespace apod_wallpaper
             {
                 if (!_isInitialized)
                 {
+                    EnsureLegacyApiKeyMigrated();
                     ApplyRuntimeSettings();
                     ConfigureScheduler(BuildSettingsSnapshot());
                     _isInitialized = true;
@@ -378,13 +382,15 @@ namespace apod_wallpaper
 
         private ApplicationSettingsSnapshot BuildSettingsSnapshot()
         {
+            EnsureLegacyApiKeyMigrated();
+
             return new ApplicationSettingsSnapshot
             {
                 TrayDoubleClickAction = Properties.Settings.Default.TrayDoubleClickAction,
                 WallpaperStyleIndex = Properties.Settings.Default.StyleComboBox,
                 AutoRefreshEnabled = Properties.Settings.Default.AutoRefreshEnabled,
                 StartWithWindows = Properties.Settings.Default.StartWithWindows,
-                NasaApiKey = Properties.Settings.Default.NasaApiKey,
+                NasaApiKey = GetStoredApiKeyForDisplay(),
                 NasaApiKeyValidationState = Properties.Settings.Default.NasaApiKeyValidationState,
                 ImagesDirectoryPath = Properties.Settings.Default.ImagesDirectoryPath,
                 LastAutoRefreshRunDate = Properties.Settings.Default.LastAutoRefreshRunDate,
@@ -397,11 +403,11 @@ namespace apod_wallpaper
             if (settings == null)
                 throw new ArgumentNullException(nameof(settings));
 
+            EnsureLegacyApiKeyMigrated();
+
             var previousAutoRefreshEnabled = Properties.Settings.Default.AutoRefreshEnabled;
-            var previousApiKey = Normalize(Properties.Settings.Default.NasaApiKey);
-            var normalizedApiKey = string.IsNullOrWhiteSpace(settings.NasaApiKey)
-                ? "DEMO_KEY"
-                : settings.NasaApiKey.Trim();
+            var previousApiKey = Normalize(GetStoredApiKeyForDisplay());
+            var normalizedApiKey = NormalizeApiKeyForDisplay(settings.NasaApiKey);
             var apiKeyChanged = !string.Equals(previousApiKey, normalizedApiKey, StringComparison.Ordinal);
             var effectiveValidationState = apiKeyChanged
                 ? ApiKeyValidationState.Unknown.ToString()
@@ -414,7 +420,7 @@ namespace apod_wallpaper
             Properties.Settings.Default.AutoRefreshEnabled = settings.AutoRefreshEnabled;
             Properties.Settings.Default.StartWithWindows = settings.StartWithWindows;
             Properties.Settings.Default.ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath);
-            Properties.Settings.Default.NasaApiKey = normalizedApiKey;
+            Properties.Settings.Default.NasaApiKey = string.Empty;
             Properties.Settings.Default.NasaApiKeyValidationState = effectiveValidationState;
             Properties.Settings.Default.LastAutoRefreshRunDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
                 ? string.Empty
@@ -423,6 +429,7 @@ namespace apod_wallpaper
                 ? string.Empty
                 : Normalize(settings.LastAutoRefreshAppliedDate);
 
+            SaveStoredApiKey(settings.NasaApiKey);
             Properties.Settings.Default.Save();
 
             if (apiKeyChanged)
@@ -441,6 +448,7 @@ namespace apod_wallpaper
 
         private void ApplyRuntimeSettings()
         {
+            EnsureLegacyApiKeyMigrated();
             RuntimeSettingsSync.ApplyCurrentSettings();
             FileStorage.SetSessionImagesDirectory(Properties.Settings.Default.ImagesDirectoryPath);
         }
@@ -574,7 +582,7 @@ namespace apod_wallpaper
 
         private static TimeSpan ResolveSchedulerPollingInterval(ApplicationSettingsSnapshot settings)
         {
-            if (settings == null || string.IsNullOrWhiteSpace(settings.NasaApiKey) || string.Equals(settings.NasaApiKey.Trim(), "DEMO_KEY", StringComparison.OrdinalIgnoreCase))
+            if (settings == null || string.IsNullOrWhiteSpace(settings.NasaApiKey) || string.Equals(settings.NasaApiKey.Trim(), DemoApiKey, StringComparison.OrdinalIgnoreCase))
                 return TimeSpan.FromHours(1);
 
             return TimeSpan.FromMinutes(30);
@@ -641,6 +649,62 @@ namespace apod_wallpaper
             Properties.Settings.Default.NasaApiKeyValidationState = validationState.ToString();
             Properties.Settings.Default.Save();
             ApplyRuntimeSettings();
+        }
+
+        private void EnsureLegacyApiKeyMigrated()
+        {
+            if (_legacyApiKeyMigrated)
+                return;
+
+            lock (_secretMigrationSync)
+            {
+                if (_legacyApiKeyMigrated)
+                    return;
+
+                var legacyApiKey = Normalize(Properties.Settings.Default.NasaApiKey);
+                if (!string.IsNullOrWhiteSpace(legacyApiKey) &&
+                    !string.Equals(legacyApiKey, DemoApiKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    UserSecretStore.SaveNasaApiKey(legacyApiKey);
+                }
+
+                if (!string.IsNullOrWhiteSpace(Properties.Settings.Default.NasaApiKey))
+                {
+                    Properties.Settings.Default.NasaApiKey = string.Empty;
+                    Properties.Settings.Default.Save();
+                }
+
+                _legacyApiKeyMigrated = true;
+            }
+        }
+
+        private static string GetStoredApiKeyForDisplay()
+        {
+            var storedApiKey = Normalize(UserSecretStore.GetNasaApiKey());
+            return string.IsNullOrWhiteSpace(storedApiKey)
+                ? DemoApiKey
+                : storedApiKey;
+        }
+
+        private static void SaveStoredApiKey(string apiKey)
+        {
+            var normalizedApiKey = Normalize(apiKey);
+            if (string.IsNullOrWhiteSpace(normalizedApiKey) ||
+                string.Equals(normalizedApiKey, DemoApiKey, StringComparison.OrdinalIgnoreCase))
+            {
+                UserSecretStore.DeleteNasaApiKey();
+                return;
+            }
+
+            UserSecretStore.SaveNasaApiKey(normalizedApiKey);
+        }
+
+        private static string NormalizeApiKeyForDisplay(string apiKey)
+        {
+            var normalizedApiKey = Normalize(apiKey);
+            return string.IsNullOrWhiteSpace(normalizedApiKey)
+                ? DemoApiKey
+                : normalizedApiKey;
         }
 
         private void ResetApiKeyValidationRuntimeState()

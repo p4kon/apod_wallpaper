@@ -43,7 +43,7 @@ namespace apod_wallpaper.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("DEMO_KEY")]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
         public string NasaApiKey {
             get {
                 return ((string)(this["NasaApiKey"]));

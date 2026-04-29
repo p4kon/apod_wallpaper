@@ -5,7 +5,7 @@ namespace apod_wallpaper
         public static void ApplyCurrentSettings()
         {
             AppRuntimeSettings.Configure(
-                Properties.Settings.Default.NasaApiKey,
+                UserSecretStore.GetNasaApiKey(),
                 Properties.Settings.Default.ImagesDirectoryPath,
                 ParseValidationState(Properties.Settings.Default.NasaApiKeyValidationState));
         }

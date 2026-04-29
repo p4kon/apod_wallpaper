@@ -9,7 +9,7 @@
       <Value Profile="(Default)">6</Value>
     </Setting>
     <Setting Name="NasaApiKey" Type="System.String" Scope="User">
-      <Value Profile="(Default)">DEMO_KEY</Value>
+      <Value Profile="(Default)"></Value>
     </Setting>
     <Setting Name="NasaApiKeyValidationState" Type="System.String" Scope="User">
       <Value Profile="(Default)">Unknown</Value>
