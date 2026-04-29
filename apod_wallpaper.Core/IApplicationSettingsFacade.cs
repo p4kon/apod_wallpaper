@@ -5,6 +5,7 @@ namespace apod_wallpaper
 {
     public interface IApplicationSettingsFacade
     {
+        Task<OperationResult<ApplicationInitialStateSnapshot>> GetInitialStateAsync();
         Task<OperationResult<ApplicationSettingsSnapshot>> GetSettingsAsync();
         Task<OperationResult<ApplicationSettingsSnapshot>> SaveSettingsAsync(ApplicationSettingsSnapshot settings);
         Task<OperationResult<string>> UpdateSessionImagesDirectoryAsync(string path);

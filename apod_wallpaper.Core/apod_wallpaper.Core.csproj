@@ -46,6 +46,7 @@
     <Compile Include="ApiKeyValidationState.cs" />
     <Compile Include="ApplicationStorageMode.cs" />
     <Compile Include="ApplicationStoragePaths.cs" />
+    <Compile Include="ApplicationInitialStateSnapshot.cs" />
     <Compile Include="ApplicationSettingsSnapshot.cs" />
     <Compile Include="ApplicationController.cs" />
     <Compile Include="OperationErrorCode.cs" />

@@ -43,6 +43,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Scheduler day lock does not skip when no applied date", SchedulerDayLockRequiresAppliedDate);
                 Run("API key is stored outside plaintext settings", ApiKeyIsStoredOutsidePlaintextSettings);
                 Run("Legacy API key migrates to protected storage", LegacyApiKeyMigratesToProtectedStorage);
+                Run("Initial state snapshot returns startup data in one call", InitialStateSnapshotReturnsStartupData);
                 Run("Storage layout resolves all backend paths centrally", StorageLayoutResolvesAllPathsCentrally);
                 Run("Portable storage mode keeps app data near executable", PortableStorageModeUsesPortableLayout);
                 Run("Public facade methods use operation results", PublicFacadeMethodsUseOperationResults);
@@ -562,6 +563,51 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             {
                 RestoreSettings(snapshot);
                 ResetSecretStore();
+            }
+        }
+
+        private static void InitialStateSnapshotReturnsStartupData()
+        {
+            var snapshot = CaptureSettings();
+            var customImagesDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_initial_state_images_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(customImagesDirectory);
+
+            try
+            {
+                var lastAppliedDate = DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd");
+                var controller = CreateController();
+                var saveResult = controller.SaveSettingsAsync(new apod_wallpaper.ApplicationSettingsSnapshot
+                {
+                    TrayDoubleClickAction = true,
+                    WallpaperStyleIndex = (int)apod_wallpaper.WallpaperStyle.Fill,
+                    AutoRefreshEnabled = snapshot.AutoRefreshEnabled,
+                    StartWithWindows = snapshot.StartWithWindows,
+                    ImagesDirectoryPath = customImagesDirectory,
+                    NasaApiKey = "DEMO_KEY",
+                    NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Unknown.ToString(),
+                    LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
+                    LastAutoRefreshAppliedDate = lastAppliedDate,
+                }).GetAwaiter().GetResult();
+                Assert(saveResult.Succeeded, "Expected initial state settings save to succeed.");
+
+                var initialStateResult = controller.GetInitialStateAsync().GetAwaiter().GetResult();
+                Assert(initialStateResult.Succeeded, "Expected initial state snapshot to succeed.");
+
+                var initialState = initialStateResult.Value;
+                Assert(initialState != null, "Expected initial state payload.");
+                Assert(initialState.Settings != null, "Expected settings inside initial state.");
+                Assert(initialState.StoragePaths != null, "Expected storage paths inside initial state.");
+                Assert(initialState.ApiKeyValidationState == apod_wallpaper.ApiKeyValidationState.Unknown, "Expected validation state from initial state.");
+                Assert(initialState.PreferredDisplayDate == DateTime.Today.AddDays(-1), "Expected preferred display date from initial state.");
+                Assert(initialState.SelectedWallpaperStyle == apod_wallpaper.WallpaperStyle.Fill, "Expected selected wallpaper style from initial state.");
+                Assert(initialState.LocalImageIndexReady, "Expected initial state to confirm local index readiness.");
+                Assert(string.Equals(initialState.StoragePaths.ImagesDirectory, customImagesDirectory, StringComparison.OrdinalIgnoreCase), "Expected initial state to surface effective images directory.");
+                Assert(string.Equals(initialState.Settings.ImagesDirectoryPath, customImagesDirectory, StringComparison.OrdinalIgnoreCase), "Expected initial state settings to keep configured images directory.");
+            }
+            finally
+            {
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(customImagesDirectory);
             }
         }
 

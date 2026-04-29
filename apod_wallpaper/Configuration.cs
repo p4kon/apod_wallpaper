@@ -77,28 +77,20 @@ namespace apod_wallpaper
                         "Unable to subscribe to wallpaper applied events.").ConfigureAwait(true);
                 }
 
-                currentSettings = await GetValueOrThrowAsync(settingsFacade.GetSettingsAsync(), "Unable to load application settings.").ConfigureAwait(true);
+                var initialState = await GetValueOrThrowAsync(settingsFacade.GetInitialStateAsync(), "Unable to load the initial application state.").ConfigureAwait(true);
+                currentSettings = initialState.Settings;
                 downloadSetCheckBox.Checked = currentSettings.TrayDoubleClickAction;
-                var currentStyle = Enum.IsDefined(typeof(WallpaperStyle), currentSettings.WallpaperStyleIndex)
-                    ? (WallpaperStyle)currentSettings.WallpaperStyleIndex
-                    : WallpaperStyle.Smart;
-                wallpaperStyleComboBox.SelectedItem = currentStyle;
+                wallpaperStyleComboBox.SelectedItem = initialState.SelectedWallpaperStyle;
                 everyTimeCheckBox.Checked = currentSettings.AutoRefreshEnabled;
                 startWithWindowsCheckBox.Checked = currentSettings.StartWithWindows;
                 apiKeyTextBox.Text = currentSettings.NasaApiKey;
-                imagesFolderTextBox.Text = (await GetValueOrThrowAsync(storageFacade.GetStoragePathsAsync(), "Unable to resolve the active images directory.").ConfigureAwait(true)).ImagesDirectory;
-                var preferredDate = await GetValueOrThrowAsync(settingsFacade.GetPreferredDisplayDateAsync(), "Unable to resolve the preferred display date.").ConfigureAwait(true);
+                imagesFolderTextBox.Text = initialState.StoragePaths.ImagesDirectory;
+                var preferredDate = initialState.PreferredDisplayDate;
                 if (preferredDate > pictureDayDateTimePicker.MaxDate)
                     preferredDate = pictureDayDateTimePicker.MaxDate.Date;
                 pictureDayDateTimePicker.Value = preferredDate;
-                await GetValueOrThrowAsync(settingsFacade.UpdateSessionImagesDirectoryAsync(imagesFolderTextBox.Text), "Unable to update the images directory for this session.").ConfigureAwait(true);
-                UpdateApiKeyValidationIndicator(await GetValueOrThrowAsync(settingsFacade.GetApiKeyValidationStateAsync(), "Unable to read API key validation state.").ConfigureAwait(true));
-                currentSettings = await GetValueOrThrowAsync(settingsFacade.GetSettingsAsync(), "Unable to reload application settings.").ConfigureAwait(true);
+                UpdateApiKeyValidationIndicator(initialState.ApiKeyValidationState);
                 suppressSettingsSync = false;
-
-                var refreshResult = await settingsFacade.RefreshLocalImageIndexAsync().ConfigureAwait(true);
-                if (!refreshResult.Succeeded)
-                    throw new InvalidOperationException(GetOperationErrorMessage(refreshResult, "Unable to refresh the local image index."));
 
                 await WarmUpCalendarMonthAsync(pictureDayDateTimePicker.Value.Date, true);
             }

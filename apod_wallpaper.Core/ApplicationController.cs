@@ -72,6 +72,31 @@ namespace apod_wallpaper
             return Task.FromResult(ExecuteOperation(BuildSettingsSnapshot, OperationErrorCode.SettingsReadFailed, "Unable to load saved application settings."));
         }
 
+        public Task<OperationResult<ApplicationInitialStateSnapshot>> GetInitialStateAsync()
+        {
+            return ExecuteOperationAsync(async () =>
+            {
+                var settings = BuildSettingsSnapshot();
+                FileStorage.SetSessionImagesDirectory(settings.ImagesDirectoryPath);
+                await _workflowService.RefreshLocalImageIndexAsync().ConfigureAwait(false);
+
+                var storagePaths = FileStorage.GetStoragePaths();
+                var preferredDate = ResolvePreferredDisplayDate(settings);
+                var selectedWallpaperStyle = ResolveSelectedWallpaperStyle(settings);
+                var validationState = GetApiKeyValidationStateCore();
+
+                return new ApplicationInitialStateSnapshot
+                {
+                    Settings = settings.Clone(),
+                    StoragePaths = storagePaths,
+                    ApiKeyValidationState = validationState,
+                    PreferredDisplayDate = preferredDate,
+                    SelectedWallpaperStyle = selectedWallpaperStyle,
+                    LocalImageIndexReady = true,
+                };
+            }, OperationErrorCode.InitializationFailed, "Unable to build the initial application state.");
+        }
+
         public Task<OperationResult<ApplicationSettingsSnapshot>> SaveSettingsAsync(ApplicationSettingsSnapshot settings)
         {
             return Task.FromResult(ExecuteOperation(() =>
@@ -309,19 +334,12 @@ namespace apod_wallpaper
 
         public Task<OperationResult<DateTime>> GetPreferredDisplayDateAsync()
         {
-            return Task.FromResult(ExecuteOperation(() =>
-            {
-                var lastAppliedDate = ParseDate(BuildSettingsSnapshot().LastAutoRefreshAppliedDate);
-                if (lastAppliedDate.HasValue && lastAppliedDate.Value <= DateTime.Today)
-                    return lastAppliedDate.Value;
-
-                return DateTime.Today;
-            }, OperationErrorCode.SettingsReadFailed, "Unable to resolve the preferred display date."));
+            return Task.FromResult(ExecuteOperation(() => ResolvePreferredDisplayDate(BuildSettingsSnapshot()), OperationErrorCode.SettingsReadFailed, "Unable to resolve the preferred display date."));
         }
 
         public Task<OperationResult<WallpaperStyle>> GetSelectedWallpaperStyleAsync()
         {
-            return Task.FromResult(ExecuteOperation(() => (WallpaperStyle)BuildSettingsSnapshot().WallpaperStyleIndex, OperationErrorCode.SettingsReadFailed, "Unable to read the selected wallpaper style."));
+            return Task.FromResult(ExecuteOperation(() => ResolveSelectedWallpaperStyle(BuildSettingsSnapshot()), OperationErrorCode.SettingsReadFailed, "Unable to read the selected wallpaper style."));
         }
 
         public Task<OperationResult> ShutdownAsync()
@@ -567,6 +585,25 @@ namespace apod_wallpaper
             return Enum.TryParse(value, true, out parsedState)
                 ? parsedState.ToString()
                 : ApiKeyValidationState.Unknown.ToString();
+        }
+
+        private static DateTime ResolvePreferredDisplayDate(ApplicationSettingsSnapshot settings)
+        {
+            var lastAppliedDate = ParseDate(settings != null ? settings.LastAutoRefreshAppliedDate : null);
+            if (lastAppliedDate.HasValue && lastAppliedDate.Value <= DateTime.Today)
+                return lastAppliedDate.Value;
+
+            return DateTime.Today;
+        }
+
+        private static WallpaperStyle ResolveSelectedWallpaperStyle(ApplicationSettingsSnapshot settings)
+        {
+            if (settings == null)
+                return WallpaperStyle.Smart;
+
+            return Enum.IsDefined(typeof(WallpaperStyle), settings.WallpaperStyleIndex)
+                ? (WallpaperStyle)settings.WallpaperStyleIndex
+                : WallpaperStyle.Smart;
         }
 
         private static DateTime? ParseDate(string value)
