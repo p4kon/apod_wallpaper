@@ -23,6 +23,7 @@ namespace apod_wallpaper
             WallpaperStyle.Span,
         };
         private readonly IApplicationSettingsFacade settingsFacade;
+        private readonly IApplicationStorageFacade storageFacade;
         private readonly IApodWorkflowFacade workflowFacade;
         private readonly IApodCalendarFacade calendarFacade;
         private readonly IApplicationDiagnosticsFacade diagnosticsFacade;
@@ -44,6 +45,7 @@ namespace apod_wallpaper
                 throw new ArgumentNullException(nameof(backend));
 
             settingsFacade = backend;
+            storageFacade = backend;
             workflowFacade = backend;
             calendarFacade = backend;
             diagnosticsFacade = backend;
@@ -77,7 +79,7 @@ namespace apod_wallpaper
                 everyTimeCheckBox.Checked = currentSettings.AutoRefreshEnabled;
                 startWithWindowsCheckBox.Checked = currentSettings.StartWithWindows;
                 apiKeyTextBox.Text = currentSettings.NasaApiKey;
-                imagesFolderTextBox.Text = GetValueOrThrow(settingsFacade.GetEffectiveImagesDirectory(), "Unable to resolve the active images directory.");
+                imagesFolderTextBox.Text = GetValueOrThrow(storageFacade.GetStoragePaths(), "Unable to resolve the active images directory.").ImagesDirectory;
                 var preferredDate = GetValueOrThrow(settingsFacade.GetPreferredDisplayDate(), "Unable to resolve the preferred display date.");
                 if (preferredDate > pictureDayDateTimePicker.MaxDate)
                     preferredDate = pictureDayDateTimePicker.MaxDate.Date;
@@ -306,10 +308,10 @@ namespace apod_wallpaper
         private void openImagesFolderButton_Click(object sender, EventArgs e)
         {
             var path = string.IsNullOrWhiteSpace(imagesFolderTextBox.Text)
-                ? GetValueOrThrow(settingsFacade.EnsureEffectiveImagesDirectory(), "Unable to prepare the images directory.")
+                ? GetValueOrThrow(storageFacade.EnsureStorageLayout(), "Unable to prepare the images directory.").ImagesDirectory
                 : GetValueOrThrow(settingsFacade.UpdateSessionImagesDirectory(imagesFolderTextBox.Text.Trim()), "Unable to resolve the images directory.");
 
-            GetValueOrThrow(settingsFacade.EnsureEffectiveImagesDirectory(), "Unable to prepare the images directory.");
+            GetValueOrThrow(storageFacade.EnsureStorageLayout(), "Unable to prepare the images directory.");
             Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
         }
 

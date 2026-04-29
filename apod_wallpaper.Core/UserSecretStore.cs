@@ -79,7 +79,7 @@ namespace apod_wallpaper
         private static string GetSecretsDirectory()
         {
             return string.IsNullOrWhiteSpace(_secretDirectoryOverride)
-                ? Path.Combine(FileStorage.ApplicationDataDirectory, "secrets")
+                ? FileStorage.SecretsDirectory
                 : _secretDirectoryOverride;
         }
 

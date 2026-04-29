@@ -42,6 +42,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("Scheduler day lock does not skip when no applied date", SchedulerDayLockRequiresAppliedDate);
                 Run("API key is stored outside plaintext settings", ApiKeyIsStoredOutsidePlaintextSettings);
                 Run("Legacy API key migrates to protected storage", LegacyApiKeyMigratesToProtectedStorage);
+                Run("Storage layout resolves all backend paths centrally", StorageLayoutResolvesAllPathsCentrally);
+                Run("Portable storage mode keeps app data near executable", PortableStorageModeUsesPortableLayout);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -557,6 +559,71 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             {
                 RestoreSettings(snapshot);
                 ResetSecretStore();
+            }
+        }
+
+        private static void StorageLayoutResolvesAllPathsCentrally()
+        {
+            var snapshot = CaptureSettings();
+            var customImagesDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_storage_images_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(customImagesDirectory);
+
+            try
+            {
+                apod_wallpaper.FileStorage.SetStorageModeOverride(apod_wallpaper.ApplicationStorageMode.LocalApplicationData);
+
+                var controller = CreateController();
+                var saveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
+                {
+                    TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
+                    WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
+                    AutoRefreshEnabled = snapshot.AutoRefreshEnabled,
+                    StartWithWindows = snapshot.StartWithWindows,
+                    ImagesDirectoryPath = customImagesDirectory,
+                    NasaApiKey = snapshot.NasaApiKey,
+                    NasaApiKeyValidationState = snapshot.NasaApiKeyValidationState,
+                    LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
+                    LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
+                });
+                Assert(saveResult.Succeeded, "Expected storage settings save to succeed.");
+
+                var layout = GetValueOrThrow(controller.GetStoragePaths(), "Unable to read storage layout.");
+                Assert(string.Equals(layout.ImagesDirectory, customImagesDirectory, StringComparison.OrdinalIgnoreCase), "Expected custom images directory in storage layout.");
+                Assert(string.Equals(layout.SmartImagesDirectory, Path.Combine(customImagesDirectory, "smart"), StringComparison.OrdinalIgnoreCase), "Expected smart directory under images directory.");
+                Assert(layout.CacheDirectory.IndexOf("apod_wallpaper", StringComparison.OrdinalIgnoreCase) >= 0, "Expected cache directory to be backend-defined.");
+                Assert(layout.LogsDirectory.IndexOf("apod_wallpaper", StringComparison.OrdinalIgnoreCase) >= 0, "Expected logs directory to be backend-defined.");
+                Assert(layout.SecretsDirectory.IndexOf("secrets", StringComparison.OrdinalIgnoreCase) >= 0, "Expected secrets directory to be backend-defined.");
+                Assert(layout.Mode == apod_wallpaper.ApplicationStorageMode.LocalApplicationData, "Expected local application data mode.");
+                Assert(layout.UsesCustomImagesDirectory, "Expected storage layout to report custom images directory usage.");
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetStorageModeOverride(null);
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(customImagesDirectory);
+            }
+        }
+
+        private static void PortableStorageModeUsesPortableLayout()
+        {
+            apod_wallpaper.FileStorage.SetStorageModeOverride(apod_wallpaper.ApplicationStorageMode.Portable);
+            try
+            {
+                var controller = CreateController();
+                var layout = GetValueOrThrow(controller.GetStoragePaths(), "Unable to read portable storage layout.");
+                var expectedImagesDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "images");
+                var expectedApplicationDataDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+
+                Assert(layout.Mode == apod_wallpaper.ApplicationStorageMode.Portable, "Expected portable storage mode.");
+                Assert(string.Equals(layout.ImagesDirectory, expectedImagesDirectory, StringComparison.OrdinalIgnoreCase), "Expected portable images directory next to executable.");
+                Assert(string.Equals(layout.ApplicationDataDirectory, expectedApplicationDataDirectory, StringComparison.OrdinalIgnoreCase), "Expected portable application data directory next to executable.");
+                Assert(string.Equals(layout.CacheDirectory, Path.Combine(expectedApplicationDataDirectory, "cache"), StringComparison.OrdinalIgnoreCase), "Expected portable cache directory.");
+                Assert(string.Equals(layout.LogsDirectory, Path.Combine(expectedApplicationDataDirectory, "logs"), StringComparison.OrdinalIgnoreCase), "Expected portable logs directory.");
+                Assert(string.Equals(layout.SecretsDirectory, Path.Combine(expectedApplicationDataDirectory, "secrets"), StringComparison.OrdinalIgnoreCase), "Expected portable secrets directory.");
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetStorageModeOverride(null);
             }
         }
 

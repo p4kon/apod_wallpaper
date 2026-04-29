@@ -8,16 +8,13 @@ namespace apod_wallpaper
     internal static class FileStorage
     {
         private static string _sessionImagesDirectoryOverride;
+        private static ApplicationStorageMode? _modeOverride;
 
         public static string ImagesDirectory
         {
             get
             {
-                var customPath = ResolveImagesDirectory();
-                if (!string.IsNullOrWhiteSpace(customPath))
-                    return customPath;
-
-                return ResolveDefaultImagesDirectory();
+                return GetStoragePaths().ImagesDirectory;
             }
         }
 
@@ -25,7 +22,7 @@ namespace apod_wallpaper
         {
             get
             {
-                return Path.Combine(ImagesDirectory, "smart");
+                return GetStoragePaths().SmartImagesDirectory;
             }
         }
 
@@ -33,7 +30,7 @@ namespace apod_wallpaper
         {
             get
             {
-                return Path.Combine(ApplicationDataDirectory, "cache");
+                return GetStoragePaths().CacheDirectory;
             }
         }
 
@@ -41,9 +38,7 @@ namespace apod_wallpaper
         {
             get
             {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "apod_wallpaper");
+                return GetStoragePaths().ApplicationDataDirectory;
             }
         }
 
@@ -51,7 +46,7 @@ namespace apod_wallpaper
         {
             get
             {
-                return Path.Combine(ApplicationDataDirectory, "logs");
+                return GetStoragePaths().LogsDirectory;
             }
         }
 
@@ -59,7 +54,15 @@ namespace apod_wallpaper
         {
             get
             {
-                return Path.Combine(CacheDirectory, "apod-metadata.json");
+                return GetStoragePaths().MetadataCacheFilePath;
+            }
+        }
+
+        public static string SecretsDirectory
+        {
+            get
+            {
+                return GetStoragePaths().SecretsDirectory;
             }
         }
 
@@ -81,6 +84,44 @@ namespace apod_wallpaper
         public static void EnsureLogsDirectory()
         {
             Directory.CreateDirectory(LogsDirectory);
+        }
+
+        public static ApplicationStoragePaths GetStoragePaths()
+        {
+            var mode = ResolveStorageMode();
+            var customImagesDirectory = ResolveImagesDirectory();
+            var usesCustomImagesDirectory = !string.IsNullOrWhiteSpace(customImagesDirectory);
+            var applicationDataDirectory = ResolveApplicationDataDirectory(mode);
+            var executableImagesDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "images");
+            var imagesDirectory = usesCustomImagesDirectory
+                ? customImagesDirectory
+                : ResolveDefaultImagesDirectory(mode, executableImagesDirectory, applicationDataDirectory);
+
+            return new ApplicationStoragePaths
+            {
+                Mode = mode,
+                ApplicationDataDirectory = applicationDataDirectory,
+                ImagesDirectory = imagesDirectory,
+                SmartImagesDirectory = Path.Combine(imagesDirectory, "smart"),
+                CacheDirectory = Path.Combine(applicationDataDirectory, "cache"),
+                LogsDirectory = Path.Combine(applicationDataDirectory, "logs"),
+                MetadataCacheFilePath = Path.Combine(applicationDataDirectory, "cache", "apod-metadata.json"),
+                SecretsDirectory = Path.Combine(applicationDataDirectory, "secrets"),
+                UsesCustomImagesDirectory = usesCustomImagesDirectory,
+                UsesExecutableImagesDirectory = !usesCustomImagesDirectory &&
+                    PathsEqual(imagesDirectory, executableImagesDirectory),
+            };
+        }
+
+        public static ApplicationStoragePaths EnsureStorageLayout()
+        {
+            var paths = GetStoragePaths();
+            Directory.CreateDirectory(paths.ImagesDirectory);
+            Directory.CreateDirectory(paths.SmartImagesDirectory);
+            Directory.CreateDirectory(paths.CacheDirectory);
+            Directory.CreateDirectory(paths.LogsDirectory);
+            Directory.CreateDirectory(paths.SecretsDirectory);
+            return paths;
         }
 
         public static string GetImagePath(string fileName)
@@ -130,6 +171,11 @@ namespace apod_wallpaper
             _sessionImagesDirectoryOverride = NormalizePath(path);
         }
 
+        internal static void SetStorageModeOverride(ApplicationStorageMode? mode)
+        {
+            _modeOverride = mode;
+        }
+
         private static string ResolveImagesDirectory()
         {
             var sessionPath = NormalizePath(_sessionImagesDirectoryOverride);
@@ -139,13 +185,44 @@ namespace apod_wallpaper
             return NormalizePath(AppRuntimeSettings.ImagesDirectoryPath);
         }
 
-        private static string ResolveDefaultImagesDirectory()
+        private static string ResolveDefaultImagesDirectory(ApplicationStorageMode mode, string executableImagesDirectory, string applicationDataDirectory)
         {
-            var executableImagesDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "images");
+            if (mode == ApplicationStorageMode.Portable)
+                return executableImagesDirectory;
+
             if (CanUseDirectory(executableImagesDirectory))
                 return executableImagesDirectory;
 
-            return Path.Combine(ApplicationDataDirectory, "images");
+            return Path.Combine(applicationDataDirectory, "images");
+        }
+
+        private static ApplicationStorageMode ResolveStorageMode()
+        {
+            if (_modeOverride.HasValue)
+                return _modeOverride.Value;
+
+            var environmentOverride = NormalizePath(Environment.GetEnvironmentVariable("APOD_WALLPAPER_STORAGE_MODE"));
+            if (string.Equals(environmentOverride, "portable", System.StringComparison.OrdinalIgnoreCase))
+                return ApplicationStorageMode.Portable;
+
+            if (string.Equals(environmentOverride, "localappdata", System.StringComparison.OrdinalIgnoreCase))
+                return ApplicationStorageMode.LocalApplicationData;
+
+            var portableMarkerPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "portable.mode");
+            if (File.Exists(portableMarkerPath))
+                return ApplicationStorageMode.Portable;
+
+            return ApplicationStorageMode.LocalApplicationData;
+        }
+
+        private static string ResolveApplicationDataDirectory(ApplicationStorageMode mode)
+        {
+            if (mode == ApplicationStorageMode.Portable)
+                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "apod_wallpaper");
         }
 
         private static bool CanUseDirectory(string path)
@@ -167,6 +244,14 @@ namespace apod_wallpaper
         private static string NormalizePath(string path)
         {
             return string.IsNullOrWhiteSpace(path) ? null : path.Trim();
+        }
+
+        private static bool PathsEqual(string left, string right)
+        {
+            return string.Equals(
+                NormalizePath(left),
+                NormalizePath(right),
+                System.StringComparison.OrdinalIgnoreCase);
         }
     }
 }

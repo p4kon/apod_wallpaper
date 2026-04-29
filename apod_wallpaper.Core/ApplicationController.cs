@@ -80,16 +80,25 @@ namespace apod_wallpaper
 
         public OperationResult<string> GetEffectiveImagesDirectory()
         {
-            return ExecuteOperation(() => FileStorage.ImagesDirectory, OperationErrorCode.StorageFailed, "Unable to resolve the active images directory.");
+            return ExecuteOperation(() => FileStorage.GetStoragePaths().ImagesDirectory, OperationErrorCode.StorageFailed, "Unable to resolve the active images directory.");
         }
 
         public OperationResult<string> EnsureEffectiveImagesDirectory()
         {
             return ExecuteOperation(() =>
             {
-                FileStorage.EnsureImagesDirectory();
-                return FileStorage.ImagesDirectory;
+                return FileStorage.EnsureStorageLayout().ImagesDirectory;
             }, OperationErrorCode.StorageFailed, "Unable to prepare the images directory.");
+        }
+
+        public OperationResult<ApplicationStoragePaths> GetStoragePaths()
+        {
+            return ExecuteOperation(FileStorage.GetStoragePaths, OperationErrorCode.StorageFailed, "Unable to resolve the application storage layout.");
+        }
+
+        public OperationResult<ApplicationStoragePaths> EnsureStorageLayout()
+        {
+            return ExecuteOperation(FileStorage.EnsureStorageLayout, OperationErrorCode.StorageFailed, "Unable to prepare the application storage layout.");
         }
 
         public OperationResult<string> GetUserFriendlyErrorMessage(Exception exception, string fallbackMessage = null)
