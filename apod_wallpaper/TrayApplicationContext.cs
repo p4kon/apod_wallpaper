@@ -1,6 +1,6 @@
 using System;
 using System.Drawing;
-using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace apod_wallpaper
@@ -36,15 +36,15 @@ namespace apod_wallpaper
             trayIcon.Text = "Astronomy Picture of the Day";
         }
 
-        void TrayDoubleClickAction(object sender, EventArgs e)
+        async void TrayDoubleClickAction(object sender, EventArgs e)
         {
             if (Control.ModifierKeys == Keys.Shift)
             {
-                ApplyLatestFromTray();
+                await ApplyLatestFromTrayAsync().ConfigureAwait(true);
                 return;
             }
 
-            var trayActionResult = settingsFacade.ShouldApplyOnTrayDoubleClick();
+            var trayActionResult = await settingsFacade.ShouldApplyOnTrayDoubleClickAsync().ConfigureAwait(true);
             if (!trayActionResult.Succeeded)
             {
                 ShowTrayError(trayActionResult.Error != null ? trayActionResult.Error.Message : "Unable to read tray action settings.");
@@ -57,49 +57,44 @@ namespace apod_wallpaper
                 return;
             }
 
-            ApplyLatestFromTray();
+            await ApplyLatestFromTrayAsync().ConfigureAwait(true);
         }
 
-        private void ApplyLatestFromTray()
+        private async Task ApplyLatestFromTrayAsync()
         {
-            Thread thread = new Thread(() =>
+            try
             {
-                try
+                var styleResult = await settingsFacade.GetSelectedWallpaperStyleAsync().ConfigureAwait(true);
+                if (!styleResult.Succeeded)
                 {
-                    var styleResult = settingsFacade.GetSelectedWallpaperStyle();
-                    if (!styleResult.Succeeded)
-                    {
-                        ShowTrayError(styleResult.Error != null ? styleResult.Error.Message : "Unable to read wallpaper style.");
-                        return;
-                    }
-
-                    var operationResult = workflowFacade.ApplyLatestPublished(styleResult.Value);
-                    if (!operationResult.Succeeded)
-                    {
-                        ShowTrayError(operationResult.Error != null ? operationResult.Error.Message : "Unable to apply the latest APOD.");
-                        return;
-                    }
-
-                    var workflowResult = operationResult.Value;
-                    if (!workflowResult.IsSuccess)
-                        ShowTrayError(workflowResult.Message);
+                    ShowTrayError(styleResult.Error != null ? styleResult.Error.Message : "Unable to read wallpaper style.");
+                    return;
                 }
-                catch (Exception ex)
+
+                var operationResult = await workflowFacade.ApplyLatestPublishedAsync(styleResult.Value).ConfigureAwait(true);
+                if (!operationResult.Succeeded)
                 {
-                    diagnosticsFacade.LogWarning("Tray double-click apply failed.", ex);
-                    ShowTrayError(GetUserFriendlyErrorMessage(ex));
+                    ShowTrayError(operationResult.Error != null ? operationResult.Error.Message : "Unable to apply the latest APOD.");
+                    return;
                 }
-            });
-            thread.IsBackground = true;
-            thread.Start();
+
+                var workflowResult = operationResult.Value;
+                if (!workflowResult.IsSuccess)
+                    ShowTrayError(workflowResult.Message);
+            }
+            catch (Exception ex)
+            {
+                _ = diagnosticsFacade.LogWarningAsync("Tray double-click apply failed.", ex);
+                ShowTrayError(await GetUserFriendlyErrorMessageAsync(ex).ConfigureAwait(true));
+            }
         }
 
-        void ShowConfig(object sender, EventArgs e)
+        async void ShowConfig(object sender, EventArgs e)
         {
             var window = EnsureConfigurationWindow();
             if (!window.Visible)
             {
-                var preferredDateResult = settingsFacade.GetPreferredDisplayDate();
+                var preferredDateResult = await settingsFacade.GetPreferredDisplayDateAsync().ConfigureAwait(true);
                 if (preferredDateResult.Succeeded)
                     window.SyncDisplayedDate(preferredDateResult.Value);
             }
@@ -110,13 +105,13 @@ namespace apod_wallpaper
                 window.ShowDialog();
         }
 
-        void Exit(object sender, EventArgs e)
+        async void Exit(object sender, EventArgs e)
         {
             DisposeConfigurationWindow();
             trayIcon.DoubleClick -= TrayDoubleClickAction;
-            var shutdownResult = sessionFacade.Shutdown();
+            var shutdownResult = await sessionFacade.ShutdownAsync().ConfigureAwait(true);
             if (!shutdownResult.Succeeded)
-                diagnosticsFacade.LogWarning(shutdownResult.Error != null ? shutdownResult.Error.Message : "Controller shutdown failed.");
+                _ = diagnosticsFacade.LogWarningAsync(shutdownResult.Error != null ? shutdownResult.Error.Message : "Controller shutdown failed.");
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();
@@ -165,9 +160,9 @@ namespace apod_wallpaper
             configWindow = null;
         }
 
-        private string GetUserFriendlyErrorMessage(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")
+        private async Task<string> GetUserFriendlyErrorMessageAsync(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")
         {
-            var result = diagnosticsFacade.GetUserFriendlyErrorMessage(exception, fallbackMessage);
+            var result = await diagnosticsFacade.GetUserFriendlyErrorMessageAsync(exception, fallbackMessage).ConfigureAwait(true);
             return result.Succeeded && !string.IsNullOrWhiteSpace(result.Value)
                 ? result.Value
                 : fallbackMessage;

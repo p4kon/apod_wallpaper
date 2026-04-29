@@ -123,7 +123,7 @@ namespace apod_wallpaper.SmokeTests
             try
             {
                 var controller = CreateController();
-                var firstSaveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
+                var firstSaveResult = controller.SaveSettingsAsync(new apod_wallpaper.ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
                     WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
@@ -134,10 +134,10 @@ namespace apod_wallpaper.SmokeTests
                     NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Valid.ToString(),
                     LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
                     LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
-                });
+                }).GetAwaiter().GetResult();
                 Assert(firstSaveResult.Succeeded, "Expected first settings save to succeed.");
 
-                var secondSaveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
+                var secondSaveResult = controller.SaveSettingsAsync(new apod_wallpaper.ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
                     WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
@@ -148,10 +148,10 @@ namespace apod_wallpaper.SmokeTests
                     NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Valid.ToString(),
                     LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
                     LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
-                });
+                }).GetAwaiter().GetResult();
                 Assert(secondSaveResult.Succeeded, "Expected second settings save to succeed.");
 
-                Assert(GetValueOrThrow(controller.GetApiKeyValidationState(), "Unable to read API key validation state.") == apod_wallpaper.ApiKeyValidationState.Unknown,
+                Assert(GetValueOrThrow(controller.GetApiKeyValidationStateAsync().GetAwaiter().GetResult(), "Unable to read API key validation state.") == apod_wallpaper.ApiKeyValidationState.Unknown,
                     "Expected validation state to reset to Unknown after API key change.");
             }
             finally
@@ -170,7 +170,7 @@ namespace apod_wallpaper.SmokeTests
                 apod_wallpaper.Properties.Settings.Default.Save();
 
                 var controller = CreateController();
-                Assert(GetValueOrThrow(controller.GetPreferredDisplayDate(), "Unable to resolve preferred display date.") == DateTime.Today.AddDays(-1),
+                Assert(GetValueOrThrow(controller.GetPreferredDisplayDateAsync().GetAwaiter().GetResult(), "Unable to resolve preferred display date.") == DateTime.Today.AddDays(-1),
                     "Expected preferred display date to use the last auto-applied date.");
             }
             finally
@@ -414,7 +414,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             try
             {
                 controller = CreateController();
-                var saveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
+                var saveResult = controller.SaveSettingsAsync(new apod_wallpaper.ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
                     WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
@@ -425,16 +425,16 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                     NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Unknown.ToString(),
                     LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
                     LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
-                });
+                }).GetAwaiter().GetResult();
                 Assert(saveResult.Succeeded, "Expected DEMO_KEY scheduler settings save to succeed.");
 
-                Assert(controller.Initialize().Succeeded, "Expected controller initialization to succeed.");
+                Assert(controller.InitializeAsync().GetAwaiter().GetResult().Succeeded, "Expected controller initialization to succeed.");
                 Assert(controller.Scheduler.PollingInterval == TimeSpan.FromHours(1), "Expected DEMO_KEY polling interval to be one hour.");
             }
             finally
             {
                 if (controller != null)
-                    controller.Shutdown();
+                    controller.ShutdownAsync().GetAwaiter().GetResult();
                 RestoreSettings(snapshot);
             }
         }
@@ -446,7 +446,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             try
             {
                 controller = CreateController();
-                var saveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
+                var saveResult = controller.SaveSettingsAsync(new apod_wallpaper.ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
                     WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
@@ -457,16 +457,16 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                     NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Valid.ToString(),
                     LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
                     LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
-                });
+                }).GetAwaiter().GetResult();
                 Assert(saveResult.Succeeded, "Expected personal-key scheduler settings save to succeed.");
 
-                Assert(controller.Initialize().Succeeded, "Expected controller initialization to succeed.");
+                Assert(controller.InitializeAsync().GetAwaiter().GetResult().Succeeded, "Expected controller initialization to succeed.");
                 Assert(controller.Scheduler.PollingInterval == TimeSpan.FromMinutes(30), "Expected personal key polling interval to be 30 minutes.");
             }
             finally
             {
                 if (controller != null)
-                    controller.Shutdown();
+                    controller.ShutdownAsync().GetAwaiter().GetResult();
                 RestoreSettings(snapshot);
             }
         }
@@ -518,7 +518,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             {
                 ResetSecretStore();
                 var controller = CreateController();
-                var saveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
+                var saveResult = controller.SaveSettingsAsync(new apod_wallpaper.ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
                     WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
@@ -529,12 +529,12 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                     NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Valid.ToString(),
                     LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
                     LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
-                });
+                }).GetAwaiter().GetResult();
 
                 Assert(saveResult.Succeeded, "Expected protected API key save to succeed.");
                 Assert(apod_wallpaper.UserSecretStore.GetNasaApiKey() == "protected-test-key", "Expected API key to be stored in protected storage.");
                 Assert(string.IsNullOrWhiteSpace(apod_wallpaper.Properties.Settings.Default.NasaApiKey), "Expected plaintext settings slot to stay empty.");
-                Assert(GetValueOrThrow(controller.GetSettings(), "Unable to read settings after protected save.").NasaApiKey == "protected-test-key", "Expected facade settings to surface the protected API key.");
+                Assert(GetValueOrThrow(controller.GetSettingsAsync().GetAwaiter().GetResult(), "Unable to read settings after protected save.").NasaApiKey == "protected-test-key", "Expected facade settings to surface the protected API key.");
             }
             finally
             {
@@ -553,7 +553,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                 apod_wallpaper.Properties.Settings.Default.Save();
 
                 var controller = CreateController();
-                var initialization = controller.Initialize();
+                var initialization = controller.InitializeAsync().GetAwaiter().GetResult();
                 Assert(initialization.Succeeded, "Expected controller initialization to succeed during legacy API key migration.");
                 Assert(apod_wallpaper.UserSecretStore.GetNasaApiKey() == "legacy-plaintext-key", "Expected legacy API key to migrate into protected storage.");
                 Assert(string.IsNullOrWhiteSpace(apod_wallpaper.Properties.Settings.Default.NasaApiKey), "Expected legacy plaintext setting to be cleared after migration.");
@@ -576,7 +576,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                 apod_wallpaper.FileStorage.SetStorageModeOverride(apod_wallpaper.ApplicationStorageMode.LocalApplicationData);
 
                 var controller = CreateController();
-                var saveResult = controller.SaveSettings(new apod_wallpaper.ApplicationSettingsSnapshot
+                var saveResult = controller.SaveSettingsAsync(new apod_wallpaper.ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
                     WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
@@ -587,10 +587,10 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                     NasaApiKeyValidationState = snapshot.NasaApiKeyValidationState,
                     LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
                     LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
-                });
+                }).GetAwaiter().GetResult();
                 Assert(saveResult.Succeeded, "Expected storage settings save to succeed.");
 
-                var layout = GetValueOrThrow(controller.GetStoragePaths(), "Unable to read storage layout.");
+                var layout = GetValueOrThrow(controller.GetStoragePathsAsync().GetAwaiter().GetResult(), "Unable to read storage layout.");
                 Assert(string.Equals(layout.ImagesDirectory, customImagesDirectory, StringComparison.OrdinalIgnoreCase), "Expected custom images directory in storage layout.");
                 Assert(string.Equals(layout.SmartImagesDirectory, Path.Combine(customImagesDirectory, "smart"), StringComparison.OrdinalIgnoreCase), "Expected smart directory under images directory.");
                 Assert(layout.CacheDirectory.IndexOf("apod_wallpaper", StringComparison.OrdinalIgnoreCase) >= 0, "Expected cache directory to be backend-defined.");
@@ -613,7 +613,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             try
             {
                 var controller = CreateController();
-                var layout = GetValueOrThrow(controller.GetStoragePaths(), "Unable to read portable storage layout.");
+                var layout = GetValueOrThrow(controller.GetStoragePathsAsync().GetAwaiter().GetResult(), "Unable to read portable storage layout.");
                 var expectedImagesDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "images");
                 var expectedApplicationDataDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
 
@@ -645,15 +645,6 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
 
         private static bool UsesOperationResultContract(Type returnType)
         {
-            if (returnType == typeof(apod_wallpaper.OperationResult))
-                return true;
-
-            if (returnType.IsGenericType &&
-                returnType.GetGenericTypeDefinition() == typeof(apod_wallpaper.OperationResult<>))
-            {
-                return true;
-            }
-
             if (returnType.IsGenericType &&
                 returnType.GetGenericTypeDefinition() == typeof(Task<>))
             {
@@ -676,7 +667,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             var controller = CreateController();
             EventHandler<apod_wallpaper.WallpaperAppliedEventArgs> handler = delegate { };
 
-            var subscribeResult = controller.SubscribeWallpaperApplied(handler);
+            var subscribeResult = controller.SubscribeWallpaperAppliedAsync(handler).GetAwaiter().GetResult();
             Assert(subscribeResult.Succeeded, "Expected wallpaper subscription to succeed.");
             Assert(subscribeResult.Value != null, "Expected wallpaper subscription token.");
 
@@ -698,12 +689,12 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
 
         private static apod_wallpaper.ApplicationSettingsSnapshot CaptureSettings()
         {
-            return GetValueOrThrow(CreateController().GetSettings(), "Unable to capture current application settings.");
+            return GetValueOrThrow(CreateController().GetSettingsAsync().GetAwaiter().GetResult(), "Unable to capture current application settings.");
         }
 
         private static void RestoreSettings(apod_wallpaper.ApplicationSettingsSnapshot snapshot)
         {
-            var restoreResult = CreateController().SaveSettings(snapshot);
+            var restoreResult = CreateController().SaveSettingsAsync(snapshot).GetAwaiter().GetResult();
             Assert(restoreResult.Succeeded, "Expected settings restore to succeed.");
         }
 

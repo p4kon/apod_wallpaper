@@ -18,7 +18,7 @@ namespace apod_wallpaper
                     IApplicationBackendFacade controller = new ApplicationController(
                         new PropertiesSettingsStore(),
                         new StartupService());
-                    var initialization = controller.Initialize();
+                    var initialization = controller.InitializeAsync().GetAwaiter().GetResult();
                     if (!initialization.Succeeded)
                     {
                         System.Windows.Forms.MessageBox.Show(

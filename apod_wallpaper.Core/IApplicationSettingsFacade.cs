@@ -5,15 +5,15 @@ namespace apod_wallpaper
 {
     public interface IApplicationSettingsFacade
     {
-        OperationResult<ApplicationSettingsSnapshot> GetSettings();
-        OperationResult<ApplicationSettingsSnapshot> SaveSettings(ApplicationSettingsSnapshot settings);
-        OperationResult<string> UpdateSessionImagesDirectory(string path);
-        OperationResult<string> GetEffectiveImagesDirectory();
-        OperationResult<string> EnsureEffectiveImagesDirectory();
-        OperationResult<ApiKeyValidationState> GetApiKeyValidationState();
+        Task<OperationResult<ApplicationSettingsSnapshot>> GetSettingsAsync();
+        Task<OperationResult<ApplicationSettingsSnapshot>> SaveSettingsAsync(ApplicationSettingsSnapshot settings);
+        Task<OperationResult<string>> UpdateSessionImagesDirectoryAsync(string path);
+        Task<OperationResult<string>> GetEffectiveImagesDirectoryAsync();
+        Task<OperationResult<string>> EnsureEffectiveImagesDirectoryAsync();
+        Task<OperationResult<ApiKeyValidationState>> GetApiKeyValidationStateAsync();
         Task<OperationResult> RefreshLocalImageIndexAsync();
-        OperationResult<DateTime> GetPreferredDisplayDate();
-        OperationResult<WallpaperStyle> GetSelectedWallpaperStyle();
-        OperationResult<bool> ShouldApplyOnTrayDoubleClick();
+        Task<OperationResult<DateTime>> GetPreferredDisplayDateAsync();
+        Task<OperationResult<WallpaperStyle>> GetSelectedWallpaperStyleAsync();
+        Task<OperationResult<bool>> ShouldApplyOnTrayDoubleClickAsync();
     }
 }

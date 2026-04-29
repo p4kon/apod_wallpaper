@@ -39,9 +39,9 @@ namespace apod_wallpaper
             get { return _scheduler; }
         }
 
-        public OperationResult<ApplicationSettingsSnapshot> Initialize()
+        public Task<OperationResult<ApplicationSettingsSnapshot>> InitializeAsync()
         {
-            return ExecuteOperation(() =>
+            return Task.FromResult(ExecuteOperation(() =>
             {
                 if (!_isInitialized)
                 {
@@ -52,70 +52,70 @@ namespace apod_wallpaper
                 }
 
                 return BuildSettingsSnapshot();
-            }, OperationErrorCode.InitializationFailed, "Unable to initialize the application controller.");
+            }, OperationErrorCode.InitializationFailed, "Unable to initialize the application controller."));
         }
 
-        public OperationResult<IEventSubscription> SubscribeWallpaperApplied(EventHandler<WallpaperAppliedEventArgs> handler)
+        public Task<OperationResult<IEventSubscription>> SubscribeWallpaperAppliedAsync(EventHandler<WallpaperAppliedEventArgs> handler)
         {
-            return ExecuteOperation<IEventSubscription>(() =>
+            return Task.FromResult(ExecuteOperation<IEventSubscription>(() =>
             {
                 if (handler == null)
                     throw new ArgumentNullException(nameof(handler));
 
                 WallpaperApplied += handler;
                 return new WallpaperAppliedSubscription(this, handler);
-            }, OperationErrorCode.StateUpdateFailed, "Unable to subscribe to wallpaper applied events.");
+            }, OperationErrorCode.StateUpdateFailed, "Unable to subscribe to wallpaper applied events."));
         }
 
-        public OperationResult<ApplicationSettingsSnapshot> GetSettings()
+        public Task<OperationResult<ApplicationSettingsSnapshot>> GetSettingsAsync()
         {
-            return ExecuteOperation(BuildSettingsSnapshot, OperationErrorCode.SettingsReadFailed, "Unable to load saved application settings.");
+            return Task.FromResult(ExecuteOperation(BuildSettingsSnapshot, OperationErrorCode.SettingsReadFailed, "Unable to load saved application settings."));
         }
 
-        public OperationResult<ApplicationSettingsSnapshot> SaveSettings(ApplicationSettingsSnapshot settings)
+        public Task<OperationResult<ApplicationSettingsSnapshot>> SaveSettingsAsync(ApplicationSettingsSnapshot settings)
         {
-            return ExecuteOperation(() =>
+            return Task.FromResult(ExecuteOperation(() =>
             {
                 SaveSettingsCore(settings);
                 return BuildSettingsSnapshot();
-            }, OperationErrorCode.SettingsWriteFailed, "Unable to save application settings.");
+            }, OperationErrorCode.SettingsWriteFailed, "Unable to save application settings."));
         }
 
-        public OperationResult<string> UpdateSessionImagesDirectory(string path)
+        public Task<OperationResult<string>> UpdateSessionImagesDirectoryAsync(string path)
         {
-            return ExecuteOperation(() =>
+            return Task.FromResult(ExecuteOperation(() =>
             {
                 FileStorage.SetSessionImagesDirectory(path);
                 return FileStorage.ImagesDirectory;
-            }, OperationErrorCode.StateUpdateFailed, "Unable to update the active images directory for this session.");
+            }, OperationErrorCode.StateUpdateFailed, "Unable to update the active images directory for this session."));
         }
 
-        public OperationResult<string> GetEffectiveImagesDirectory()
+        public Task<OperationResult<string>> GetEffectiveImagesDirectoryAsync()
         {
-            return ExecuteOperation(() => FileStorage.GetStoragePaths().ImagesDirectory, OperationErrorCode.StorageFailed, "Unable to resolve the active images directory.");
+            return Task.FromResult(ExecuteOperation(() => FileStorage.GetStoragePaths().ImagesDirectory, OperationErrorCode.StorageFailed, "Unable to resolve the active images directory."));
         }
 
-        public OperationResult<string> EnsureEffectiveImagesDirectory()
+        public Task<OperationResult<string>> EnsureEffectiveImagesDirectoryAsync()
         {
-            return ExecuteOperation(() =>
+            return Task.FromResult(ExecuteOperation(() =>
             {
                 return FileStorage.EnsureStorageLayout().ImagesDirectory;
-            }, OperationErrorCode.StorageFailed, "Unable to prepare the images directory.");
+            }, OperationErrorCode.StorageFailed, "Unable to prepare the images directory."));
         }
 
-        public OperationResult<ApplicationStoragePaths> GetStoragePaths()
+        public Task<OperationResult<ApplicationStoragePaths>> GetStoragePathsAsync()
         {
-            return ExecuteOperation(FileStorage.GetStoragePaths, OperationErrorCode.StorageFailed, "Unable to resolve the application storage layout.");
+            return Task.FromResult(ExecuteOperation(FileStorage.GetStoragePaths, OperationErrorCode.StorageFailed, "Unable to resolve the application storage layout."));
         }
 
-        public OperationResult<ApplicationStoragePaths> EnsureStorageLayout()
+        public Task<OperationResult<ApplicationStoragePaths>> EnsureStorageLayoutAsync()
         {
-            return ExecuteOperation(FileStorage.EnsureStorageLayout, OperationErrorCode.StorageFailed, "Unable to prepare the application storage layout.");
+            return Task.FromResult(ExecuteOperation(FileStorage.EnsureStorageLayout, OperationErrorCode.StorageFailed, "Unable to prepare the application storage layout."));
         }
 
-        public OperationResult<string> GetUserFriendlyErrorMessage(Exception exception, string fallbackMessage = null)
+        public Task<OperationResult<string>> GetUserFriendlyErrorMessageAsync(Exception exception, string fallbackMessage = null)
         {
-            return ExecuteOperation(
+            return Task.FromResult(ExecuteOperation(
                 () =>
                 {
                     var message = ApodErrorTranslator.ToUserMessage(exception);
@@ -124,16 +124,15 @@ namespace apod_wallpaper
                         : message;
                 },
                 OperationErrorCode.Unknown,
-                fallbackMessage ?? "Unable to translate the error into a user-friendly message.");
+                fallbackMessage ?? "Unable to translate the error into a user-friendly message."));
         }
 
-        public OperationResult LogWarning(string message, Exception exception = null)
+        public Task<OperationResult> LogWarningAsync(string message, Exception exception = null)
         {
-            return ExecuteOperation(() =>
-            {
-                AppLogger.Warn(message, exception);
-                return true;
-            }, OperationErrorCode.LoggingFailed, "Unable to write a warning log entry.");
+            return Task.FromResult(ExecuteOperation(
+                () => AppLogger.Warn(message, exception),
+                OperationErrorCode.LoggingFailed,
+                "Unable to write a warning log entry."));
         }
 
         internal DateTime GetLatestPublishedDate()
@@ -230,17 +229,6 @@ namespace apod_wallpaper
             return validationState;
         }
 
-        public OperationResult<ApodWorkflowResult> LoadDay(DateTime date, bool forceRefresh = false)
-        {
-            return ExecuteOperation(() =>
-            {
-                EnsureApiKeyValidationIfNeeded(date, forceRefresh);
-                var result = _workflowService.LoadDay(date, forceRefresh);
-                _calendarStateService.Clear();
-                return result;
-            }, OperationErrorCode.WorkflowFailed, "Unable to load the requested APOD entry.");
-        }
-
         public Task<OperationResult<ApodWorkflowResult>> LoadDayAsync(DateTime date, bool forceRefresh = false)
         {
             return ExecuteOperationAsync(async () =>
@@ -252,17 +240,6 @@ namespace apod_wallpaper
             }, OperationErrorCode.WorkflowFailed, "Unable to load the requested APOD entry.");
         }
 
-        public OperationResult<ApodWorkflowResult> DownloadDay(DateTime date, bool forceRefresh = false)
-        {
-            return ExecuteOperation(() =>
-            {
-                EnsureApiKeyValidationIfNeeded(date, forceRefresh);
-                var result = _workflowService.DownloadDay(date, forceRefresh);
-                _calendarStateService.Clear();
-                return result;
-            }, OperationErrorCode.WorkflowFailed, "Unable to download the requested APOD image.");
-        }
-
         public Task<OperationResult<ApodWorkflowResult>> DownloadDayAsync(DateTime date, bool forceRefresh = false)
         {
             return ExecuteOperationAsync(async () =>
@@ -272,18 +249,6 @@ namespace apod_wallpaper
                 _calendarStateService.Clear();
                 return result;
             }, OperationErrorCode.WorkflowFailed, "Unable to download the requested APOD image.");
-        }
-
-        public OperationResult<ApodWorkflowResult> ApplyDay(DateTime date, WallpaperStyle style, bool forceRefresh = false)
-        {
-            return ExecuteOperation(() =>
-            {
-                EnsureApiKeyValidationIfNeeded(date, forceRefresh);
-                var result = _workflowService.ApplyDay(date, style, forceRefresh);
-                _calendarStateService.Clear();
-                RaiseWallpaperApplied(result, false);
-                return result;
-            }, OperationErrorCode.WorkflowFailed, "Unable to apply the requested APOD image as wallpaper.");
         }
 
         public Task<OperationResult<ApodWorkflowResult>> ApplyDayAsync(DateTime date, WallpaperStyle style, bool forceRefresh = false)
@@ -298,18 +263,6 @@ namespace apod_wallpaper
             }, OperationErrorCode.WorkflowFailed, "Unable to apply the requested APOD image as wallpaper.");
         }
 
-        public OperationResult<ApodWorkflowResult> ApplyLatestPublished(WallpaperStyle style, bool forceRefresh = false)
-        {
-            return ExecuteOperation(() =>
-            {
-                EnsureApiKeyValidation();
-                var result = _workflowService.ApplyLatestPublished(style, forceRefresh);
-                _calendarStateService.Clear();
-                RaiseWallpaperApplied(result, false);
-                return result;
-            }, OperationErrorCode.WorkflowFailed, "Unable to apply the latest available APOD image.");
-        }
-
         public Task<OperationResult<ApodWorkflowResult>> ApplyLatestPublishedAsync(WallpaperStyle style, bool forceRefresh = false)
         {
             return ExecuteOperationAsync(async () =>
@@ -322,32 +275,14 @@ namespace apod_wallpaper
             }, OperationErrorCode.WorkflowFailed, "Unable to apply the latest available APOD image.");
         }
 
-        public OperationResult<string> GetPostUrl(DateTime date)
+        public Task<OperationResult<string>> GetPostUrlAsync(DateTime date)
         {
-            return ExecuteOperation(() => _workflowService.GetPostUrl(date), OperationErrorCode.WorkflowFailed, "Unable to resolve the NASA APOD page URL.");
+            return Task.FromResult(ExecuteOperation(() => _workflowService.GetPostUrl(date), OperationErrorCode.WorkflowFailed, "Unable to resolve the NASA APOD page URL."));
         }
 
-        public OperationResult<ApiKeyValidationState> GetApiKeyValidationState()
+        public Task<OperationResult<ApiKeyValidationState>> GetApiKeyValidationStateAsync()
         {
-            return ExecuteOperation(GetApiKeyValidationStateCore, OperationErrorCode.SettingsReadFailed, "Unable to read the current API key validation state.");
-        }
-
-        public OperationResult<ApodCalendarMonthState> GetCalendarMonthState(DateTime month, bool refreshMissingDates)
-        {
-            return GetCalendarMonthState(month, refreshMissingDates, MonthRefreshMode.Aggressive);
-        }
-
-        public OperationResult<ApodCalendarMonthState> GetCalendarMonthState(DateTime month, bool refreshMissingDates, MonthRefreshMode refreshMode)
-        {
-            return ExecuteOperation(
-                () => _calendarStateService.GetMonthState(month, refreshMissingDates, refreshMode),
-                OperationErrorCode.WorkflowFailed,
-                "Unable to build calendar month state.");
-        }
-
-        public Task<OperationResult<ApodCalendarMonthState>> GetCalendarMonthStateAsync(DateTime month, bool refreshMissingDates)
-        {
-            return GetCalendarMonthStateAsync(month, refreshMissingDates, MonthRefreshMode.Aggressive);
+            return Task.FromResult(ExecuteOperation(GetApiKeyValidationStateCore, OperationErrorCode.SettingsReadFailed, "Unable to read the current API key validation state."));
         }
 
         public Task<OperationResult<ApodCalendarMonthState>> GetCalendarMonthStateAsync(DateTime month, bool refreshMissingDates, MonthRefreshMode refreshMode)
@@ -367,35 +302,34 @@ namespace apod_wallpaper
             }, OperationErrorCode.StorageFailed, "Unable to refresh the local image index.");
         }
 
-        public OperationResult<bool> ShouldApplyOnTrayDoubleClick()
+        public Task<OperationResult<bool>> ShouldApplyOnTrayDoubleClickAsync()
         {
-            return ExecuteOperation(() => BuildSettingsSnapshot().TrayDoubleClickAction, OperationErrorCode.SettingsReadFailed, "Unable to read tray double-click behavior.");
+            return Task.FromResult(ExecuteOperation(() => BuildSettingsSnapshot().TrayDoubleClickAction, OperationErrorCode.SettingsReadFailed, "Unable to read tray double-click behavior."));
         }
 
-        public OperationResult<DateTime> GetPreferredDisplayDate()
+        public Task<OperationResult<DateTime>> GetPreferredDisplayDateAsync()
         {
-            return ExecuteOperation(() =>
+            return Task.FromResult(ExecuteOperation(() =>
             {
                 var lastAppliedDate = ParseDate(BuildSettingsSnapshot().LastAutoRefreshAppliedDate);
                 if (lastAppliedDate.HasValue && lastAppliedDate.Value <= DateTime.Today)
                     return lastAppliedDate.Value;
 
                 return DateTime.Today;
-            }, OperationErrorCode.SettingsReadFailed, "Unable to resolve the preferred display date.");
+            }, OperationErrorCode.SettingsReadFailed, "Unable to resolve the preferred display date."));
         }
 
-        public OperationResult<WallpaperStyle> GetSelectedWallpaperStyle()
+        public Task<OperationResult<WallpaperStyle>> GetSelectedWallpaperStyleAsync()
         {
-            return ExecuteOperation(() => (WallpaperStyle)BuildSettingsSnapshot().WallpaperStyleIndex, OperationErrorCode.SettingsReadFailed, "Unable to read the selected wallpaper style.");
+            return Task.FromResult(ExecuteOperation(() => (WallpaperStyle)BuildSettingsSnapshot().WallpaperStyleIndex, OperationErrorCode.SettingsReadFailed, "Unable to read the selected wallpaper style."));
         }
 
-        public OperationResult Shutdown()
+        public Task<OperationResult> ShutdownAsync()
         {
-            return ExecuteOperation(() =>
-            {
-                ShutdownCore();
-                return true;
-            }, OperationErrorCode.ShutdownFailed, "Unable to shut down the application controller cleanly.");
+            return Task.FromResult(ExecuteOperation(
+                ShutdownCore,
+                OperationErrorCode.ShutdownFailed,
+                "Unable to shut down the application controller cleanly."));
         }
 
         void IDisposable.Dispose()
@@ -500,6 +434,20 @@ namespace apod_wallpaper
             {
                 AppLogger.Warn(failureMessage, ex);
                 return OperationResult<T>.Failure(CreateOperationError(errorCode, failureMessage, ex, retryable));
+            }
+        }
+
+        private static OperationResult ExecuteOperation(Action operation, OperationErrorCode errorCode, string failureMessage, bool retryable = false)
+        {
+            try
+            {
+                operation();
+                return OperationResult.Success();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn(failureMessage, ex);
+                return OperationResult.Failure(CreateOperationError(errorCode, failureMessage, ex, retryable));
             }
         }
 

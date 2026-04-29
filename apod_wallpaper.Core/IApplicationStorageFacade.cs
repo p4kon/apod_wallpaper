@@ -1,8 +1,10 @@
+using System.Threading.Tasks;
+
 namespace apod_wallpaper
 {
     public interface IApplicationStorageFacade
     {
-        OperationResult<ApplicationStoragePaths> GetStoragePaths();
-        OperationResult<ApplicationStoragePaths> EnsureStorageLayout();
+        Task<OperationResult<ApplicationStoragePaths>> GetStoragePathsAsync();
+        Task<OperationResult<ApplicationStoragePaths>> EnsureStorageLayoutAsync();
     }
 }

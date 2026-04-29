@@ -28,7 +28,7 @@ namespace apod_wallpaper
         private readonly IApodCalendarFacade calendarFacade;
         private readonly IApplicationDiagnosticsFacade diagnosticsFacade;
         private readonly IApplicationSessionFacade sessionFacade;
-        private readonly IEventSubscription wallpaperAppliedSubscription;
+        private IEventSubscription wallpaperAppliedSubscription;
         private bool suppressSettingsSync = true;
         private bool not_found = false;
         private bool nonImageMedia = false;
@@ -52,9 +52,6 @@ namespace apod_wallpaper
             diagnosticsFacade = backend;
             sessionFacade = backend;
             InitializeComponent();
-            wallpaperAppliedSubscription = GetValueOrThrow(
-                sessionFacade.SubscribeWallpaperApplied(controller_WallpaperApplied),
-                "Unable to subscribe to wallpaper applied events.");
             pictureDayDateTimePicker.MaxDate = DateTime.Today;
             pictureDayDateTimePicker.Value = DateTime.Today;
             wallpaperStyleComboBox.DataSource = WallpaperStyleDisplayOrder;
@@ -73,7 +70,14 @@ namespace apod_wallpaper
             try
             {
                 suppressSettingsSync = true;
-                currentSettings = GetValueOrThrow(settingsFacade.GetSettings(), "Unable to load application settings.");
+                if (wallpaperAppliedSubscription == null)
+                {
+                    wallpaperAppliedSubscription = await GetValueOrThrowAsync(
+                        sessionFacade.SubscribeWallpaperAppliedAsync(controller_WallpaperApplied),
+                        "Unable to subscribe to wallpaper applied events.").ConfigureAwait(true);
+                }
+
+                currentSettings = await GetValueOrThrowAsync(settingsFacade.GetSettingsAsync(), "Unable to load application settings.").ConfigureAwait(true);
                 downloadSetCheckBox.Checked = currentSettings.TrayDoubleClickAction;
                 var currentStyle = Enum.IsDefined(typeof(WallpaperStyle), currentSettings.WallpaperStyleIndex)
                     ? (WallpaperStyle)currentSettings.WallpaperStyleIndex
@@ -82,14 +86,14 @@ namespace apod_wallpaper
                 everyTimeCheckBox.Checked = currentSettings.AutoRefreshEnabled;
                 startWithWindowsCheckBox.Checked = currentSettings.StartWithWindows;
                 apiKeyTextBox.Text = currentSettings.NasaApiKey;
-                imagesFolderTextBox.Text = GetValueOrThrow(storageFacade.GetStoragePaths(), "Unable to resolve the active images directory.").ImagesDirectory;
-                var preferredDate = GetValueOrThrow(settingsFacade.GetPreferredDisplayDate(), "Unable to resolve the preferred display date.");
+                imagesFolderTextBox.Text = (await GetValueOrThrowAsync(storageFacade.GetStoragePathsAsync(), "Unable to resolve the active images directory.").ConfigureAwait(true)).ImagesDirectory;
+                var preferredDate = await GetValueOrThrowAsync(settingsFacade.GetPreferredDisplayDateAsync(), "Unable to resolve the preferred display date.").ConfigureAwait(true);
                 if (preferredDate > pictureDayDateTimePicker.MaxDate)
                     preferredDate = pictureDayDateTimePicker.MaxDate.Date;
                 pictureDayDateTimePicker.Value = preferredDate;
-                GetValueOrThrow(settingsFacade.UpdateSessionImagesDirectory(imagesFolderTextBox.Text), "Unable to update the images directory for this session.");
-                UpdateApiKeyValidationIndicator(GetValueOrThrow(settingsFacade.GetApiKeyValidationState(), "Unable to read API key validation state."));
-                currentSettings = GetValueOrThrow(settingsFacade.GetSettings(), "Unable to reload application settings.");
+                await GetValueOrThrowAsync(settingsFacade.UpdateSessionImagesDirectoryAsync(imagesFolderTextBox.Text), "Unable to update the images directory for this session.").ConfigureAwait(true);
+                UpdateApiKeyValidationIndicator(await GetValueOrThrowAsync(settingsFacade.GetApiKeyValidationStateAsync(), "Unable to read API key validation state.").ConfigureAwait(true));
+                currentSettings = await GetValueOrThrowAsync(settingsFacade.GetSettingsAsync(), "Unable to reload application settings.").ConfigureAwait(true);
                 suppressSettingsSync = false;
 
                 var refreshResult = await settingsFacade.RefreshLocalImageIndexAsync().ConfigureAwait(true);
@@ -101,72 +105,22 @@ namespace apod_wallpaper
             catch (Exception ex)
             {
                 suppressSettingsSync = false;
-                MessageBox.Show(GetUserFriendlyErrorMessage(ex),
+                MessageBox.Show(await GetUserFriendlyErrorMessageAsync(ex).ConfigureAwait(true),
                                 "APOD error",
                                 MessageBoxButtons.OK,
                                 MessageBoxIcon.Error);
             }
         }
 
-        private void SaveSettings(object sender, FormClosingEventArgs e)
+        private async void SaveSettings(object sender, FormClosingEventArgs e)
         {
-            PersistSettings();
+            await PersistSettingsAsync().ConfigureAwait(true);
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            wallpaperAppliedSubscription.Dispose();
+            wallpaperAppliedSubscription?.Dispose();
             base.OnFormClosed(e);
-        }
-
-        public void DownloadWallpaper()
-        {
-            var selectedDate = pictureDayDateTimePicker.Value.Date;
-            download_only = Control.ModifierKeys == Keys.Shift;
-
-            try
-            {
-                OperationResult<ApodWorkflowResult> operationResult;
-                if (download_only)
-                {
-                    operationResult = workflowFacade.DownloadDay(selectedDate);
-                }
-                else
-                {
-                    operationResult = workflowFacade.ApplyDay(selectedDate, GetSelectedWallpaperStyle());
-                }
-
-                if (!operationResult.Succeeded)
-                    throw new InvalidOperationException(GetOperationErrorMessage(operationResult, "Unable to complete the requested wallpaper operation."));
-
-                var workflowResult = operationResult.Value;
-                currentEntry = workflowResult.Entry;
-                if (!workflowResult.IsSuccess)
-                {
-                    ShowUnavailableEntryState();
-                    if (workflowResult.Status == ApodWorkflowStatus.Failed)
-                    {
-                        MessageBox.Show(workflowResult.Message,
-                                        "APOD error",
-                                        MessageBoxButtons.OK,
-                                        MessageBoxIcon.Error);
-                    }
-
-                    return;
-                }
-
-                nonImageMedia = false;
-                UpdatePreviewImage(workflowResult.ImagePath);
-                MaybeDisableAutoRefreshForManualSelection(selectedDate);
-            }
-            catch (Exception ex)
-            {
-                ShowUnavailableEntryState();
-                MessageBox.Show(GetUserFriendlyErrorMessage(ex),
-                                "APOD error",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Error);
-            }
         }
 
         public async Task DownloadWallpaperAsync()
@@ -183,8 +137,8 @@ namespace apod_wallpaper
             {
                 operationResult = await workflowFacade.ApplyDayAsync(selectedDate, GetSelectedWallpaperStyle()).ConfigureAwait(true);
             }
-            currentSettings = GetValueOrThrow(settingsFacade.GetSettings(), "Unable to reload application settings.");
-            UpdateApiKeyValidationIndicator(GetValueOrThrow(settingsFacade.GetApiKeyValidationState(), "Unable to read API key validation state."));
+            currentSettings = await GetValueOrThrowAsync(settingsFacade.GetSettingsAsync(), "Unable to reload application settings.").ConfigureAwait(true);
+            UpdateApiKeyValidationIndicator(await GetValueOrThrowAsync(settingsFacade.GetApiKeyValidationStateAsync(), "Unable to read API key validation state.").ConfigureAwait(true));
 
             if (!operationResult.Succeeded)
                 throw new InvalidOperationException(GetOperationErrorMessage(operationResult, "Unable to complete the requested wallpaper operation."));
@@ -231,8 +185,8 @@ namespace apod_wallpaper
                 loading_picture = true;
 
                 var operationResult = await workflowFacade.LoadDayAsync(selectedDate).ConfigureAwait(true);
-                currentSettings = GetValueOrThrow(settingsFacade.GetSettings(), "Unable to reload application settings.");
-                UpdateApiKeyValidationIndicator(GetValueOrThrow(settingsFacade.GetApiKeyValidationState(), "Unable to read API key validation state."));
+                currentSettings = await GetValueOrThrowAsync(settingsFacade.GetSettingsAsync(), "Unable to reload application settings.").ConfigureAwait(true);
+                UpdateApiKeyValidationIndicator(await GetValueOrThrowAsync(settingsFacade.GetApiKeyValidationStateAsync(), "Unable to read API key validation state.").ConfigureAwait(true));
                 if (requestVersion != previewRequestVersion)
                     return;
 
@@ -265,7 +219,7 @@ namespace apod_wallpaper
 
         private void everyTimeCheckBox_CheckedChanged(object sender, EventArgs e)
         {
-            PersistSettings();
+            _ = PersistSettingsAsync();
         }
 
         private async void pictureDayDateTimePicker_DropDown(object sender, EventArgs e)
@@ -288,7 +242,7 @@ namespace apod_wallpaper
             catch (Exception ex)
             {
                 ShowUnavailableEntryState();
-                MessageBox.Show(GetUserFriendlyErrorMessage(ex),
+                MessageBox.Show(await GetUserFriendlyErrorMessageAsync(ex).ConfigureAwait(true),
                                 "APOD error",
                                 MessageBoxButtons.OK,
                                 MessageBoxIcon.Error);
@@ -303,34 +257,34 @@ namespace apod_wallpaper
                 if (dialog.ShowDialog() == DialogResult.OK)
                 {
                     imagesFolderTextBox.Text = dialog.SelectedPath;
-                    ApplyPendingImagesDirectory();
+                    _ = ApplyPendingImagesDirectoryAsync();
                 }
             }
         }
 
-        private void openImagesFolderButton_Click(object sender, EventArgs e)
+        private async void openImagesFolderButton_Click(object sender, EventArgs e)
         {
             var path = string.IsNullOrWhiteSpace(imagesFolderTextBox.Text)
-                ? GetValueOrThrow(storageFacade.EnsureStorageLayout(), "Unable to prepare the images directory.").ImagesDirectory
-                : GetValueOrThrow(settingsFacade.UpdateSessionImagesDirectory(imagesFolderTextBox.Text.Trim()), "Unable to resolve the images directory.");
+                ? (await GetValueOrThrowAsync(storageFacade.EnsureStorageLayoutAsync(), "Unable to prepare the images directory.").ConfigureAwait(true)).ImagesDirectory
+                : await GetValueOrThrowAsync(settingsFacade.UpdateSessionImagesDirectoryAsync(imagesFolderTextBox.Text.Trim()), "Unable to resolve the images directory.").ConfigureAwait(true);
 
-            GetValueOrThrow(storageFacade.EnsureStorageLayout(), "Unable to prepare the images directory.");
+            await GetValueOrThrowAsync(storageFacade.EnsureStorageLayoutAsync(), "Unable to prepare the images directory.").ConfigureAwait(true);
             Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
         }
 
         private void imagesFolderTextBox_TextChanged(object sender, EventArgs e)
         {
-            ApplyPendingImagesDirectory();
-            PersistSettings();
+            _ = ApplyPendingImagesDirectoryAsync();
+            _ = PersistSettingsAsync();
         }
 
-        private void PreviewPictureBox_MouseClick(object sender, MouseEventArgs e)
+        private async void PreviewPictureBox_MouseClick(object sender, MouseEventArgs e)
         {
             if (!not_found && !loading_picture)
             {
                 if (Control.ModifierKeys == Keys.Shift)
                 {
-                    Process.Start(new ProcessStartInfo(GetValueOrThrow(workflowFacade.GetPostUrl(pictureDayDateTimePicker.Value.Date), "Unable to resolve the NASA APOD page URL."))
+                    Process.Start(new ProcessStartInfo(await GetValueOrThrowAsync(workflowFacade.GetPostUrlAsync(pictureDayDateTimePicker.Value.Date), "Unable to resolve the NASA APOD page URL.").ConfigureAwait(true))
                     {
                         UseShellExecute = true
                     });
@@ -352,7 +306,7 @@ namespace apod_wallpaper
             }
             else if (not_found && Control.ModifierKeys == Keys.Shift)
             {
-                Process.Start(new ProcessStartInfo(GetValueOrThrow(workflowFacade.GetPostUrl(pictureDayDateTimePicker.Value.Date), "Unable to resolve the NASA APOD page URL."))
+                Process.Start(new ProcessStartInfo(await GetValueOrThrowAsync(workflowFacade.GetPostUrlAsync(pictureDayDateTimePicker.Value.Date), "Unable to resolve the NASA APOD page URL.").ConfigureAwait(true))
                 {
                     UseShellExecute = true
                 });
@@ -441,7 +395,7 @@ namespace apod_wallpaper
             }
             catch (Exception ex)
             {
-                diagnosticsFacade.LogWarning("Unable to open NASA API key page.", ex);
+                _ = diagnosticsFacade.LogWarningAsync("Unable to open NASA API key page.", ex);
             }
 
             MessageBox.Show(
@@ -485,10 +439,10 @@ namespace apod_wallpaper
             loading_picture = false;
         }
 
-        private void ApplyPendingImagesDirectory()
+        private async Task ApplyPendingImagesDirectoryAsync()
         {
             var configuredImagesPath = imagesFolderTextBox.Text.Trim();
-            var updateResult = settingsFacade.UpdateSessionImagesDirectory(configuredImagesPath);
+            var updateResult = await settingsFacade.UpdateSessionImagesDirectoryAsync(configuredImagesPath).ConfigureAwait(true);
             if (!updateResult.Succeeded)
                 return;
 
@@ -497,10 +451,10 @@ namespace apod_wallpaper
 
         private void settingsControl_Changed(object sender, EventArgs e)
         {
-            PersistSettings();
+            _ = PersistSettingsAsync();
         }
 
-        private void PersistSettings()
+        private async Task PersistSettingsAsync()
         {
             if (suppressSettingsSync)
                 return;
@@ -520,16 +474,16 @@ namespace apod_wallpaper
                     LastAutoRefreshAppliedDate = currentSettings != null ? currentSettings.LastAutoRefreshAppliedDate : string.Empty,
                 };
 
-                var saveResult = settingsFacade.SaveSettings(currentSettings);
+                var saveResult = await settingsFacade.SaveSettingsAsync(currentSettings).ConfigureAwait(true);
                 if (!saveResult.Succeeded)
                     throw new InvalidOperationException(GetOperationErrorMessage(saveResult, "Unable to persist application settings."));
 
                 currentSettings = saveResult.Value;
-                UpdateApiKeyValidationIndicator(GetValueOrThrow(settingsFacade.GetApiKeyValidationState(), "Unable to read API key validation state."));
+                UpdateApiKeyValidationIndicator(await GetValueOrThrowAsync(settingsFacade.GetApiKeyValidationStateAsync(), "Unable to read API key validation state.").ConfigureAwait(true));
             }
             catch (Exception ex)
             {
-                diagnosticsFacade.LogWarning("Unable to persist settings immediately.", ex);
+                _ = diagnosticsFacade.LogWarningAsync("Unable to persist settings immediately.", ex);
             }
         }
 
@@ -674,7 +628,7 @@ namespace apod_wallpaper
             {
                 var selectedDate = pictureDayDateTimePicker.Value.Date;
                 var operationResult = await workflowFacade.ApplyDayAsync(selectedDate, GetSelectedWallpaperStyle()).ConfigureAwait(true);
-                UpdateApiKeyValidationIndicator(GetValueOrThrow(settingsFacade.GetApiKeyValidationState(), "Unable to read API key validation state."));
+                UpdateApiKeyValidationIndicator(await GetValueOrThrowAsync(settingsFacade.GetApiKeyValidationStateAsync(), "Unable to read API key validation state.").ConfigureAwait(true));
                 if (!operationResult.Succeeded)
                     return;
 
@@ -688,7 +642,7 @@ namespace apod_wallpaper
             }
             catch (Exception ex)
             {
-                diagnosticsFacade.LogWarning("Unable to reapply wallpaper after wallpaper mode change.", ex);
+                _ = diagnosticsFacade.LogWarningAsync("Unable to reapply wallpaper after wallpaper mode change.", ex);
             }
             finally
             {
@@ -696,12 +650,17 @@ namespace apod_wallpaper
             }
         }
 
-        private string GetUserFriendlyErrorMessage(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")
+        private async Task<string> GetUserFriendlyErrorMessageAsync(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")
         {
-            var result = diagnosticsFacade.GetUserFriendlyErrorMessage(exception, fallbackMessage);
+            var result = await diagnosticsFacade.GetUserFriendlyErrorMessageAsync(exception, fallbackMessage).ConfigureAwait(true);
             return result.Succeeded && !string.IsNullOrWhiteSpace(result.Value)
                 ? result.Value
                 : fallbackMessage;
+        }
+
+        private static async Task<T> GetValueOrThrowAsync<T>(Task<OperationResult<T>> resultTask, string fallbackMessage)
+        {
+            return GetValueOrThrow(await resultTask.ConfigureAwait(true), fallbackMessage);
         }
     }
 }

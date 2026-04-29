@@ -1,11 +1,12 @@
 using System;
+using System.Threading.Tasks;
 
 namespace apod_wallpaper
 {
     public interface IApplicationSessionFacade
     {
-        OperationResult<ApplicationSettingsSnapshot> Initialize();
-        OperationResult<IEventSubscription> SubscribeWallpaperApplied(EventHandler<WallpaperAppliedEventArgs> handler);
-        OperationResult Shutdown();
+        Task<OperationResult<ApplicationSettingsSnapshot>> InitializeAsync();
+        Task<OperationResult<IEventSubscription>> SubscribeWallpaperAppliedAsync(EventHandler<WallpaperAppliedEventArgs> handler);
+        Task<OperationResult> ShutdownAsync();
     }
 }
