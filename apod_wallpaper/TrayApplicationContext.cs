@@ -76,8 +76,8 @@ namespace apod_wallpaper
                 }
                 catch (Exception ex)
                 {
-                    AppLogger.Warn("Tray double-click apply failed.", ex);
-                    ShowTrayError(ApodErrorTranslator.ToUserMessage(ex));
+                    controller.LogWarning("Tray double-click apply failed.", ex);
+                    ShowTrayError(GetUserFriendlyErrorMessage(ex));
                 }
             });
             thread.IsBackground = true;
@@ -103,7 +103,7 @@ namespace apod_wallpaper
         {
             var shutdownResult = controller.Shutdown();
             if (!shutdownResult.Succeeded)
-                AppLogger.Warn(shutdownResult.Error != null ? shutdownResult.Error.Message : "Controller shutdown failed.");
+                controller.LogWarning(shutdownResult.Error != null ? shutdownResult.Error.Message : "Controller shutdown failed.");
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();
@@ -119,6 +119,14 @@ namespace apod_wallpaper
             trayIcon.BalloonTipTitle = "APOD Wallpaper";
             trayIcon.BalloonTipText = message;
             trayIcon.ShowBalloonTip(4000);
+        }
+
+        private string GetUserFriendlyErrorMessage(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")
+        {
+            var result = controller.GetUserFriendlyErrorMessage(exception, fallbackMessage);
+            return result.Succeeded && !string.IsNullOrWhiteSpace(result.Value)
+                ? result.Value
+                : fallbackMessage;
         }
     }
 }

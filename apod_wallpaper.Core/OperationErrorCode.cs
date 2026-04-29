@@ -9,6 +9,7 @@ namespace apod_wallpaper
         SettingsWriteFailed,
         StateUpdateFailed,
         ValidationFailed,
+        LoggingFailed,
         StorageFailed,
         WorkflowFailed,
         ShutdownFailed,

@@ -72,6 +72,43 @@ namespace apod_wallpaper
             }, OperationErrorCode.StateUpdateFailed, "Unable to update the active images directory for this session.");
         }
 
+        public OperationResult<string> GetEffectiveImagesDirectory()
+        {
+            return ExecuteOperation(() => FileStorage.ImagesDirectory, OperationErrorCode.StorageFailed, "Unable to resolve the active images directory.");
+        }
+
+        public OperationResult<string> EnsureEffectiveImagesDirectory()
+        {
+            return ExecuteOperation(() =>
+            {
+                FileStorage.EnsureImagesDirectory();
+                return FileStorage.ImagesDirectory;
+            }, OperationErrorCode.StorageFailed, "Unable to prepare the images directory.");
+        }
+
+        public OperationResult<string> GetUserFriendlyErrorMessage(Exception exception, string fallbackMessage = null)
+        {
+            return ExecuteOperation(
+                () =>
+                {
+                    var message = ApodErrorTranslator.ToUserMessage(exception);
+                    return string.IsNullOrWhiteSpace(message)
+                        ? (fallbackMessage ?? "Something went wrong while processing the APOD request.")
+                        : message;
+                },
+                OperationErrorCode.Unknown,
+                fallbackMessage ?? "Unable to translate the error into a user-friendly message.");
+        }
+
+        public OperationResult LogWarning(string message, Exception exception = null)
+        {
+            return ExecuteOperation(() =>
+            {
+                AppLogger.Warn(message, exception);
+                return true;
+            }, OperationErrorCode.LoggingFailed, "Unable to write a warning log entry.");
+        }
+
         internal DateTime GetLatestPublishedDate()
         {
             return _workflowService.GetLatestPublishedDate();

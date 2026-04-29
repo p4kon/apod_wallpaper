@@ -2,7 +2,6 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -67,7 +66,7 @@ namespace apod_wallpaper
                 everyTimeCheckBox.Checked = currentSettings.AutoRefreshEnabled;
                 startWithWindowsCheckBox.Checked = currentSettings.StartWithWindows;
                 apiKeyTextBox.Text = currentSettings.NasaApiKey;
-                imagesFolderTextBox.Text = FileStorage.ImagesDirectory;
+                imagesFolderTextBox.Text = GetValueOrThrow(controller.GetEffectiveImagesDirectory(), "Unable to resolve the active images directory.");
                 var preferredDate = GetValueOrThrow(controller.GetPreferredDisplayDate(), "Unable to resolve the preferred display date.");
                 if (preferredDate > pictureDayDateTimePicker.MaxDate)
                     preferredDate = pictureDayDateTimePicker.MaxDate.Date;
@@ -86,7 +85,7 @@ namespace apod_wallpaper
             catch (Exception ex)
             {
                 suppressSettingsSync = false;
-                MessageBox.Show(ApodErrorTranslator.ToUserMessage(ex),
+                MessageBox.Show(GetUserFriendlyErrorMessage(ex),
                                 "APOD error",
                                 MessageBoxButtons.OK,
                                 MessageBoxIcon.Error);
@@ -147,7 +146,7 @@ namespace apod_wallpaper
             catch (Exception ex)
             {
                 ShowUnavailableEntryState();
-                MessageBox.Show(ApodErrorTranslator.ToUserMessage(ex),
+                MessageBox.Show(GetUserFriendlyErrorMessage(ex),
                                 "APOD error",
                                 MessageBoxButtons.OK,
                                 MessageBoxIcon.Error);
@@ -273,7 +272,7 @@ namespace apod_wallpaper
             catch (Exception ex)
             {
                 ShowUnavailableEntryState();
-                MessageBox.Show(ApodErrorTranslator.ToUserMessage(ex),
+                MessageBox.Show(GetUserFriendlyErrorMessage(ex),
                                 "APOD error",
                                 MessageBoxButtons.OK,
                                 MessageBoxIcon.Error);
@@ -295,8 +294,11 @@ namespace apod_wallpaper
 
         private void openImagesFolderButton_Click(object sender, EventArgs e)
         {
-            var path = string.IsNullOrWhiteSpace(imagesFolderTextBox.Text) ? FileStorage.ImagesDirectory : imagesFolderTextBox.Text.Trim();
-            Directory.CreateDirectory(path);
+            var path = string.IsNullOrWhiteSpace(imagesFolderTextBox.Text)
+                ? GetValueOrThrow(controller.EnsureEffectiveImagesDirectory(), "Unable to prepare the images directory.")
+                : GetValueOrThrow(controller.UpdateSessionImagesDirectory(imagesFolderTextBox.Text.Trim()), "Unable to resolve the images directory.");
+
+            GetValueOrThrow(controller.EnsureEffectiveImagesDirectory(), "Unable to prepare the images directory.");
             Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
         }
 
@@ -423,7 +425,7 @@ namespace apod_wallpaper
             }
             catch (Exception ex)
             {
-                AppLogger.Warn("Unable to open NASA API key page.", ex);
+                controller.LogWarning("Unable to open NASA API key page.", ex);
             }
 
             MessageBox.Show(
@@ -511,7 +513,7 @@ namespace apod_wallpaper
             }
             catch (Exception ex)
             {
-                AppLogger.Warn("Unable to persist settings immediately.", ex);
+                controller.LogWarning("Unable to persist settings immediately.", ex);
             }
         }
 
@@ -670,12 +672,20 @@ namespace apod_wallpaper
             }
             catch (Exception ex)
             {
-                AppLogger.Warn("Unable to reapply wallpaper after wallpaper mode change.", ex);
+                controller.LogWarning("Unable to reapply wallpaper after wallpaper mode change.", ex);
             }
             finally
             {
                 applyingWallpaperStyleChange = false;
             }
+        }
+
+        private string GetUserFriendlyErrorMessage(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")
+        {
+            var result = controller.GetUserFriendlyErrorMessage(exception, fallbackMessage);
+            return result.Succeeded && !string.IsNullOrWhiteSpace(result.Value)
+                ? result.Value
+                : fallbackMessage;
         }
     }
 }
