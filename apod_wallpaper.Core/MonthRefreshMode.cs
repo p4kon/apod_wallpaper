@@ -1,6 +1,6 @@
 namespace apod_wallpaper
 {
-    internal enum MonthRefreshMode
+    public enum MonthRefreshMode
     {
         Aggressive = 0,
         Balanced = 1,

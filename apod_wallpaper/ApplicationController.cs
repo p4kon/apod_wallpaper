@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace apod_wallpaper
 {
-    internal sealed class ApplicationController : IDisposable
+    internal sealed class ApplicationController : IApplicationBackendFacade, IDisposable
     {
         private const string DemoApiKey = "DEMO_KEY";
         private readonly Scheduler _scheduler;
@@ -22,7 +22,7 @@ namespace apod_wallpaper
         private DateTime _lastUnknownApiValidationUtc = DateTime.MinValue;
         private string _lastUnknownApiValidationKey;
 
-        internal event EventHandler<WallpaperAppliedEventArgs> WallpaperApplied;
+        public event EventHandler<WallpaperAppliedEventArgs> WallpaperApplied;
 
         public ApplicationController()
         {

@@ -1,8 +1,6 @@
-using System;
-
 namespace apod_wallpaper
 {
-    internal sealed class ApplicationSettingsSnapshot
+    public sealed class ApplicationSettingsSnapshot
     {
         public bool TrayDoubleClickAction { get; set; }
         public int WallpaperStyleIndex { get; set; }

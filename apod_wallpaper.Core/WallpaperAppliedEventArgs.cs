@@ -2,7 +2,7 @@ using System;
 
 namespace apod_wallpaper
 {
-    internal sealed class WallpaperAppliedEventArgs : EventArgs
+    public sealed class WallpaperAppliedEventArgs : EventArgs
     {
         public WallpaperAppliedEventArgs(ApodWorkflowResult result, bool automatic)
         {

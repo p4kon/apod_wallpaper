@@ -8,13 +8,22 @@ namespace apod_wallpaper
     internal class TrayApplicationContext : ApplicationContext
     {
         private static NotifyIcon trayIcon = new NotifyIcon();
-        private readonly ApplicationController controller;
+        private readonly IApplicationSessionFacade sessionFacade;
+        private readonly IApplicationSettingsFacade settingsFacade;
+        private readonly IApodWorkflowFacade workflowFacade;
+        private readonly IApplicationDiagnosticsFacade diagnosticsFacade;
         private readonly ConfigurationForm configWindow;
 
-        internal TrayApplicationContext(ApplicationController controller)
+        internal TrayApplicationContext(IApplicationBackendFacade backend)
         {
-            this.controller = controller ?? throw new ArgumentNullException(nameof(controller));
-            configWindow = new ConfigurationForm(this.controller);
+            if (backend == null)
+                throw new ArgumentNullException(nameof(backend));
+
+            sessionFacade = backend;
+            settingsFacade = backend;
+            workflowFacade = backend;
+            diagnosticsFacade = backend;
+            configWindow = new ConfigurationForm(backend);
             MenuItem configMenuItem = new MenuItem("Configuration", new EventHandler(ShowConfig));
             MenuItem exitMenuItem = new MenuItem("Exit", new EventHandler(Exit));
             Icon apod_icon = new Icon(ApodResources.apod_icon, 32, 32);
@@ -34,7 +43,7 @@ namespace apod_wallpaper
                 return;
             }
 
-            var trayActionResult = controller.ShouldApplyOnTrayDoubleClick();
+            var trayActionResult = settingsFacade.ShouldApplyOnTrayDoubleClick();
             if (!trayActionResult.Succeeded)
             {
                 ShowTrayError(trayActionResult.Error != null ? trayActionResult.Error.Message : "Unable to read tray action settings.");
@@ -56,14 +65,14 @@ namespace apod_wallpaper
             {
                 try
                 {
-                    var styleResult = controller.GetSelectedWallpaperStyle();
+                    var styleResult = settingsFacade.GetSelectedWallpaperStyle();
                     if (!styleResult.Succeeded)
                     {
                         ShowTrayError(styleResult.Error != null ? styleResult.Error.Message : "Unable to read wallpaper style.");
                         return;
                     }
 
-                    var operationResult = controller.ApplyLatestPublished(styleResult.Value);
+                    var operationResult = workflowFacade.ApplyLatestPublished(styleResult.Value);
                     if (!operationResult.Succeeded)
                     {
                         ShowTrayError(operationResult.Error != null ? operationResult.Error.Message : "Unable to apply the latest APOD.");
@@ -76,7 +85,7 @@ namespace apod_wallpaper
                 }
                 catch (Exception ex)
                 {
-                    controller.LogWarning("Tray double-click apply failed.", ex);
+                    diagnosticsFacade.LogWarning("Tray double-click apply failed.", ex);
                     ShowTrayError(GetUserFriendlyErrorMessage(ex));
                 }
             });
@@ -88,7 +97,7 @@ namespace apod_wallpaper
         {
             if (!configWindow.Visible)
             {
-                var preferredDateResult = controller.GetPreferredDisplayDate();
+                var preferredDateResult = settingsFacade.GetPreferredDisplayDate();
                 if (preferredDateResult.Succeeded)
                     configWindow.SyncDisplayedDate(preferredDateResult.Value);
             }
@@ -101,9 +110,9 @@ namespace apod_wallpaper
 
         void Exit(object sender, EventArgs e)
         {
-            var shutdownResult = controller.Shutdown();
+            var shutdownResult = sessionFacade.Shutdown();
             if (!shutdownResult.Succeeded)
-                controller.LogWarning(shutdownResult.Error != null ? shutdownResult.Error.Message : "Controller shutdown failed.");
+                diagnosticsFacade.LogWarning(shutdownResult.Error != null ? shutdownResult.Error.Message : "Controller shutdown failed.");
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();
@@ -123,7 +132,7 @@ namespace apod_wallpaper
 
         private string GetUserFriendlyErrorMessage(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")
         {
-            var result = controller.GetUserFriendlyErrorMessage(exception, fallbackMessage);
+            var result = diagnosticsFacade.GetUserFriendlyErrorMessage(exception, fallbackMessage);
             return result.Succeeded && !string.IsNullOrWhiteSpace(result.Value)
                 ? result.Value
                 : fallbackMessage;

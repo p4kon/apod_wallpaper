@@ -44,10 +44,17 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ApiKeyValidationState.cs" />
+    <Compile Include="ApplicationSettingsSnapshot.cs" />
     <Compile Include="OperationErrorCode.cs" />
     <Compile Include="OperationError.cs" />
     <Compile Include="OperationResult.cs" />
     <Compile Include="OperationResultOfT.cs" />
+    <Compile Include="IApplicationSessionFacade.cs" />
+    <Compile Include="IApplicationSettingsFacade.cs" />
+    <Compile Include="IApodWorkflowFacade.cs" />
+    <Compile Include="IApodCalendarFacade.cs" />
+    <Compile Include="IApplicationDiagnosticsFacade.cs" />
+    <Compile Include="IApplicationBackendFacade.cs" />
     <Compile Include="IApodClient.cs" />
     <Compile Include="IApodMetadataCache.cs" />
     <Compile Include="IWallpaperApplier.cs" />
@@ -84,6 +91,7 @@
     <Compile Include="WallpaperService.cs" />
     <Compile Include="SmartWallpaperComposer.cs" />
     <Compile Include="AppRuntimeSettings.cs" />
+    <Compile Include="WallpaperAppliedEventArgs.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
