@@ -45,6 +45,7 @@
   <ItemGroup>
     <Compile Include="ApiKeyValidationState.cs" />
     <Compile Include="ApplicationStorageMode.cs" />
+    <Compile Include="ApplicationStorageLayout.cs" />
     <Compile Include="ApplicationStoragePaths.cs" />
     <Compile Include="ApplicationInitialStateSnapshot.cs" />
     <Compile Include="ApplicationSettingsSnapshot.cs" />

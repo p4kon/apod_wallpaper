@@ -10,6 +10,7 @@ namespace apod_wallpaper
         public string LogsDirectory { get; set; }
         public string MetadataCacheFilePath { get; set; }
         public string SecretsDirectory { get; set; }
+        public string SettingsFilePath { get; set; }
         public bool UsesCustomImagesDirectory { get; set; }
         public bool UsesExecutableImagesDirectory { get; set; }
     }

@@ -107,6 +107,7 @@ namespace apod_wallpaper
                 LogsDirectory = Path.Combine(applicationDataDirectory, "logs"),
                 MetadataCacheFilePath = Path.Combine(applicationDataDirectory, "cache", "apod-metadata.json"),
                 SecretsDirectory = Path.Combine(applicationDataDirectory, "secrets"),
+                SettingsFilePath = Path.Combine(applicationDataDirectory, "settings.json"),
                 UsesCustomImagesDirectory = usesCustomImagesDirectory,
                 UsesExecutableImagesDirectory = !usesCustomImagesDirectory &&
                     PathsEqual(imagesDirectory, executableImagesDirectory),

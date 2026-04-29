@@ -44,6 +44,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("API key is stored outside plaintext settings", ApiKeyIsStoredOutsidePlaintextSettings);
                 Run("Legacy API key migrates to protected storage", LegacyApiKeyMigratesToProtectedStorage);
                 Run("Initial state snapshot returns startup data in one call", InitialStateSnapshotReturnsStartupData);
+                Run("Json settings store writes non-secret settings to settings.json", JsonSettingsStoreWritesSettingsFile);
+                Run("Legacy non-secret settings migrate to json store", LegacySettingsMigrateToJsonStore);
                 Run("Storage layout resolves all backend paths centrally", StorageLayoutResolvesAllPathsCentrally);
                 Run("Portable storage mode keeps app data near executable", PortableStorageModeUsesPortableLayout);
                 Run("Public facade methods use operation results", PublicFacadeMethodsUseOperationResults);
@@ -166,11 +168,21 @@ namespace apod_wallpaper.SmokeTests
             var snapshot = CaptureSettings();
             try
             {
-                var expectedDate = DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd");
-                apod_wallpaper.Properties.Settings.Default.LastAutoRefreshAppliedDate = expectedDate;
-                apod_wallpaper.Properties.Settings.Default.Save();
-
                 var controller = CreateController();
+                var saveResult = controller.SaveSettingsAsync(new apod_wallpaper.ApplicationSettingsSnapshot
+                {
+                    TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
+                    WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
+                    AutoRefreshEnabled = snapshot.AutoRefreshEnabled,
+                    StartWithWindows = snapshot.StartWithWindows,
+                    ImagesDirectoryPath = snapshot.ImagesDirectoryPath,
+                    NasaApiKey = snapshot.NasaApiKey,
+                    NasaApiKeyValidationState = snapshot.NasaApiKeyValidationState,
+                    LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
+                    LastAutoRefreshAppliedDate = DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd"),
+                }).GetAwaiter().GetResult();
+                Assert(saveResult.Succeeded, "Expected settings save for preferred display date to succeed.");
+
                 Assert(GetValueOrThrow(controller.GetPreferredDisplayDateAsync().GetAwaiter().GetResult(), "Unable to resolve preferred display date.") == DateTime.Today.AddDays(-1),
                     "Expected preferred display date to use the last auto-applied date.");
             }
@@ -611,6 +623,91 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             }
         }
 
+        private static void JsonSettingsStoreWritesSettingsFile()
+        {
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_settings_store_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+            var settingsPath = Path.Combine(tempDirectory, "settings.json");
+
+            try
+            {
+                var store = new apod_wallpaper.JsonSettingsStore(settingsPath, new apod_wallpaper.LegacyPropertiesSettingsBridge());
+                var snapshot = new apod_wallpaper.ApplicationSettingsSnapshot
+                {
+                    TrayDoubleClickAction = true,
+                    WallpaperStyleIndex = (int)apod_wallpaper.WallpaperStyle.Fill,
+                    AutoRefreshEnabled = true,
+                    StartWithWindows = false,
+                    NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Valid.ToString(),
+                    ImagesDirectoryPath = @"C:\temp\images",
+                    LastAutoRefreshRunDate = "2026-04-29",
+                    LastAutoRefreshAppliedDate = "2026-04-28",
+                };
+
+                store.Save(snapshot);
+
+                Assert(File.Exists(settingsPath), "Expected settings.json to be created.");
+                var json = File.ReadAllText(settingsPath);
+                Assert(json.IndexOf("TrayDoubleClickAction", StringComparison.OrdinalIgnoreCase) >= 0, "Expected non-secret settings inside settings.json.");
+                Assert(json.IndexOf("ImagesDirectoryPath", StringComparison.OrdinalIgnoreCase) >= 0, "Expected images directory inside settings.json.");
+                Assert(json.IndexOf("protected-test-key", StringComparison.OrdinalIgnoreCase) < 0, "Expected API key secret value not to be written into settings.json.");
+
+                var loaded = store.Load();
+                Assert(loaded.TrayDoubleClickAction, "Expected tray action to round-trip through settings.json.");
+                Assert(loaded.WallpaperStyleIndex == (int)apod_wallpaper.WallpaperStyle.Fill, "Expected wallpaper style to round-trip through settings.json.");
+                Assert(loaded.AutoRefreshEnabled, "Expected auto-refresh flag to round-trip through settings.json.");
+                Assert(!loaded.StartWithWindows, "Expected start-with-Windows flag to round-trip through settings.json.");
+                Assert(loaded.ImagesDirectoryPath == @"C:\temp\images", "Expected images directory to round-trip through settings.json.");
+            }
+            finally
+            {
+                TryDeleteDirectory(tempDirectory);
+            }
+        }
+
+        private static void LegacySettingsMigrateToJsonStore()
+        {
+            var snapshot = CaptureSettings();
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_settings_migration_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+            var settingsPath = Path.Combine(tempDirectory, "settings.json");
+
+            try
+            {
+                apod_wallpaper.Properties.Settings.Default.TrayDoubleClickAction = true;
+                apod_wallpaper.Properties.Settings.Default.StyleComboBox = (int)apod_wallpaper.WallpaperStyle.Tile;
+                apod_wallpaper.Properties.Settings.Default.AutoRefreshEnabled = true;
+                apod_wallpaper.Properties.Settings.Default.StartWithWindows = false;
+                apod_wallpaper.Properties.Settings.Default.NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Invalid.ToString();
+                apod_wallpaper.Properties.Settings.Default.ImagesDirectoryPath = @"C:\legacy\images";
+                apod_wallpaper.Properties.Settings.Default.LastAutoRefreshRunDate = "2026-04-20";
+                apod_wallpaper.Properties.Settings.Default.LastAutoRefreshAppliedDate = "2026-04-19";
+                apod_wallpaper.Properties.Settings.Default.NasaApiKey = "legacy-secret-key";
+                apod_wallpaper.Properties.Settings.Default.Save();
+
+                var store = new apod_wallpaper.JsonSettingsStore(settingsPath, new apod_wallpaper.LegacyPropertiesSettingsBridge());
+                store.MigrateLegacySettingsIfNeeded();
+
+                Assert(File.Exists(settingsPath), "Expected migration to create settings.json.");
+                var migrated = store.Load();
+                Assert(migrated.TrayDoubleClickAction, "Expected tray action to migrate into json store.");
+                Assert(migrated.WallpaperStyleIndex == (int)apod_wallpaper.WallpaperStyle.Tile, "Expected wallpaper style to migrate into json store.");
+                Assert(migrated.AutoRefreshEnabled, "Expected auto-refresh to migrate into json store.");
+                Assert(!migrated.StartWithWindows, "Expected start-with-Windows to migrate into json store.");
+                Assert(migrated.NasaApiKeyValidationState == apod_wallpaper.ApiKeyValidationState.Invalid.ToString(), "Expected validation state to migrate into json store.");
+                Assert(migrated.ImagesDirectoryPath == @"C:\legacy\images", "Expected images directory to migrate into json store.");
+                Assert(migrated.LastAutoRefreshRunDate == "2026-04-20", "Expected last run date to migrate into json store.");
+                Assert(migrated.LastAutoRefreshAppliedDate == "2026-04-19", "Expected last applied date to migrate into json store.");
+                Assert(string.IsNullOrWhiteSpace(apod_wallpaper.Properties.Settings.Default.ImagesDirectoryPath), "Expected legacy non-secret settings to be cleared after migration.");
+                Assert(apod_wallpaper.Properties.Settings.Default.NasaApiKey == "legacy-secret-key", "Expected legacy secret key to stay until DPAPI migration handles it.");
+            }
+            finally
+            {
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(tempDirectory);
+            }
+        }
+
         private static void StorageLayoutResolvesAllPathsCentrally()
         {
             var snapshot = CaptureSettings();
@@ -642,6 +739,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                 Assert(layout.CacheDirectory.IndexOf("apod_wallpaper", StringComparison.OrdinalIgnoreCase) >= 0, "Expected cache directory to be backend-defined.");
                 Assert(layout.LogsDirectory.IndexOf("apod_wallpaper", StringComparison.OrdinalIgnoreCase) >= 0, "Expected logs directory to be backend-defined.");
                 Assert(layout.SecretsDirectory.IndexOf("secrets", StringComparison.OrdinalIgnoreCase) >= 0, "Expected secrets directory to be backend-defined.");
+                Assert(layout.SettingsFilePath.IndexOf("settings.json", StringComparison.OrdinalIgnoreCase) >= 0, "Expected settings.json path to be backend-defined.");
                 Assert(layout.Mode == apod_wallpaper.ApplicationStorageMode.LocalApplicationData, "Expected local application data mode.");
                 Assert(layout.UsesCustomImagesDirectory, "Expected storage layout to report custom images directory usage.");
             }
@@ -669,6 +767,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                 Assert(string.Equals(layout.CacheDirectory, Path.Combine(expectedApplicationDataDirectory, "cache"), StringComparison.OrdinalIgnoreCase), "Expected portable cache directory.");
                 Assert(string.Equals(layout.LogsDirectory, Path.Combine(expectedApplicationDataDirectory, "logs"), StringComparison.OrdinalIgnoreCase), "Expected portable logs directory.");
                 Assert(string.Equals(layout.SecretsDirectory, Path.Combine(expectedApplicationDataDirectory, "secrets"), StringComparison.OrdinalIgnoreCase), "Expected portable secrets directory.");
+                Assert(string.Equals(layout.SettingsFilePath, Path.Combine(expectedApplicationDataDirectory, "settings.json"), StringComparison.OrdinalIgnoreCase), "Expected portable settings.json path.");
             }
             finally
             {
@@ -747,7 +846,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
         private static apod_wallpaper.ApplicationController CreateController()
         {
             return new apod_wallpaper.ApplicationController(
-                new apod_wallpaper.PropertiesSettingsStore(),
+                new apod_wallpaper.JsonSettingsStore(),
                 new apod_wallpaper.StartupService());
         }
 
