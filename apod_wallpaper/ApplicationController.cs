@@ -29,175 +29,76 @@ namespace apod_wallpaper
             _calendarStateService = new ApodCalendarStateService(_workflowService);
         }
 
-        public Scheduler Scheduler
+        internal Scheduler Scheduler
         {
             get { return _scheduler; }
         }
 
-        public void Initialize()
+        public OperationResult<ApplicationSettingsSnapshot> Initialize()
         {
-            if (_isInitialized)
-                return;
-
-            ApplyRuntimeSettings();
-            ConfigureScheduler(GetSettings());
-            _isInitialized = true;
-        }
-
-        public ApplicationSettingsSnapshot GetSettings()
-        {
-            return new ApplicationSettingsSnapshot
+            return ExecuteOperation(() =>
             {
-                TrayDoubleClickAction = Properties.Settings.Default.TrayDoubleClickAction,
-                WallpaperStyleIndex = Properties.Settings.Default.StyleComboBox,
-                AutoRefreshEnabled = Properties.Settings.Default.AutoRefreshEnabled,
-                StartWithWindows = Properties.Settings.Default.StartWithWindows,
-                NasaApiKey = Properties.Settings.Default.NasaApiKey,
-                NasaApiKeyValidationState = Properties.Settings.Default.NasaApiKeyValidationState,
-                ImagesDirectoryPath = Properties.Settings.Default.ImagesDirectoryPath,
-                LastAutoRefreshRunDate = Properties.Settings.Default.LastAutoRefreshRunDate,
-                LastAutoRefreshAppliedDate = Properties.Settings.Default.LastAutoRefreshAppliedDate,
-            };
+                if (!_isInitialized)
+                {
+                    ApplyRuntimeSettings();
+                    ConfigureScheduler(BuildSettingsSnapshot());
+                    _isInitialized = true;
+                }
+
+                return BuildSettingsSnapshot();
+            }, OperationErrorCode.InitializationFailed, "Unable to initialize the application controller.");
         }
 
-        public void SaveSettings(ApplicationSettingsSnapshot settings)
+        public OperationResult<ApplicationSettingsSnapshot> GetSettings()
         {
-            if (settings == null)
-                throw new ArgumentNullException(nameof(settings));
-
-            var previousAutoRefreshEnabled = Properties.Settings.Default.AutoRefreshEnabled;
-            var previousApiKey = Normalize(Properties.Settings.Default.NasaApiKey);
-            var normalizedApiKey = string.IsNullOrWhiteSpace(settings.NasaApiKey)
-                ? "DEMO_KEY"
-                : settings.NasaApiKey.Trim();
-            var apiKeyChanged = !string.Equals(previousApiKey, normalizedApiKey, StringComparison.Ordinal);
-            var effectiveValidationState = apiKeyChanged
-                ? ApiKeyValidationState.Unknown.ToString()
-                : (string.IsNullOrWhiteSpace(settings.NasaApiKeyValidationState)
-                    ? NormalizeValidationState(Properties.Settings.Default.NasaApiKeyValidationState)
-                    : NormalizeValidationState(settings.NasaApiKeyValidationState));
-
-            Properties.Settings.Default.TrayDoubleClickAction = settings.TrayDoubleClickAction;
-            Properties.Settings.Default.StyleComboBox = settings.WallpaperStyleIndex;
-            Properties.Settings.Default.AutoRefreshEnabled = settings.AutoRefreshEnabled;
-            Properties.Settings.Default.StartWithWindows = settings.StartWithWindows;
-            Properties.Settings.Default.ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath);
-            Properties.Settings.Default.NasaApiKey = normalizedApiKey;
-            Properties.Settings.Default.NasaApiKeyValidationState = effectiveValidationState;
-            Properties.Settings.Default.LastAutoRefreshRunDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
-                ? string.Empty
-                : Normalize(settings.LastAutoRefreshRunDate);
-            Properties.Settings.Default.LastAutoRefreshAppliedDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
-                ? string.Empty
-                : Normalize(settings.LastAutoRefreshAppliedDate);
-
-            Properties.Settings.Default.Save();
-
-            if (apiKeyChanged)
-                ResetApiKeyValidationRuntimeState();
-
-            ApplyRuntimeSettings();
-            _calendarStateService.Clear();
-            ConfigureScheduler(settings);
-            _startupService.SetStartWithWindows(settings.StartWithWindows);
+            return ExecuteOperation(BuildSettingsSnapshot, OperationErrorCode.SettingsReadFailed, "Unable to load saved application settings.");
         }
 
-        public void UpdateSessionImagesDirectory(string path)
+        public OperationResult<ApplicationSettingsSnapshot> SaveSettings(ApplicationSettingsSnapshot settings)
         {
-            FileStorage.SetSessionImagesDirectory(path);
+            return ExecuteOperation(() =>
+            {
+                SaveSettingsCore(settings);
+                return BuildSettingsSnapshot();
+            }, OperationErrorCode.SettingsWriteFailed, "Unable to save application settings.");
         }
 
-        public ApodWorkflowResult LoadDay(DateTime date, bool forceRefresh = false)
+        public OperationResult<string> UpdateSessionImagesDirectory(string path)
         {
-            EnsureApiKeyValidationIfNeeded(date, forceRefresh);
-            var result = _workflowService.LoadDay(date, forceRefresh);
-            _calendarStateService.Clear();
-            return result;
+            return ExecuteOperation(() =>
+            {
+                FileStorage.SetSessionImagesDirectory(path);
+                return FileStorage.ImagesDirectory;
+            }, OperationErrorCode.StateUpdateFailed, "Unable to update the active images directory for this session.");
         }
 
-        public Task<ApodWorkflowResult> LoadDayAsync(DateTime date, bool forceRefresh = false)
-        {
-            return LoadDayAsyncInternal(date, forceRefresh);
-        }
-
-        public ApodWorkflowResult DownloadDay(DateTime date, bool forceRefresh = false)
-        {
-            EnsureApiKeyValidationIfNeeded(date, forceRefresh);
-            var result = _workflowService.DownloadDay(date, forceRefresh);
-            _calendarStateService.Clear();
-            return result;
-        }
-
-        public Task<ApodWorkflowResult> DownloadDayAsync(DateTime date, bool forceRefresh = false)
-        {
-            return DownloadDayAsyncInternal(date, forceRefresh);
-        }
-
-        public ApodWorkflowResult ApplyDay(DateTime date, WallpaperStyle style, bool forceRefresh = false)
-        {
-            EnsureApiKeyValidationIfNeeded(date, forceRefresh);
-            var result = _workflowService.ApplyDay(date, style, forceRefresh);
-            _calendarStateService.Clear();
-            RaiseWallpaperApplied(result, false);
-            return result;
-        }
-
-        public Task<ApodWorkflowResult> ApplyDayAsync(DateTime date, WallpaperStyle style, bool forceRefresh = false)
-        {
-            return ApplyDayAsyncInternal(date, style, forceRefresh);
-        }
-
-        public ApodWorkflowResult ApplyLatestPublished(WallpaperStyle style, bool forceRefresh = false)
-        {
-            EnsureApiKeyValidation();
-            var result = _workflowService.ApplyLatestPublished(style, forceRefresh);
-            _calendarStateService.Clear();
-            RaiseWallpaperApplied(result, false);
-            return result;
-        }
-
-        public Task<ApodWorkflowResult> ApplyLatestPublishedAsync(WallpaperStyle style, bool forceRefresh = false)
-        {
-            return ApplyLatestPublishedAsyncInternal(style, forceRefresh);
-        }
-
-        public string GetPostUrl(DateTime date)
-        {
-            return _workflowService.GetPostUrl(date);
-        }
-
-        public DateTime GetLatestPublishedDate()
+        internal DateTime GetLatestPublishedDate()
         {
             return _workflowService.GetLatestPublishedDate();
         }
 
-        public Task<DateTime> GetLatestPublishedDateAsync()
+        internal Task<DateTime> GetLatestPublishedDateAsync()
         {
             return _workflowService.GetLatestPublishedDateAsync();
         }
 
-        public DateTime GetLatestAvailableDate()
+        internal DateTime GetLatestAvailableDate()
         {
             return _workflowService.GetLatestAvailableDate();
         }
 
-        public Task<DateTime> GetLatestAvailableDateAsync()
+        internal Task<DateTime> GetLatestAvailableDateAsync()
         {
             return _workflowService.GetLatestAvailableDateAsync();
         }
 
-        public ApiKeyValidationState GetApiKeyValidationState()
+        internal async Task<ApiKeyValidationState> EnsureApiKeyValidationAsync()
         {
-            return ParseValidationState(Properties.Settings.Default.NasaApiKeyValidationState);
-        }
-
-        public async Task<ApiKeyValidationState> EnsureApiKeyValidationAsync()
-        {
-            var settings = GetSettings();
+            var settings = BuildSettingsSnapshot();
             if (string.IsNullOrWhiteSpace(settings.NasaApiKey) ||
                 string.Equals(settings.NasaApiKey, "DEMO_KEY", StringComparison.OrdinalIgnoreCase))
             {
-                if (GetApiKeyValidationState() != ApiKeyValidationState.Unknown)
+                if (GetApiKeyValidationStateCore() != ApiKeyValidationState.Unknown)
                     SaveApiKeyValidationState(ApiKeyValidationState.Unknown);
 
                 return ApiKeyValidationState.Unknown;
@@ -265,54 +166,240 @@ namespace apod_wallpaper
             return validationState;
         }
 
-        public ApodCalendarMonthState GetCalendarMonthState(DateTime month, bool refreshMissingDates)
+        public OperationResult<ApodWorkflowResult> LoadDay(DateTime date, bool forceRefresh = false)
+        {
+            return ExecuteOperation(() =>
+            {
+                EnsureApiKeyValidationIfNeeded(date, forceRefresh);
+                var result = _workflowService.LoadDay(date, forceRefresh);
+                _calendarStateService.Clear();
+                return result;
+            }, OperationErrorCode.WorkflowFailed, "Unable to load the requested APOD entry.");
+        }
+
+        public Task<OperationResult<ApodWorkflowResult>> LoadDayAsync(DateTime date, bool forceRefresh = false)
+        {
+            return ExecuteOperationAsync(async () =>
+            {
+                await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
+                var result = await _workflowService.LoadDayAsync(date, forceRefresh).ConfigureAwait(false);
+                _calendarStateService.Clear();
+                return result;
+            }, OperationErrorCode.WorkflowFailed, "Unable to load the requested APOD entry.");
+        }
+
+        public OperationResult<ApodWorkflowResult> DownloadDay(DateTime date, bool forceRefresh = false)
+        {
+            return ExecuteOperation(() =>
+            {
+                EnsureApiKeyValidationIfNeeded(date, forceRefresh);
+                var result = _workflowService.DownloadDay(date, forceRefresh);
+                _calendarStateService.Clear();
+                return result;
+            }, OperationErrorCode.WorkflowFailed, "Unable to download the requested APOD image.");
+        }
+
+        public Task<OperationResult<ApodWorkflowResult>> DownloadDayAsync(DateTime date, bool forceRefresh = false)
+        {
+            return ExecuteOperationAsync(async () =>
+            {
+                await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
+                var result = await _workflowService.DownloadDayAsync(date, forceRefresh).ConfigureAwait(false);
+                _calendarStateService.Clear();
+                return result;
+            }, OperationErrorCode.WorkflowFailed, "Unable to download the requested APOD image.");
+        }
+
+        public OperationResult<ApodWorkflowResult> ApplyDay(DateTime date, WallpaperStyle style, bool forceRefresh = false)
+        {
+            return ExecuteOperation(() =>
+            {
+                EnsureApiKeyValidationIfNeeded(date, forceRefresh);
+                var result = _workflowService.ApplyDay(date, style, forceRefresh);
+                _calendarStateService.Clear();
+                RaiseWallpaperApplied(result, false);
+                return result;
+            }, OperationErrorCode.WorkflowFailed, "Unable to apply the requested APOD image as wallpaper.");
+        }
+
+        public Task<OperationResult<ApodWorkflowResult>> ApplyDayAsync(DateTime date, WallpaperStyle style, bool forceRefresh = false)
+        {
+            return ExecuteOperationAsync(async () =>
+            {
+                await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
+                var result = await _workflowService.ApplyDayAsync(date, style, forceRefresh).ConfigureAwait(false);
+                _calendarStateService.Clear();
+                RaiseWallpaperApplied(result, false);
+                return result;
+            }, OperationErrorCode.WorkflowFailed, "Unable to apply the requested APOD image as wallpaper.");
+        }
+
+        public OperationResult<ApodWorkflowResult> ApplyLatestPublished(WallpaperStyle style, bool forceRefresh = false)
+        {
+            return ExecuteOperation(() =>
+            {
+                EnsureApiKeyValidation();
+                var result = _workflowService.ApplyLatestPublished(style, forceRefresh);
+                _calendarStateService.Clear();
+                RaiseWallpaperApplied(result, false);
+                return result;
+            }, OperationErrorCode.WorkflowFailed, "Unable to apply the latest available APOD image.");
+        }
+
+        public Task<OperationResult<ApodWorkflowResult>> ApplyLatestPublishedAsync(WallpaperStyle style, bool forceRefresh = false)
+        {
+            return ExecuteOperationAsync(async () =>
+            {
+                await EnsureApiKeyValidationAsync().ConfigureAwait(false);
+                var result = await _workflowService.ApplyLatestPublishedAsync(style, forceRefresh).ConfigureAwait(false);
+                _calendarStateService.Clear();
+                RaiseWallpaperApplied(result, false);
+                return result;
+            }, OperationErrorCode.WorkflowFailed, "Unable to apply the latest available APOD image.");
+        }
+
+        public OperationResult<string> GetPostUrl(DateTime date)
+        {
+            return ExecuteOperation(() => _workflowService.GetPostUrl(date), OperationErrorCode.WorkflowFailed, "Unable to resolve the NASA APOD page URL.");
+        }
+
+        public OperationResult<ApiKeyValidationState> GetApiKeyValidationState()
+        {
+            return ExecuteOperation(GetApiKeyValidationStateCore, OperationErrorCode.SettingsReadFailed, "Unable to read the current API key validation state.");
+        }
+
+        public OperationResult<ApodCalendarMonthState> GetCalendarMonthState(DateTime month, bool refreshMissingDates)
         {
             return GetCalendarMonthState(month, refreshMissingDates, MonthRefreshMode.Aggressive);
         }
 
-        public ApodCalendarMonthState GetCalendarMonthState(DateTime month, bool refreshMissingDates, MonthRefreshMode refreshMode)
+        public OperationResult<ApodCalendarMonthState> GetCalendarMonthState(DateTime month, bool refreshMissingDates, MonthRefreshMode refreshMode)
         {
-            return _calendarStateService.GetMonthState(month, refreshMissingDates, refreshMode);
+            return ExecuteOperation(
+                () => _calendarStateService.GetMonthState(month, refreshMissingDates, refreshMode),
+                OperationErrorCode.WorkflowFailed,
+                "Unable to build calendar month state.");
         }
 
-        public Task<ApodCalendarMonthState> GetCalendarMonthStateAsync(DateTime month, bool refreshMissingDates)
+        public Task<OperationResult<ApodCalendarMonthState>> GetCalendarMonthStateAsync(DateTime month, bool refreshMissingDates)
         {
             return GetCalendarMonthStateAsync(month, refreshMissingDates, MonthRefreshMode.Aggressive);
         }
 
-        public Task<ApodCalendarMonthState> GetCalendarMonthStateAsync(DateTime month, bool refreshMissingDates, MonthRefreshMode refreshMode)
+        public Task<OperationResult<ApodCalendarMonthState>> GetCalendarMonthStateAsync(DateTime month, bool refreshMissingDates, MonthRefreshMode refreshMode)
         {
-            return Task.Run(() => _calendarStateService.GetMonthState(month, refreshMissingDates, refreshMode));
+            return ExecuteOperationAsync(
+                () => Task.Run(() => _calendarStateService.GetMonthState(month, refreshMissingDates, refreshMode)),
+                OperationErrorCode.WorkflowFailed,
+                "Unable to build calendar month state.");
         }
 
-        public async Task RefreshLocalImageIndexAsync()
+        public Task<OperationResult> RefreshLocalImageIndexAsync()
         {
-            await _workflowService.RefreshLocalImageIndexAsync().ConfigureAwait(false);
+            return ExecuteOperationAsync(async () =>
+            {
+                await _workflowService.RefreshLocalImageIndexAsync().ConfigureAwait(false);
+                _calendarStateService.Clear();
+            }, OperationErrorCode.StorageFailed, "Unable to refresh the local image index.");
+        }
+
+        public OperationResult<bool> ShouldApplyOnTrayDoubleClick()
+        {
+            return ExecuteOperation(() => Properties.Settings.Default.TrayDoubleClickAction, OperationErrorCode.SettingsReadFailed, "Unable to read tray double-click behavior.");
+        }
+
+        public OperationResult<DateTime> GetPreferredDisplayDate()
+        {
+            return ExecuteOperation(() =>
+            {
+                var lastAppliedDate = ParseDate(Properties.Settings.Default.LastAutoRefreshAppliedDate);
+                if (lastAppliedDate.HasValue && lastAppliedDate.Value <= DateTime.Today)
+                    return lastAppliedDate.Value;
+
+                return DateTime.Today;
+            }, OperationErrorCode.SettingsReadFailed, "Unable to resolve the preferred display date.");
+        }
+
+        public OperationResult<WallpaperStyle> GetSelectedWallpaperStyle()
+        {
+            return ExecuteOperation(() => (WallpaperStyle)Properties.Settings.Default.StyleComboBox, OperationErrorCode.SettingsReadFailed, "Unable to read the selected wallpaper style.");
+        }
+
+        public OperationResult Shutdown()
+        {
+            return ExecuteOperation(() =>
+            {
+                ShutdownCore();
+                return true;
+            }, OperationErrorCode.ShutdownFailed, "Unable to shut down the application controller cleanly.");
+        }
+
+        void IDisposable.Dispose()
+        {
+            ShutdownCore();
+        }
+
+        private ApplicationSettingsSnapshot BuildSettingsSnapshot()
+        {
+            return new ApplicationSettingsSnapshot
+            {
+                TrayDoubleClickAction = Properties.Settings.Default.TrayDoubleClickAction,
+                WallpaperStyleIndex = Properties.Settings.Default.StyleComboBox,
+                AutoRefreshEnabled = Properties.Settings.Default.AutoRefreshEnabled,
+                StartWithWindows = Properties.Settings.Default.StartWithWindows,
+                NasaApiKey = Properties.Settings.Default.NasaApiKey,
+                NasaApiKeyValidationState = Properties.Settings.Default.NasaApiKeyValidationState,
+                ImagesDirectoryPath = Properties.Settings.Default.ImagesDirectoryPath,
+                LastAutoRefreshRunDate = Properties.Settings.Default.LastAutoRefreshRunDate,
+                LastAutoRefreshAppliedDate = Properties.Settings.Default.LastAutoRefreshAppliedDate,
+            };
+        }
+
+        private void SaveSettingsCore(ApplicationSettingsSnapshot settings)
+        {
+            if (settings == null)
+                throw new ArgumentNullException(nameof(settings));
+
+            var previousAutoRefreshEnabled = Properties.Settings.Default.AutoRefreshEnabled;
+            var previousApiKey = Normalize(Properties.Settings.Default.NasaApiKey);
+            var normalizedApiKey = string.IsNullOrWhiteSpace(settings.NasaApiKey)
+                ? "DEMO_KEY"
+                : settings.NasaApiKey.Trim();
+            var apiKeyChanged = !string.Equals(previousApiKey, normalizedApiKey, StringComparison.Ordinal);
+            var effectiveValidationState = apiKeyChanged
+                ? ApiKeyValidationState.Unknown.ToString()
+                : (string.IsNullOrWhiteSpace(settings.NasaApiKeyValidationState)
+                    ? NormalizeValidationState(Properties.Settings.Default.NasaApiKeyValidationState)
+                    : NormalizeValidationState(settings.NasaApiKeyValidationState));
+
+            Properties.Settings.Default.TrayDoubleClickAction = settings.TrayDoubleClickAction;
+            Properties.Settings.Default.StyleComboBox = settings.WallpaperStyleIndex;
+            Properties.Settings.Default.AutoRefreshEnabled = settings.AutoRefreshEnabled;
+            Properties.Settings.Default.StartWithWindows = settings.StartWithWindows;
+            Properties.Settings.Default.ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath);
+            Properties.Settings.Default.NasaApiKey = normalizedApiKey;
+            Properties.Settings.Default.NasaApiKeyValidationState = effectiveValidationState;
+            Properties.Settings.Default.LastAutoRefreshRunDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
+                ? string.Empty
+                : Normalize(settings.LastAutoRefreshRunDate);
+            Properties.Settings.Default.LastAutoRefreshAppliedDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
+                ? string.Empty
+                : Normalize(settings.LastAutoRefreshAppliedDate);
+
+            Properties.Settings.Default.Save();
+
+            if (apiKeyChanged)
+                ResetApiKeyValidationRuntimeState();
+
+            ApplyRuntimeSettings();
             _calendarStateService.Clear();
+            ConfigureScheduler(settings);
+            _startupService.SetStartWithWindows(settings.StartWithWindows);
         }
 
-        public bool ShouldApplyOnTrayDoubleClick()
+        private ApiKeyValidationState GetApiKeyValidationStateCore()
         {
-            return Properties.Settings.Default.TrayDoubleClickAction;
-        }
-
-        public DateTime GetPreferredDisplayDate()
-        {
-            var lastAppliedDate = ParseDate(Properties.Settings.Default.LastAutoRefreshAppliedDate);
-            if (lastAppliedDate.HasValue && lastAppliedDate.Value <= DateTime.Today)
-                return lastAppliedDate.Value;
-
-            return DateTime.Today;
-        }
-
-        public WallpaperStyle GetSelectedWallpaperStyle()
-        {
-            return (WallpaperStyle)Properties.Settings.Default.StyleComboBox;
-        }
-
-        public void Dispose()
-        {
-            _scheduler.Dispose();
+            return ParseValidationState(Properties.Settings.Default.NasaApiKeyValidationState);
         }
 
         private void ApplyRuntimeSettings()
@@ -333,38 +420,49 @@ namespace apod_wallpaper
             _scheduler.Start(RunScheduledWallpaperUpdate);
         }
 
-        private async Task<ApodWorkflowResult> LoadDayAsyncInternal(DateTime date, bool forceRefresh)
+        private void ShutdownCore()
         {
-            await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
-            var result = await _workflowService.LoadDayAsync(date, forceRefresh).ConfigureAwait(false);
-            _calendarStateService.Clear();
-            return result;
+            _scheduler.Dispose();
         }
 
-        private async Task<ApodWorkflowResult> DownloadDayAsyncInternal(DateTime date, bool forceRefresh)
+        private static OperationResult<T> ExecuteOperation<T>(Func<T> operation, OperationErrorCode errorCode, string failureMessage, bool retryable = false)
         {
-            await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
-            var result = await _workflowService.DownloadDayAsync(date, forceRefresh).ConfigureAwait(false);
-            _calendarStateService.Clear();
-            return result;
+            try
+            {
+                return OperationResult<T>.Success(operation());
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn(failureMessage, ex);
+                return OperationResult<T>.Failure(CreateOperationError(errorCode, failureMessage, ex, retryable));
+            }
         }
 
-        private async Task<ApodWorkflowResult> ApplyDayAsyncInternal(DateTime date, WallpaperStyle style, bool forceRefresh)
+        private static async Task<OperationResult<T>> ExecuteOperationAsync<T>(Func<Task<T>> operation, OperationErrorCode errorCode, string failureMessage, bool retryable = false)
         {
-            await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
-            var result = await _workflowService.ApplyDayAsync(date, style, forceRefresh).ConfigureAwait(false);
-            _calendarStateService.Clear();
-            RaiseWallpaperApplied(result, false);
-            return result;
+            try
+            {
+                return OperationResult<T>.Success(await operation().ConfigureAwait(false));
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn(failureMessage, ex);
+                return OperationResult<T>.Failure(CreateOperationError(errorCode, failureMessage, ex, retryable));
+            }
         }
 
-        private async Task<ApodWorkflowResult> ApplyLatestPublishedAsyncInternal(WallpaperStyle style, bool forceRefresh)
+        private static async Task<OperationResult> ExecuteOperationAsync(Func<Task> operation, OperationErrorCode errorCode, string failureMessage, bool retryable = false)
         {
-            await EnsureApiKeyValidationAsync().ConfigureAwait(false);
-            var result = await _workflowService.ApplyLatestPublishedAsync(style, forceRefresh).ConfigureAwait(false);
-            _calendarStateService.Clear();
-            RaiseWallpaperApplied(result, false);
-            return result;
+            try
+            {
+                await operation().ConfigureAwait(false);
+                return OperationResult.Success();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn(failureMessage, ex);
+                return OperationResult.Failure(CreateOperationError(errorCode, failureMessage, ex, retryable));
+            }
         }
 
         private void RunScheduledWallpaperUpdate()
@@ -374,7 +472,7 @@ namespace apod_wallpaper
 
             try
             {
-                var settings = GetSettings();
+                var settings = BuildSettingsSnapshot();
                 if (!settings.AutoRefreshEnabled)
                     return;
 
@@ -532,6 +630,11 @@ namespace apod_wallpaper
             return lastRunDate.HasValue &&
                    lastRunDate.Value == localToday.Date &&
                    lastAppliedDate.HasValue;
+        }
+
+        private static OperationError CreateOperationError(OperationErrorCode code, string message, Exception exception, bool retryable)
+        {
+            return new OperationError(code, message, retryable, exception != null ? exception.GetType().Name + ": " + exception.Message : null);
         }
     }
 }

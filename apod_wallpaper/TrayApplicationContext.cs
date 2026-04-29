@@ -34,7 +34,14 @@ namespace apod_wallpaper
                 return;
             }
 
-            if (!controller.ShouldApplyOnTrayDoubleClick())
+            var trayActionResult = controller.ShouldApplyOnTrayDoubleClick();
+            if (!trayActionResult.Succeeded)
+            {
+                ShowTrayError(trayActionResult.Error != null ? trayActionResult.Error.Message : "Unable to read tray action settings.");
+                return;
+            }
+
+            if (!trayActionResult.Value)
             {
                 ShowConfig(sender, e);
                 return;
@@ -49,7 +56,21 @@ namespace apod_wallpaper
             {
                 try
                 {
-                    var workflowResult = controller.ApplyLatestPublished(controller.GetSelectedWallpaperStyle());
+                    var styleResult = controller.GetSelectedWallpaperStyle();
+                    if (!styleResult.Succeeded)
+                    {
+                        ShowTrayError(styleResult.Error != null ? styleResult.Error.Message : "Unable to read wallpaper style.");
+                        return;
+                    }
+
+                    var operationResult = controller.ApplyLatestPublished(styleResult.Value);
+                    if (!operationResult.Succeeded)
+                    {
+                        ShowTrayError(operationResult.Error != null ? operationResult.Error.Message : "Unable to apply the latest APOD.");
+                        return;
+                    }
+
+                    var workflowResult = operationResult.Value;
                     if (!workflowResult.IsSuccess)
                         ShowTrayError(workflowResult.Message);
                 }
@@ -66,7 +87,11 @@ namespace apod_wallpaper
         void ShowConfig(object sender, EventArgs e)
         {
             if (!configWindow.Visible)
-                configWindow.SyncDisplayedDate(controller.GetPreferredDisplayDate());
+            {
+                var preferredDateResult = controller.GetPreferredDisplayDate();
+                if (preferredDateResult.Succeeded)
+                    configWindow.SyncDisplayedDate(preferredDateResult.Value);
+            }
 
             if (configWindow.Visible)
                 configWindow.Focus();
@@ -76,7 +101,9 @@ namespace apod_wallpaper
 
         void Exit(object sender, EventArgs e)
         {
-            controller.Dispose();
+            var shutdownResult = controller.Shutdown();
+            if (!shutdownResult.Succeeded)
+                AppLogger.Warn(shutdownResult.Error != null ? shutdownResult.Error.Message : "Controller shutdown failed.");
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();

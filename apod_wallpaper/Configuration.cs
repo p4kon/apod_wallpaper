@@ -55,28 +55,42 @@ namespace apod_wallpaper
 
         private async void LoadSettings(object sender, EventArgs e)
         {
-            suppressSettingsSync = true;
-            currentSettings = controller.GetSettings();
-            downloadSetCheckBox.Checked = currentSettings.TrayDoubleClickAction;
-            var currentStyle = Enum.IsDefined(typeof(WallpaperStyle), currentSettings.WallpaperStyleIndex)
-                ? (WallpaperStyle)currentSettings.WallpaperStyleIndex
-                : WallpaperStyle.Smart;
-            wallpaperStyleComboBox.SelectedItem = currentStyle;
-            everyTimeCheckBox.Checked = currentSettings.AutoRefreshEnabled;
-            startWithWindowsCheckBox.Checked = currentSettings.StartWithWindows;
-            apiKeyTextBox.Text = currentSettings.NasaApiKey;
-            imagesFolderTextBox.Text = FileStorage.ImagesDirectory;
-            var preferredDate = controller.GetPreferredDisplayDate();
-            if (preferredDate > pictureDayDateTimePicker.MaxDate)
-                preferredDate = pictureDayDateTimePicker.MaxDate.Date;
-            pictureDayDateTimePicker.Value = preferredDate;
-            controller.UpdateSessionImagesDirectory(imagesFolderTextBox.Text);
-            UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
-            currentSettings = controller.GetSettings();
-            suppressSettingsSync = false;
+            try
+            {
+                suppressSettingsSync = true;
+                currentSettings = GetValueOrThrow(controller.GetSettings(), "Unable to load application settings.");
+                downloadSetCheckBox.Checked = currentSettings.TrayDoubleClickAction;
+                var currentStyle = Enum.IsDefined(typeof(WallpaperStyle), currentSettings.WallpaperStyleIndex)
+                    ? (WallpaperStyle)currentSettings.WallpaperStyleIndex
+                    : WallpaperStyle.Smart;
+                wallpaperStyleComboBox.SelectedItem = currentStyle;
+                everyTimeCheckBox.Checked = currentSettings.AutoRefreshEnabled;
+                startWithWindowsCheckBox.Checked = currentSettings.StartWithWindows;
+                apiKeyTextBox.Text = currentSettings.NasaApiKey;
+                imagesFolderTextBox.Text = FileStorage.ImagesDirectory;
+                var preferredDate = GetValueOrThrow(controller.GetPreferredDisplayDate(), "Unable to resolve the preferred display date.");
+                if (preferredDate > pictureDayDateTimePicker.MaxDate)
+                    preferredDate = pictureDayDateTimePicker.MaxDate.Date;
+                pictureDayDateTimePicker.Value = preferredDate;
+                GetValueOrThrow(controller.UpdateSessionImagesDirectory(imagesFolderTextBox.Text), "Unable to update the images directory for this session.");
+                UpdateApiKeyValidationIndicator(GetValueOrThrow(controller.GetApiKeyValidationState(), "Unable to read API key validation state."));
+                currentSettings = GetValueOrThrow(controller.GetSettings(), "Unable to reload application settings.");
+                suppressSettingsSync = false;
 
-            await controller.RefreshLocalImageIndexAsync().ConfigureAwait(true);
-            await WarmUpCalendarMonthAsync(pictureDayDateTimePicker.Value.Date, true);
+                var refreshResult = await controller.RefreshLocalImageIndexAsync().ConfigureAwait(true);
+                if (!refreshResult.Succeeded)
+                    throw new InvalidOperationException(GetOperationErrorMessage(refreshResult, "Unable to refresh the local image index."));
+
+                await WarmUpCalendarMonthAsync(pictureDayDateTimePicker.Value.Date, true);
+            }
+            catch (Exception ex)
+            {
+                suppressSettingsSync = false;
+                MessageBox.Show(ApodErrorTranslator.ToUserMessage(ex),
+                                "APOD error",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Error);
+            }
         }
 
         private void SaveSettings(object sender, FormClosingEventArgs e)
@@ -97,16 +111,20 @@ namespace apod_wallpaper
 
             try
             {
-                ApodWorkflowResult workflowResult;
+                OperationResult<ApodWorkflowResult> operationResult;
                 if (download_only)
                 {
-                    workflowResult = controller.DownloadDay(selectedDate);
+                    operationResult = controller.DownloadDay(selectedDate);
                 }
                 else
                 {
-                    workflowResult = controller.ApplyDay(selectedDate, GetSelectedWallpaperStyle());
+                    operationResult = controller.ApplyDay(selectedDate, GetSelectedWallpaperStyle());
                 }
 
+                if (!operationResult.Succeeded)
+                    throw new InvalidOperationException(GetOperationErrorMessage(operationResult, "Unable to complete the requested wallpaper operation."));
+
+                var workflowResult = operationResult.Value;
                 currentEntry = workflowResult.Entry;
                 if (!workflowResult.IsSuccess)
                 {
@@ -141,18 +159,22 @@ namespace apod_wallpaper
             var selectedDate = pictureDayDateTimePicker.Value.Date;
             download_only = Control.ModifierKeys == Keys.Shift;
 
-            ApodWorkflowResult workflowResult;
+            OperationResult<ApodWorkflowResult> operationResult;
             if (download_only)
             {
-                workflowResult = await controller.DownloadDayAsync(selectedDate).ConfigureAwait(true);
+                operationResult = await controller.DownloadDayAsync(selectedDate).ConfigureAwait(true);
             }
             else
             {
-                workflowResult = await controller.ApplyDayAsync(selectedDate, GetSelectedWallpaperStyle()).ConfigureAwait(true);
+                operationResult = await controller.ApplyDayAsync(selectedDate, GetSelectedWallpaperStyle()).ConfigureAwait(true);
             }
-            currentSettings = controller.GetSettings();
-            UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
+            currentSettings = GetValueOrThrow(controller.GetSettings(), "Unable to reload application settings.");
+            UpdateApiKeyValidationIndicator(GetValueOrThrow(controller.GetApiKeyValidationState(), "Unable to read API key validation state."));
 
+            if (!operationResult.Succeeded)
+                throw new InvalidOperationException(GetOperationErrorMessage(operationResult, "Unable to complete the requested wallpaper operation."));
+
+            var workflowResult = operationResult.Value;
             currentEntry = workflowResult.Entry;
             if (!workflowResult.IsSuccess)
             {
@@ -193,12 +215,19 @@ namespace apod_wallpaper
                 PreviewPictureBox.Image = ApodResources.loading_image_progress;
                 loading_picture = true;
 
-                var workflowResult = await controller.LoadDayAsync(selectedDate).ConfigureAwait(true);
-                currentSettings = controller.GetSettings();
-                UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
+                var operationResult = await controller.LoadDayAsync(selectedDate).ConfigureAwait(true);
+                currentSettings = GetValueOrThrow(controller.GetSettings(), "Unable to reload application settings.");
+                UpdateApiKeyValidationIndicator(GetValueOrThrow(controller.GetApiKeyValidationState(), "Unable to read API key validation state."));
                 if (requestVersion != previewRequestVersion)
                     return;
 
+                if (!operationResult.Succeeded)
+                {
+                    ShowUnavailableEntryState();
+                    return;
+                }
+
+                var workflowResult = operationResult.Value;
                 currentEntry = workflowResult.Entry;
 
                 if (!workflowResult.IsSuccess || string.IsNullOrWhiteSpace(workflowResult.PreviewLocation))
@@ -283,7 +312,7 @@ namespace apod_wallpaper
             {
                 if (Control.ModifierKeys == Keys.Shift)
                 {
-                    Process.Start(new ProcessStartInfo(controller.GetPostUrl(pictureDayDateTimePicker.Value.Date))
+                    Process.Start(new ProcessStartInfo(GetValueOrThrow(controller.GetPostUrl(pictureDayDateTimePicker.Value.Date), "Unable to resolve the NASA APOD page URL."))
                     {
                         UseShellExecute = true
                     });
@@ -305,7 +334,7 @@ namespace apod_wallpaper
             }
             else if (not_found && Control.ModifierKeys == Keys.Shift)
             {
-                Process.Start(new ProcessStartInfo(controller.GetPostUrl(pictureDayDateTimePicker.Value.Date))
+                Process.Start(new ProcessStartInfo(GetValueOrThrow(controller.GetPostUrl(pictureDayDateTimePicker.Value.Date), "Unable to resolve the NASA APOD page URL."))
                 {
                     UseShellExecute = true
                 });
@@ -441,7 +470,10 @@ namespace apod_wallpaper
         private void ApplyPendingImagesDirectory()
         {
             var configuredImagesPath = imagesFolderTextBox.Text.Trim();
-            controller.UpdateSessionImagesDirectory(configuredImagesPath);
+            var updateResult = controller.UpdateSessionImagesDirectory(configuredImagesPath);
+            if (!updateResult.Succeeded)
+                return;
+
             _ = controller.RefreshLocalImageIndexAsync();
         }
 
@@ -470,9 +502,12 @@ namespace apod_wallpaper
                     LastAutoRefreshAppliedDate = currentSettings != null ? currentSettings.LastAutoRefreshAppliedDate : string.Empty,
                 };
 
-                controller.SaveSettings(currentSettings);
-                currentSettings = controller.GetSettings();
-                UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
+                var saveResult = controller.SaveSettings(currentSettings);
+                if (!saveResult.Succeeded)
+                    throw new InvalidOperationException(GetOperationErrorMessage(saveResult, "Unable to persist application settings."));
+
+                currentSettings = saveResult.Value;
+                UpdateApiKeyValidationIndicator(GetValueOrThrow(controller.GetApiKeyValidationState(), "Unable to read API key validation state."));
             }
             catch (Exception ex)
             {
@@ -514,7 +549,9 @@ namespace apod_wallpaper
         {
             try
             {
-                await controller.GetCalendarMonthStateAsync(month, refreshMissingDates, CalendarWarmupMode).ConfigureAwait(true);
+                var monthStateResult = await controller.GetCalendarMonthStateAsync(month, refreshMissingDates, CalendarWarmupMode).ConfigureAwait(true);
+                if (!monthStateResult.Succeeded)
+                    throw new InvalidOperationException(GetOperationErrorMessage(monthStateResult, "Unable to warm up APOD calendar state."));
             }
             catch
             {
@@ -578,6 +615,24 @@ namespace apod_wallpaper
                 pictureDayDateTimePicker.Value = targetDate;
         }
 
+        private static T GetValueOrThrow<T>(OperationResult<T> result, string fallbackMessage)
+        {
+            if (result == null)
+                throw new InvalidOperationException(fallbackMessage);
+
+            if (!result.Succeeded)
+                throw new InvalidOperationException(GetOperationErrorMessage(result, fallbackMessage));
+
+            return result.Value;
+        }
+
+        private static string GetOperationErrorMessage(OperationResult result, string fallbackMessage)
+        {
+            return result != null && result.Error != null && !string.IsNullOrWhiteSpace(result.Error.Message)
+                ? result.Error.Message
+                : fallbackMessage;
+        }
+
         private void UpdateApiKeyValidationIndicator(ApiKeyValidationState validationState)
         {
             switch (validationState)
@@ -600,8 +655,12 @@ namespace apod_wallpaper
             try
             {
                 var selectedDate = pictureDayDateTimePicker.Value.Date;
-                var workflowResult = await controller.ApplyDayAsync(selectedDate, GetSelectedWallpaperStyle()).ConfigureAwait(true);
-                UpdateApiKeyValidationIndicator(controller.GetApiKeyValidationState());
+                var operationResult = await controller.ApplyDayAsync(selectedDate, GetSelectedWallpaperStyle()).ConfigureAwait(true);
+                UpdateApiKeyValidationIndicator(GetValueOrThrow(controller.GetApiKeyValidationState(), "Unable to read API key validation state."));
+                if (!operationResult.Succeeded)
+                    return;
+
+                var workflowResult = operationResult.Value;
                 if (!workflowResult.IsSuccess)
                     return;
 

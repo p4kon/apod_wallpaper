@@ -16,7 +16,16 @@ namespace apod_wallpaper
                 if (createdNew)
                 {
                     var controller = new ApplicationController();
-                    controller.Initialize();
+                    var initialization = controller.Initialize();
+                    if (!initialization.Succeeded)
+                    {
+                        System.Windows.Forms.MessageBox.Show(
+                            initialization.Error != null ? initialization.Error.Message : "Application initialization failed.",
+                            "APOD Wallpaper",
+                            System.Windows.Forms.MessageBoxButtons.OK,
+                            System.Windows.Forms.MessageBoxIcon.Error);
+                        return;
+                    }
                     Application.EnableVisualStyles();
                     Application.SetCompatibleTextRenderingDefault(false);
                     Application.Run(new TrayApplicationContext(controller));

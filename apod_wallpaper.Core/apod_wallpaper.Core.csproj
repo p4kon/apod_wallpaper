@@ -43,6 +43,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ApiKeyValidationState.cs" />
+    <Compile Include="OperationErrorCode.cs" />
+    <Compile Include="OperationError.cs" />
+    <Compile Include="OperationResult.cs" />
+    <Compile Include="OperationResultOfT.cs" />
     <Compile Include="IApodClient.cs" />
     <Compile Include="IApodMetadataCache.cs" />
     <Compile Include="IWallpaperApplier.cs" />
