@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "apod_wallpaper.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "apod_wallpaper.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

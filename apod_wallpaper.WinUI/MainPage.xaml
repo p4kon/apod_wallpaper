@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="apod_wallpaper.WinUI.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:apod_wallpaper.WinUI"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer>
+        <Grid Padding="32" RowSpacing="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Spacing="6">
+                <TextBlock FontSize="28" FontWeight="SemiBold" Text="APOD Wallpaper" />
+                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="WinUI packaged host now boots the shared Core backend through a dedicated composition root." TextWrapping="Wrap" />
+            </StackPanel>
+
+            <InfoBar
+                x:Name="StatusBar"
+                Grid.Row="1"
+                IsClosable="False"
+                IsOpen="True"
+                Severity="Informational"
+                Title="Starting backend" />
+
+            <Border
+                Grid.Row="2"
+                Padding="20"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="12">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Initial snapshot" />
+                    <TextBlock x:Name="SnapshotSummaryText" Text="Loading backend state..." TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border
+                Grid.Row="3"
+                Padding="20"
+                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="12">
+                <StackPanel Spacing="8">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Composition root" />
+                    <TextBlock Text="Settings store: JsonSettingsStore" />
+                    <TextBlock Text="Secret store: DpapiUserSecretStore" />
+                    <TextBlock Text="Startup adapter: StoreStartupRegistrationService" />
+                    <TextBlock Text="Backend facade: ApplicationController" />
+                </StackPanel>
+            </Border>
+
+            <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="12">
+                <Button Click="RefreshButton_Click" Content="Refresh snapshot" />
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>
