@@ -26,7 +26,6 @@ namespace apod_wallpaper
         private readonly IApplicationStorageFacade storageFacade;
         private readonly IApodWorkflowFacade workflowFacade;
         private readonly IApodCalendarFacade calendarFacade;
-        private readonly IApplicationDiagnosticsFacade diagnosticsFacade;
         private readonly IApplicationSessionFacade sessionFacade;
         private IEventSubscription wallpaperAppliedSubscription;
         private bool suppressSettingsSync = true;
@@ -49,7 +48,6 @@ namespace apod_wallpaper
             storageFacade = backend;
             workflowFacade = backend;
             calendarFacade = backend;
-            diagnosticsFacade = backend;
             sessionFacade = backend;
             InitializeComponent();
             pictureDayDateTimePicker.MaxDate = DateTime.Today;
@@ -97,7 +95,7 @@ namespace apod_wallpaper
             catch (Exception ex)
             {
                 suppressSettingsSync = false;
-                MessageBox.Show(await GetUserFriendlyErrorMessageAsync(ex).ConfigureAwait(true),
+                MessageBox.Show(GetUserFacingExceptionMessage(ex),
                                 "APOD error",
                                 MessageBoxButtons.OK,
                                 MessageBoxIcon.Error);
@@ -140,14 +138,6 @@ namespace apod_wallpaper
             if (!workflowResult.IsSuccess)
             {
                 ShowUnavailableEntryState();
-                if (workflowResult.Status == ApodWorkflowStatus.Failed)
-                {
-                    MessageBox.Show(workflowResult.Message,
-                                    "APOD error",
-                                    MessageBoxButtons.OK,
-                                    MessageBoxIcon.Error);
-                }
-
                 return;
             }
 
@@ -234,7 +224,7 @@ namespace apod_wallpaper
             catch (Exception ex)
             {
                 ShowUnavailableEntryState();
-                MessageBox.Show(await GetUserFriendlyErrorMessageAsync(ex).ConfigureAwait(true),
+                MessageBox.Show(GetUserFacingExceptionMessage(ex),
                                 "APOD error",
                                 MessageBoxButtons.OK,
                                 MessageBoxIcon.Error);
@@ -385,9 +375,8 @@ namespace apod_wallpaper
                     UseShellExecute = true
                 });
             }
-            catch (Exception ex)
+            catch
             {
-                _ = diagnosticsFacade.LogWarningAsync("Unable to open NASA API key page.", ex);
             }
 
             MessageBox.Show(
@@ -473,9 +462,8 @@ namespace apod_wallpaper
                 currentSettings = saveResult.Value;
                 UpdateApiKeyValidationIndicator(await GetValueOrThrowAsync(settingsFacade.GetApiKeyValidationStateAsync(), "Unable to read API key validation state.").ConfigureAwait(true));
             }
-            catch (Exception ex)
+            catch
             {
-                _ = diagnosticsFacade.LogWarningAsync("Unable to persist settings immediately.", ex);
             }
         }
 
@@ -632,9 +620,8 @@ namespace apod_wallpaper
                 UpdatePreviewImage(workflowResult.ImagePath);
                 MaybeDisableAutoRefreshForManualSelection(selectedDate);
             }
-            catch (Exception ex)
+            catch
             {
-                _ = diagnosticsFacade.LogWarningAsync("Unable to reapply wallpaper after wallpaper mode change.", ex);
             }
             finally
             {
@@ -642,12 +629,14 @@ namespace apod_wallpaper
             }
         }
 
-        private async Task<string> GetUserFriendlyErrorMessageAsync(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")
+        private static string GetUserFacingExceptionMessage(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")
         {
-            var result = await diagnosticsFacade.GetUserFriendlyErrorMessageAsync(exception, fallbackMessage).ConfigureAwait(true);
-            return result.Succeeded && !string.IsNullOrWhiteSpace(result.Value)
-                ? result.Value
-                : fallbackMessage;
+            if (exception == null)
+                return fallbackMessage;
+
+            return string.IsNullOrWhiteSpace(exception.Message)
+                ? fallbackMessage
+                : exception.Message;
         }
 
         private static async Task<T> GetValueOrThrowAsync<T>(Task<OperationResult<T>> resultTask, string fallbackMessage)

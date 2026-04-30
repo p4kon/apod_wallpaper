@@ -11,7 +11,6 @@ namespace apod_wallpaper
         private readonly IApplicationSessionFacade sessionFacade;
         private readonly IApplicationSettingsFacade settingsFacade;
         private readonly IApodWorkflowFacade workflowFacade;
-        private readonly IApplicationDiagnosticsFacade diagnosticsFacade;
         private readonly IApplicationBackendFacade backendFacade;
         private ConfigurationForm configWindow;
 
@@ -23,7 +22,6 @@ namespace apod_wallpaper
             sessionFacade = backend;
             settingsFacade = backend;
             workflowFacade = backend;
-            diagnosticsFacade = backend;
             backendFacade = backend;
             MenuItem configMenuItem = new MenuItem("Configuration", new EventHandler(ShowConfig));
             MenuItem exitMenuItem = new MenuItem("Exit", new EventHandler(Exit));
@@ -84,8 +82,7 @@ namespace apod_wallpaper
             }
             catch (Exception ex)
             {
-                _ = diagnosticsFacade.LogWarningAsync("Tray double-click apply failed.", ex);
-                ShowTrayError(await GetUserFriendlyErrorMessageAsync(ex).ConfigureAwait(true));
+                ShowTrayError(GetUserFacingExceptionMessage(ex));
             }
         }
 
@@ -109,9 +106,7 @@ namespace apod_wallpaper
         {
             DisposeConfigurationWindow();
             trayIcon.DoubleClick -= TrayDoubleClickAction;
-            var shutdownResult = await sessionFacade.ShutdownAsync().ConfigureAwait(true);
-            if (!shutdownResult.Succeeded)
-                _ = diagnosticsFacade.LogWarningAsync(shutdownResult.Error != null ? shutdownResult.Error.Message : "Controller shutdown failed.");
+            await sessionFacade.ShutdownAsync().ConfigureAwait(true);
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();
@@ -160,12 +155,14 @@ namespace apod_wallpaper
             configWindow = null;
         }
 
-        private async Task<string> GetUserFriendlyErrorMessageAsync(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")
+        private static string GetUserFacingExceptionMessage(Exception exception, string fallbackMessage = "Something went wrong while processing the APOD request.")
         {
-            var result = await diagnosticsFacade.GetUserFriendlyErrorMessageAsync(exception, fallbackMessage).ConfigureAwait(true);
-            return result.Succeeded && !string.IsNullOrWhiteSpace(result.Value)
-                ? result.Value
-                : fallbackMessage;
+            if (exception == null)
+                return fallbackMessage;
+
+            return string.IsNullOrWhiteSpace(exception.Message)
+                ? fallbackMessage
+                : exception.Message;
         }
     }
 }

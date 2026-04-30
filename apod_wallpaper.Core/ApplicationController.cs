@@ -261,7 +261,7 @@ namespace apod_wallpaper
                 await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
                 var result = await _workflowService.LoadDayAsync(date, forceRefresh).ConfigureAwait(false);
                 _calendarStateService.Clear();
-                return result;
+                return EnsureWorkflowResultSucceeded(result, "Unable to load the requested APOD entry.");
             }, OperationErrorCode.WorkflowFailed, "Unable to load the requested APOD entry.");
         }
 
@@ -272,7 +272,7 @@ namespace apod_wallpaper
                 await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
                 var result = await _workflowService.DownloadDayAsync(date, forceRefresh).ConfigureAwait(false);
                 _calendarStateService.Clear();
-                return result;
+                return EnsureWorkflowResultSucceeded(result, "Unable to download the requested APOD image.");
             }, OperationErrorCode.WorkflowFailed, "Unable to download the requested APOD image.");
         }
 
@@ -284,7 +284,7 @@ namespace apod_wallpaper
                 var result = await _workflowService.ApplyDayAsync(date, style, forceRefresh).ConfigureAwait(false);
                 _calendarStateService.Clear();
                 RaiseWallpaperApplied(result, false);
-                return result;
+                return EnsureWorkflowResultSucceeded(result, "Unable to apply the requested APOD image as wallpaper.");
             }, OperationErrorCode.WorkflowFailed, "Unable to apply the requested APOD image as wallpaper.");
         }
 
@@ -296,7 +296,7 @@ namespace apod_wallpaper
                 var result = await _workflowService.ApplyLatestPublishedAsync(style, forceRefresh).ConfigureAwait(false);
                 _calendarStateService.Clear();
                 RaiseWallpaperApplied(result, false);
-                return result;
+                return EnsureWorkflowResultSucceeded(result, "Unable to apply the latest available APOD image.");
             }, OperationErrorCode.WorkflowFailed, "Unable to apply the latest available APOD image.");
         }
 
@@ -620,6 +620,20 @@ namespace apod_wallpaper
             return Enum.TryParse(value, true, out parsedState)
                 ? parsedState
                 : ApiKeyValidationState.Unknown;
+        }
+
+        internal static ApodWorkflowResult EnsureWorkflowResultSucceeded(ApodWorkflowResult result, string fallbackMessage)
+        {
+            if (result == null)
+                throw new InvalidOperationException(fallbackMessage);
+
+            if (result.Status != ApodWorkflowStatus.Failed)
+                return result;
+
+            var message = string.IsNullOrWhiteSpace(result.Message)
+                ? fallbackMessage
+                : result.Message;
+            throw new InvalidOperationException(message);
         }
 
         private ApiKeyValidationState EnsureApiKeyValidation()

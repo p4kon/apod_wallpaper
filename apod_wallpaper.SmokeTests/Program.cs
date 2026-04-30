@@ -49,6 +49,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("Storage layout resolves all backend paths centrally", StorageLayoutResolvesAllPathsCentrally);
                 Run("Portable storage mode keeps app data near executable", PortableStorageModeUsesPortableLayout);
                 Run("Public facade methods use operation results", PublicFacadeMethodsUseOperationResults);
+                Run("Public workflow payload never exposes failed status", FailedWorkflowStatusMapsToOperationError);
+                Run("Backend facade does not expose diagnostics contract", BackendFacadeDoesNotExposeDiagnosticsContract);
                 Run("WallpaperApplied subscription disposes cleanly", WallpaperAppliedSubscriptionDisposesCleanly);
 
                 Console.WriteLine(_failures == 0
@@ -756,6 +758,8 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             apod_wallpaper.FileStorage.SetStorageModeOverride(apod_wallpaper.ApplicationStorageMode.Portable);
             try
             {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(null);
+                apod_wallpaper.AppRuntimeSettings.Configure(null, null, apod_wallpaper.ApiKeyValidationState.Unknown);
                 var controller = CreateController();
                 var layout = GetValueOrThrow(controller.GetStoragePathsAsync().GetAwaiter().GetResult(), "Unable to read portable storage layout.");
                 var expectedImagesDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "images");
@@ -786,6 +790,44 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
 
             Assert(invalidMethods.Length == 0,
                 "Expected all public facade methods to use OperationResult contracts. Invalid methods: " + string.Join(", ", invalidMethods));
+        }
+
+        private static void FailedWorkflowStatusMapsToOperationError()
+        {
+            var failedResult = new apod_wallpaper.ApodWorkflowResult
+            {
+                Status = apod_wallpaper.ApodWorkflowStatus.Failed,
+                Message = "Workflow-level failure should surface as an operation error.",
+            };
+
+            try
+            {
+                apod_wallpaper.ApplicationController.EnsureWorkflowResultSucceeded(
+                    failedResult,
+                    "Fallback workflow failure message.");
+                throw new InvalidOperationException("Expected failed workflow status to be rejected before reaching the public facade payload.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Assert(ex.Message == failedResult.Message, "Expected workflow failure message to become the public operation error message.");
+            }
+
+            var unavailableResult = new apod_wallpaper.ApodWorkflowResult
+            {
+                Status = apod_wallpaper.ApodWorkflowStatus.Unavailable,
+                Message = "Unavailable is a valid domain outcome.",
+            };
+
+            var mappedUnavailable = apod_wallpaper.ApplicationController.EnsureWorkflowResultSucceeded(
+                unavailableResult,
+                "Fallback workflow failure message.");
+            Assert(object.ReferenceEquals(mappedUnavailable, unavailableResult), "Expected unavailable workflow result to remain a successful payload.");
+        }
+
+        private static void BackendFacadeDoesNotExposeDiagnosticsContract()
+        {
+            Assert(!typeof(apod_wallpaper.IApplicationDiagnosticsFacade).IsAssignableFrom(typeof(apod_wallpaper.IApplicationBackendFacade)),
+                "Expected backend facade to stop exposing diagnostics methods directly to frontend callers.");
         }
 
         private static bool UsesOperationResultContract(Type returnType)
