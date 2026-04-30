@@ -1,4 +1,4 @@
-namespace ApodWallpaper.WinUI;
+namespace apod_wallpaper.WinUI;
 
 internal sealed class MainPageArguments
 {

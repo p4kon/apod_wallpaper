@@ -2,7 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Windows.Storage;
 
-namespace ApodWallpaper.WinUI;
+namespace apod_wallpaper.WinUI;
 
 internal sealed class BackendHost : IDisposable
 {

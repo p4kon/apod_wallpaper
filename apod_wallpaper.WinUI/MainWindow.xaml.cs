@@ -1,6 +1,6 @@
 using Microsoft.UI.Xaml;
 
-namespace ApodWallpaper.WinUI;
+namespace apod_wallpaper.WinUI;
 
 public sealed partial class MainWindow : Window
 {

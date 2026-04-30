@@ -2,7 +2,7 @@
 
 ## Goal
 
-Validate the riskiest host assumptions before creating the real `ApodWallpaper.WinUI` frontend project.
+Validate the riskiest host assumptions before creating the real `apod_wallpaper.WinUI` frontend project.
 
 The proof-of-concept exists to answer one question:
 
@@ -160,7 +160,7 @@ The PoC phase should end with:
 
 ### If PoC passes
 
-- Create the real `ApodWallpaper.WinUI` frontend project
+- Create the real `apod_wallpaper.WinUI` frontend project
 - Start implementation of the production UI
 
 ### If PoC fails
