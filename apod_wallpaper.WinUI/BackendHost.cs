@@ -40,10 +40,12 @@ internal sealed class BackendHost : IDisposable
         return Backend.GetInitialStateAsync();
     }
 
-    public async Task ShutdownAsync()
+    public async Task<apod_wallpaper.OperationResult> ShutdownAsync()
     {
         if (Backend != null)
-            await Backend.ShutdownAsync();
+            return await Backend.ShutdownAsync();
+
+        return apod_wallpaper.OperationResult.Success();
     }
 
     public void Dispose()

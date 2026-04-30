@@ -4,7 +4,7 @@ namespace apod_wallpaper.WinUI;
 
 public partial class App : Application
 {
-    private Window? _window;
+    private MainWindow? _window;
 
     internal BackendHost? Host { get; private set; }
 
