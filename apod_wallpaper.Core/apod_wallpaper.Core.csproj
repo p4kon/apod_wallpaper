@@ -1,112 +1,27 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{A5E9275F-FB85-4509-81A7-8B4AEE2A6B6F}</ProjectGuid>
+    <TargetFrameworks>net48;net8.0-windows10.0.19041.0</TargetFrameworks>
     <OutputType>Library</OutputType>
     <RootNamespace>apod_wallpaper</RootNamespace>
     <AssemblyName>apod_wallpaper.Core</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <LangVersion>7.3</LangVersion>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
+    <UseSystemDrawing>true</UseSystemDrawing>
+    <NoWarn>$(NoWarn);SYSLIB0014;SYSLIB0039;CA1416</NoWarn>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Drawing" />
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Security" />
-    <Reference Include="System.Runtime.Serialization" />
-    <Reference Include="System.Xml" />
-    <Reference Include="System.Xml.Linq" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="ApiKeyValidationState.cs" />
-    <Compile Include="ApplicationStorageMode.cs" />
-    <Compile Include="ApplicationStorageLayout.cs" />
-    <Compile Include="ApplicationStoragePaths.cs" />
-    <Compile Include="ApplicationInitialStateSnapshot.cs" />
-    <Compile Include="ApplicationSettingsSnapshot.cs" />
-    <Compile Include="ApplicationController.cs" />
-    <Compile Include="LegacySettingsMigration.cs" />
-    <Compile Include="OperationErrorCode.cs" />
-    <Compile Include="OperationError.cs" />
-    <Compile Include="OperationResult.cs" />
-    <Compile Include="OperationResultOfT.cs" />
-    <Compile Include="IApplicationSessionFacade.cs" />
-    <Compile Include="IEventSubscription.cs" />
-    <Compile Include="IApplicationSettingsFacade.cs" />
-    <Compile Include="IApplicationStorageFacade.cs" />
-    <Compile Include="IApplicationSettingsStore.cs" />
-    <Compile Include="IUserSecretStore.cs" />
-    <Compile Include="ILegacySettingsMigrationSource.cs" />
-    <Compile Include="IApodWorkflowFacade.cs" />
-    <Compile Include="IApodCalendarFacade.cs" />
-    <Compile Include="IApplicationDiagnosticsFacade.cs" />
-    <Compile Include="IApplicationBackendFacade.cs" />
-    <Compile Include="IStartupRegistrationService.cs" />
-    <Compile Include="NoOpStartupRegistrationService.cs" />
-    <Compile Include="IApodClient.cs" />
-    <Compile Include="IApodMetadataCache.cs" />
-    <Compile Include="IWallpaperApplier.cs" />
-    <Compile Include="ApodCalendarDayState.cs" />
-    <Compile Include="ApodCalendarMonthState.cs" />
-    <Compile Include="ApodCalendarStateService.cs" />
-    <Compile Include="ApodClient.cs" />
-    <Compile Include="ApodCachedEntry.cs" />
-    <Compile Include="ApodDataSource.cs" />
-    <Compile Include="ApodDayAvailability.cs" />
-    <Compile Include="ApodApplyResult.cs" />
-    <Compile Include="ApodDownloadResult.cs" />
-    <Compile Include="ApodEntry.cs" />
-    <Compile Include="ApodErrorTranslator.cs" />
-    <Compile Include="ApodMetadataCache.cs" />
-    <Compile Include="DisplayMetrics.cs" />
-    <Compile Include="ImageFormatCatalog.cs" />
-    <Compile Include="LocalImageValidator.cs" />
-    <Compile Include="MonthRefreshMode.cs" />
-    <Compile Include="ApodPageImageExtractor.cs" />
-    <Compile Include="ApodPreviewResult.cs" />
-    <Compile Include="ApodWorkflowResult.cs" />
-    <Compile Include="ApodWorkflowService.cs" />
-    <Compile Include="ApodWorkflowStatus.cs" />
-    <Compile Include="ApodWallpaperService.cs" />
-    <Compile Include="AppLogger.cs" />
-    <Compile Include="JsonSettingsStore.cs" />
-    <Compile Include="DpapiUserSecretStore.cs" />
-    <Compile Include="FileStorage.cs" />
-    <Compile Include="DownloadedImageFile.cs" />
-    <Compile Include="Network.cs" />
-    <Compile Include="NetworkRetryProfile.cs" />
-    <Compile Include="Scheduler.cs" />
-    <Compile Include="ApodPageUrl.cs" />
-    <Compile Include="Wallpaper.cs" />
-    <Compile Include="WallpaperService.cs" />
-    <Compile Include="SmartWallpaperComposer.cs" />
-    <Compile Include="AppRuntimeSettings.cs" />
-    <Compile Include="WallpaperAppliedEventArgs.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

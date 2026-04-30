@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <RootNamespace>apod_wallpaper.Net8Probe</RootNamespace>
+    <AssemblyName>apod_wallpaper.Net8Probe</AssemblyName>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <UseSystemDrawing>true</UseSystemDrawing>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\apod_wallpaper.Core\apod_wallpaper.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -2,35 +2,36 @@
 
 ## Status
 
-The current `apod_wallpaper.Core` project is **not yet directly compatible** with a WinUI 3 host.
+The target-framework migration pass is now **completed at the Core level**.
 
-This is not a speculative concern. It is confirmed by the current project structure and framework targeting.
+`apod_wallpaper.Core` now builds as a multi-targeted Windows backend:
 
-## Current Target Framework
+- `net48`
+- `net8.0-windows10.0.19041.0`
 
-`apod_wallpaper.Core` currently targets:
+The backend can now be referenced by a modern Windows host without rewriting its public API.
 
-- `.NET Framework 4.8` (`net48`)
+## What Changed
 
-This means the current Core project cannot be referenced directly by a standard modern WinUI 3 packaged app project, which uses a modern .NET Windows target.
+The migration pass introduced:
 
-## Conclusion
+- SDK-style project format for `apod_wallpaper.Core`
+- dual-target build for current WinForms host and future WinUI host
+- a dedicated `net8` compatibility probe project
 
-Before building the real WinUI 3 frontend host, the backend requires a dedicated **target framework migration pass**.
+Validated areas:
 
-This migration is not optional.
+- `ApplicationController` construction and initialization under `net8`
+- DPAPI secret store round-trip under `net8`
+- `DisplayMetrics` screen bounds via Win32 under `net8`
+- `SmartWallpaperComposer` resize/crop path under `net8`
+- `WallpaperNative` registry and `SystemParametersInfo` execution path under `net8`
+- `Network` `HttpWebRequest` fallback under `net8`
+- `ApodPageImageExtractor` HTML parsing under `net8`
 
 ## Confirmed Compatibility Blockers
 
-### 1. Current target is `net48`
-
-The project file currently targets classic .NET Framework:
-
-- `TargetFrameworkVersion = v4.8`
-
-That alone blocks direct consumption from a standard WinUI 3 host project.
-
-### 2. Core uses `System.Drawing`
+### 1. Core still uses `System.Drawing`
 
 The backend currently relies on `System.Drawing` and `System.Drawing.Imaging` in multiple areas:
 
@@ -39,9 +40,11 @@ The backend currently relies on `System.Drawing` and `System.Drawing.Imaging` in
 - local image validation
 - display size helpers
 
-This means a simple target-framework flip is not enough. The graphics path must be reviewed for modern Windows compatibility.
+This path now builds and passes the probe under `net8.0-windows`, so it is **not an immediate blocker**.
 
-### 3. Core uses Windows-native desktop APIs
+It remains a future technical watchpoint if packaged WinUI runtime behavior or Store requirements later expose issues.
+
+### 2. Core uses Windows-native desktop APIs
 
 The backend also uses Windows-specific APIs and desktop integration points:
 
@@ -51,7 +54,7 @@ The backend also uses Windows-specific APIs and desktop integration points:
 
 These are acceptable for a Windows-only host, but they mean the backend should be treated as a **Windows backend**, not as a neutral `netstandard` library.
 
-### 4. Storage currently assumes classic desktop semantics
+### 3. Storage still needs packaged-host validation
 
 Storage logic currently relies on:
 
@@ -59,23 +62,16 @@ Storage logic currently relies on:
 - `AppDomain.CurrentDomain.BaseDirectory`
 - portable marker and executable-adjacent paths
 
-This may still work under a packaged host, but it must be validated explicitly. It is not yet guaranteed.
+This is acceptable for the migration pass, but packaged WinUI behavior must still be validated in the PoC.
 
 ## What This Means For Target Strategy
 
 ### Recommended direction
 
-The backend should move to **multi-targeting**, but not to `netstandard2.0`.
+The chosen direction is now implemented:
 
-Recommended target strategy:
-
-- keep `net48` temporarily for the current WinForms host
-- add a modern Windows target for the future host
-
-Example direction:
-
-- `net48`
-- `net8.0-windows10.0.19041.0`
+- keep `net48` for the current WinForms host
+- add `net8.0-windows10.0.19041.0` for the future WinUI host
 
 ### Why not `netstandard2.0`
 
@@ -94,34 +90,33 @@ not:
 
 > one portable `netstandard` backend
 
-## Required Migration Work
+## Remaining Operational Caveat
 
-The migration pass should explicitly cover:
+The backend migration is complete, but the current local Visual Studio/MSBuild toolchain is older than the installed .NET 8 SDK requirement:
 
-1. Convert `apod_wallpaper.Core` to a modern SDK-style project file.
-2. Introduce multi-targeting for:
-   - current `net48` host
-   - future WinUI host
-3. Revalidate all `System.Drawing` usage under the modern Windows target.
-4. Decide whether `System.Drawing` remains acceptable for the Windows-only path or whether image composition should move to a newer imaging stack later.
-5. Revalidate packaged storage behavior for settings, logs, cache, secrets, and smart wallpaper output.
+- installed SDK used by CLI: `.NET 8.0.420`
+- local Visual Studio MSBuild: `17.5`
+- minimum MSBuild required by SDK `8.0.420`: `17.8.3`
+
+What this means in practice:
+
+- `dotnet build` works for the `net8` target and compatibility probe
+- the legacy `net48` path still builds and smoke tests still pass
+- a one-shot full solution build through the current old Visual Studio MSBuild is not yet available on this machine until the IDE/build tools are updated
 
 ## Immediate Decision
 
 The next frontend-related work should follow this order:
 
 1. Keep the WinUI 3 host decision.
-2. Keep the WinUI PoC as the host/platform validation step.
-3. Add a **separate required Core migration task**:
-   - modernize framework targeting
-   - keep public API stable
-   - avoid breaking the current WinForms host during transition
+2. Treat the Core migration as complete.
+3. Continue with the WinUI packaged PoC.
+4. Validate packaged storage and capability requirements there.
 
 ## Bottom Line
 
-At this moment, the correct statement is:
+The correct statement now is:
 
 - the backend architecture is isolated enough for a new frontend
-- the backend **project targeting is not yet ready** for direct WinUI 3 consumption
-
-That gap must be handled deliberately before the production WinUI host is created.
+- the backend project targeting is now ready for direct Windows-host consumption
+- the remaining unknowns are no longer Core targeting, but packaged-host behavior and local IDE toolchain freshness
