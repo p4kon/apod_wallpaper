@@ -4,5 +4,6 @@ namespace apod_wallpaper
     {
         LocalApplicationData = 0,
         Portable = 1,
+        Store = 2,
     }
 }

@@ -62,7 +62,9 @@ Storage logic currently relies on:
 - `AppDomain.CurrentDomain.BaseDirectory`
 - portable marker and executable-adjacent paths
 
-This is acceptable for the migration pass, but packaged WinUI behavior must still be validated in the PoC.
+This is acceptable for the migration pass, and `Core` now includes an explicit `Store` storage mode so a packaged host can provide its sandbox root path cleanly.
+
+Packaged WinUI behavior still needs live PoC validation, but the backend-side storage contract is now ready for that host integration step.
 
 ## What This Means For Target Strategy
 

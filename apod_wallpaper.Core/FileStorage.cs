@@ -9,6 +9,7 @@ namespace apod_wallpaper
     {
         private static string _sessionImagesDirectoryOverride;
         private static ApplicationStorageMode? _modeOverride;
+        private static string _applicationDataDirectoryOverride;
 
         public static string ImagesDirectory
         {
@@ -172,9 +173,20 @@ namespace apod_wallpaper
             _sessionImagesDirectoryOverride = NormalizePath(path);
         }
 
-        internal static void SetStorageModeOverride(ApplicationStorageMode? mode)
+        internal static void Configure(ApplicationStorageMode? mode, string applicationDataDirectoryOverride)
         {
             _modeOverride = mode;
+            _applicationDataDirectoryOverride = NormalizePath(applicationDataDirectoryOverride);
+        }
+
+        internal static void SetStorageModeOverride(ApplicationStorageMode? mode)
+        {
+            Configure(mode, _applicationDataDirectoryOverride);
+        }
+
+        internal static void SetApplicationDataDirectoryOverride(string path)
+        {
+            Configure(_modeOverride, path);
         }
 
         private static string ResolveImagesDirectory()
@@ -190,6 +202,9 @@ namespace apod_wallpaper
         {
             if (mode == ApplicationStorageMode.Portable)
                 return executableImagesDirectory;
+
+            if (mode == ApplicationStorageMode.Store)
+                return Path.Combine(applicationDataDirectory, "images");
 
             if (CanUseDirectory(executableImagesDirectory))
                 return executableImagesDirectory;
@@ -209,6 +224,9 @@ namespace apod_wallpaper
             if (string.Equals(environmentOverride, "localappdata", System.StringComparison.OrdinalIgnoreCase))
                 return ApplicationStorageMode.LocalApplicationData;
 
+            if (string.Equals(environmentOverride, "store", System.StringComparison.OrdinalIgnoreCase))
+                return ApplicationStorageMode.Store;
+
             var portableMarkerPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "portable.mode");
             if (File.Exists(portableMarkerPath))
                 return ApplicationStorageMode.Portable;
@@ -218,8 +236,15 @@ namespace apod_wallpaper
 
         private static string ResolveApplicationDataDirectory(ApplicationStorageMode mode)
         {
+            var overridePath = NormalizePath(_applicationDataDirectoryOverride);
+            if (!string.IsNullOrWhiteSpace(overridePath))
+                return overridePath;
+
             if (mode == ApplicationStorageMode.Portable)
                 return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+
+            if (mode == ApplicationStorageMode.Store)
+                throw new InvalidOperationException("Store storage mode requires a host-provided application data directory.");
 
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

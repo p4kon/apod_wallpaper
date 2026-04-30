@@ -55,6 +55,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Legacy non-secret settings migrate to json store", LegacySettingsMigrateToJsonStore);
                 Run("Storage layout resolves all backend paths centrally", StorageLayoutResolvesAllPathsCentrally);
                 Run("Portable storage mode keeps app data near executable", PortableStorageModeUsesPortableLayout);
+                Run("Store storage mode keeps app data inside sandbox path", StoreStorageModeUsesSandboxLayout);
                 Run("Public facade methods use operation results", PublicFacadeMethodsUseOperationResults);
                 Run("Public workflow payload never exposes failed status", FailedWorkflowStatusMapsToOperationError);
                 Run("Backend facade does not expose diagnostics contract", BackendFacadeDoesNotExposeDiagnosticsContract);
@@ -737,7 +738,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
 
         private static void PortableStorageModeUsesPortableLayout()
         {
-            apod_wallpaper.FileStorage.SetStorageModeOverride(apod_wallpaper.ApplicationStorageMode.Portable);
+            apod_wallpaper.ApplicationStorageLayout.Configure(apod_wallpaper.ApplicationStorageMode.Portable);
             try
             {
                 apod_wallpaper.FileStorage.SetSessionImagesDirectory(null);
@@ -757,7 +758,46 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             }
             finally
             {
-                apod_wallpaper.FileStorage.SetStorageModeOverride(null);
+                apod_wallpaper.ApplicationStorageLayout.ResetConfiguration();
+            }
+        }
+
+        private static void StoreStorageModeUsesSandboxLayout()
+        {
+            var sandboxPath = Path.Combine(Path.GetTempPath(), "apod_wallpaper_store_layout_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(sandboxPath);
+
+            try
+            {
+                apod_wallpaper.ApplicationStorageLayout.Configure(apod_wallpaper.ApplicationStorageMode.Store, sandboxPath);
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(null);
+                apod_wallpaper.AppRuntimeSettings.Configure(null, null, apod_wallpaper.ApiKeyValidationState.Unknown);
+
+                var controller = CreateController();
+                var layout = GetValueOrThrow(controller.EnsureStorageLayoutAsync().GetAwaiter().GetResult(), "Unable to prepare store storage layout.");
+
+                Assert(layout.Mode == apod_wallpaper.ApplicationStorageMode.Store, "Expected store storage mode.");
+                Assert(string.Equals(layout.ApplicationDataDirectory, sandboxPath, StringComparison.OrdinalIgnoreCase), "Expected store application data directory to use the sandbox path.");
+                Assert(string.Equals(layout.ImagesDirectory, Path.Combine(sandboxPath, "images"), StringComparison.OrdinalIgnoreCase), "Expected store images directory inside sandbox path.");
+                Assert(string.Equals(layout.SmartImagesDirectory, Path.Combine(sandboxPath, "images", "smart"), StringComparison.OrdinalIgnoreCase), "Expected store smart images directory inside sandbox path.");
+                Assert(string.Equals(layout.CacheDirectory, Path.Combine(sandboxPath, "cache"), StringComparison.OrdinalIgnoreCase), "Expected store cache directory inside sandbox path.");
+                Assert(string.Equals(layout.LogsDirectory, Path.Combine(sandboxPath, "logs"), StringComparison.OrdinalIgnoreCase), "Expected store logs directory inside sandbox path.");
+                Assert(string.Equals(layout.SecretsDirectory, Path.Combine(sandboxPath, "secrets"), StringComparison.OrdinalIgnoreCase), "Expected store secrets directory inside sandbox path.");
+                Assert(string.Equals(layout.SettingsFilePath, Path.Combine(sandboxPath, "settings.json"), StringComparison.OrdinalIgnoreCase), "Expected store settings.json path inside sandbox path.");
+
+                var settingsStore = new apod_wallpaper.JsonSettingsStore();
+                var storeSecret = new apod_wallpaper.DpapiUserSecretStore();
+                settingsStore.Save(CreateDefaultSettingsSnapshot());
+                storeSecret.SaveNasaApiKey("sandbox-key");
+
+                Assert(File.Exists(Path.Combine(sandboxPath, "settings.json")), "Expected settings.json to be written into the sandbox path.");
+                Assert(File.Exists(Path.Combine(sandboxPath, "secrets", "nasa-api-key.bin")), "Expected protected secret file to be written into the sandbox path.");
+                Assert(storeSecret.GetNasaApiKey() == "sandbox-key", "Expected protected secret round-trip in store storage mode.");
+            }
+            finally
+            {
+                apod_wallpaper.ApplicationStorageLayout.ResetConfiguration();
+                TryDeleteDirectory(sandboxPath);
             }
         }
 
