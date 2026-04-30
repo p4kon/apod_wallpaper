@@ -118,13 +118,15 @@ The future WinUI host should compose the backend using the public contracts alre
 
 The first frontend phase should proceed in this order:
 
-1. Create PoC packaged WinUI 3 app.
-2. Validate tray behavior and wallpaper apply.
-3. Confirm host viability.
-4. Create the real `apod_wallpaper.WinUI` project.
-5. Build the production frontend on top of `apod_wallpaper.Core`.
+1. Complete the required Core target-framework migration pass.
+2. Create PoC packaged WinUI 3 app.
+3. Validate tray behavior and wallpaper apply.
+4. Confirm host viability.
+5. Create the real `apod_wallpaper.WinUI` project.
+6. Build the production frontend on top of `apod_wallpaper.Core`.
 
 ## Notes
 
 - The current local CLI template list does not expose a WinUI 3 template directly, so project scaffolding should be done through Visual Studio's WinUI packaged app template when this phase starts.
 - This does not block the decision; it only affects how the host project is created.
+- `apod_wallpaper.Core` currently targets `.NET Framework 4.8`, so a dedicated compatibility migration is required before the production WinUI host can reference it directly.
