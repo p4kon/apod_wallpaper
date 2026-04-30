@@ -24,7 +24,7 @@ public sealed partial class MainWindow : Window
         _trayIconController.Initialize();
         Closed += MainWindow_Closed;
 
-        RootFrame.Navigate(typeof(MainPage), new MainPageArguments(
+        RootFrame.Navigate(typeof(ShellPage), new ShellPageArguments(
             backendHost,
             initialization,
             _trayStatus,
