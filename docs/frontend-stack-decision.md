@@ -123,7 +123,9 @@ The first frontend phase should proceed in this order:
 3. Validate tray behavior and wallpaper apply.
 4. Confirm host viability.
 5. Create the real `apod_wallpaper.WinUI` project.
-6. Build the production frontend on top of `apod_wallpaper.Core`.
+6. Build the first production screen as a single-page preview/apply surface.
+7. Add a larger shell only after the real preview/apply/settings flow proves multiple surfaces are needed.
+8. Build the production frontend on top of `apod_wallpaper.Core`.
 
 ## Notes
 

@@ -125,6 +125,31 @@ The current app is functionally dense. The new frontend should separate concerns
 
 The UI should remain compact, but it should no longer feel like all controls are packed into one legacy dialog.
 
+## Frontend Build Order
+
+The production frontend should **not** start with a full multi-page shell.
+
+Reason:
+
+- this product is still primarily a single-flow wallpaper tool
+- building `NavigationView` / `Frame` / page shell too early would add WinUI boilerplate before the real interaction model is proven
+- preview/apply behavior should shape the shell, not the other way around
+
+### Required Order
+
+1. Build a single-page working preview surface first
+2. Connect date selection, preview loading, apply/download actions
+3. Validate what truly needs separate navigation
+4. Only then introduce a larger shell if the UI actually needs multiple surfaces
+
+### Shell Rule
+
+Until preview/apply/settings flows are proven in the real host:
+
+- prefer one working page
+- avoid committing early to `NavigationView`
+- avoid adding XAML shell structure just for architecture aesthetics
+
 ## Notes For Implementation
 
 - The calendar highlighting depends on backend month/date state and should not be hardcoded in UI.
