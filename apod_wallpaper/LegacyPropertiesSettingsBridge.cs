@@ -2,7 +2,7 @@ using System;
 
 namespace apod_wallpaper
 {
-    internal sealed class LegacyPropertiesSettingsBridge
+    internal sealed class LegacyPropertiesSettingsBridge : ILegacySettingsMigrationSource
     {
         public ApplicationSettingsSnapshot LoadLegacySettings()
         {

@@ -49,6 +49,7 @@
     <Compile Include="ApplicationInitialStateSnapshot.cs" />
     <Compile Include="ApplicationSettingsSnapshot.cs" />
     <Compile Include="ApplicationController.cs" />
+    <Compile Include="LegacySettingsMigration.cs" />
     <Compile Include="OperationErrorCode.cs" />
     <Compile Include="OperationError.cs" />
     <Compile Include="OperationResult.cs" />
@@ -58,11 +59,14 @@
     <Compile Include="IApplicationSettingsFacade.cs" />
     <Compile Include="IApplicationStorageFacade.cs" />
     <Compile Include="IApplicationSettingsStore.cs" />
+    <Compile Include="IUserSecretStore.cs" />
+    <Compile Include="ILegacySettingsMigrationSource.cs" />
     <Compile Include="IApodWorkflowFacade.cs" />
     <Compile Include="IApodCalendarFacade.cs" />
     <Compile Include="IApplicationDiagnosticsFacade.cs" />
     <Compile Include="IApplicationBackendFacade.cs" />
     <Compile Include="IStartupRegistrationService.cs" />
+    <Compile Include="NoOpStartupRegistrationService.cs" />
     <Compile Include="IApodClient.cs" />
     <Compile Include="IApodMetadataCache.cs" />
     <Compile Include="IWallpaperApplier.cs" />
@@ -89,7 +93,8 @@
     <Compile Include="ApodWorkflowStatus.cs" />
     <Compile Include="ApodWallpaperService.cs" />
     <Compile Include="AppLogger.cs" />
-    <Compile Include="UserSecretStore.cs" />
+    <Compile Include="JsonSettingsStore.cs" />
+    <Compile Include="DpapiUserSecretStore.cs" />
     <Compile Include="FileStorage.cs" />
     <Compile Include="DownloadedImageFile.cs" />
     <Compile Include="Network.cs" />

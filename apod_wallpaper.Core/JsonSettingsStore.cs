@@ -5,20 +5,23 @@ using System.Runtime.Serialization.Json;
 
 namespace apod_wallpaper
 {
-    internal sealed class JsonSettingsStore : IApplicationSettingsStore
+    public sealed class JsonSettingsStore : IApplicationSettingsStore
     {
-        private readonly LegacyPropertiesSettingsBridge _legacyBridge;
         private readonly string _settingsFilePathOverride;
 
         public JsonSettingsStore()
-            : this(null, new LegacyPropertiesSettingsBridge())
+            : this(null)
         {
         }
 
-        internal JsonSettingsStore(string settingsFilePathOverride, LegacyPropertiesSettingsBridge legacyBridge)
+        public JsonSettingsStore(string settingsFilePathOverride)
         {
             _settingsFilePathOverride = string.IsNullOrWhiteSpace(settingsFilePathOverride) ? null : settingsFilePathOverride.Trim();
-            _legacyBridge = legacyBridge ?? throw new ArgumentNullException(nameof(legacyBridge));
+        }
+
+        public bool Exists()
+        {
+            return File.Exists(GetSettingsFilePath());
         }
 
         public ApplicationSettingsSnapshot Load()
@@ -64,32 +67,7 @@ namespace apod_wallpaper
             File.Move(tempPath, path);
         }
 
-        public string LoadLegacyApiKey()
-        {
-            return _legacyBridge.LoadLegacyApiKey();
-        }
-
-        public void ClearLegacyApiKey()
-        {
-            _legacyBridge.ClearLegacyApiKey();
-        }
-
-        public void MigrateLegacySettingsIfNeeded()
-        {
-            var path = GetSettingsFilePath();
-            if (File.Exists(path))
-                return;
-
-            Save(_legacyBridge.LoadLegacySettings());
-            _legacyBridge.ClearLegacySettingsPreservingApiKey();
-        }
-
-        private string GetSettingsFilePath()
-        {
-            return _settingsFilePathOverride ?? ApplicationStorageLayout.GetStoragePaths().SettingsFilePath;
-        }
-
-        private static ApplicationSettingsSnapshot CreateDefaultSnapshot()
+        internal static ApplicationSettingsSnapshot CreateDefaultSnapshot()
         {
             return new ApplicationSettingsSnapshot
             {
@@ -102,6 +80,11 @@ namespace apod_wallpaper
                 LastAutoRefreshRunDate = string.Empty,
                 LastAutoRefreshAppliedDate = string.Empty,
             };
+        }
+
+        private string GetSettingsFilePath()
+        {
+            return _settingsFilePathOverride ?? ApplicationStorageLayout.GetStoragePaths().SettingsFilePath;
         }
     }
 }

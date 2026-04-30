@@ -5,12 +5,22 @@ using System.Text;
 
 namespace apod_wallpaper
 {
-    internal static class UserSecretStore
+    public sealed class DpapiUserSecretStore : IUserSecretStore
     {
         private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("apod_wallpaper:nasa-api-key");
-        private static string _secretDirectoryOverride;
+        private readonly string _secretDirectoryPathOverride;
 
-        public static string GetNasaApiKey()
+        public DpapiUserSecretStore()
+            : this(null)
+        {
+        }
+
+        public DpapiUserSecretStore(string secretDirectoryPathOverride)
+        {
+            _secretDirectoryPathOverride = Normalize(secretDirectoryPathOverride);
+        }
+
+        public string GetNasaApiKey()
         {
             var path = GetNasaApiKeyPath();
             if (!File.Exists(path))
@@ -33,7 +43,7 @@ namespace apod_wallpaper
             }
         }
 
-        public static void SaveNasaApiKey(string apiKey)
+        public void SaveNasaApiKey(string apiKey)
         {
             var normalized = Normalize(apiKey);
             if (string.IsNullOrWhiteSpace(normalized))
@@ -47,7 +57,7 @@ namespace apod_wallpaper
             File.WriteAllBytes(GetNasaApiKeyPath(), encrypted);
         }
 
-        public static void DeleteNasaApiKey()
+        public void DeleteNasaApiKey()
         {
             var path = GetNasaApiKeyPath();
             try
@@ -61,26 +71,16 @@ namespace apod_wallpaper
             }
         }
 
-        internal static void SetSecretDirectoryOverride(string directoryPath)
-        {
-            _secretDirectoryOverride = Normalize(directoryPath);
-        }
-
-        internal static void ClearSecretDirectoryOverride()
-        {
-            _secretDirectoryOverride = null;
-        }
-
-        private static string GetNasaApiKeyPath()
+        private string GetNasaApiKeyPath()
         {
             return Path.Combine(GetSecretsDirectory(), "nasa-api-key.bin");
         }
 
-        private static string GetSecretsDirectory()
+        private string GetSecretsDirectory()
         {
-            return string.IsNullOrWhiteSpace(_secretDirectoryOverride)
+            return string.IsNullOrWhiteSpace(_secretDirectoryPathOverride)
                 ? FileStorage.SecretsDirectory
-                : _secretDirectoryOverride;
+                : _secretDirectoryPathOverride;
         }
 
         private static string Normalize(string value)

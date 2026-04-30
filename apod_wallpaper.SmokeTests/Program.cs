@@ -15,6 +15,7 @@ namespace apod_wallpaper.SmokeTests
         private static string _secretStoreDirectory;
         private static string _logDirectory;
         private static InMemorySettingsStore _settingsStore;
+        private static apod_wallpaper.DpapiUserSecretStore _secretStore;
 
         [STAThread]
         private static int Main()
@@ -23,9 +24,9 @@ namespace apod_wallpaper.SmokeTests
             _logDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_smoke_logs_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_secretStoreDirectory);
             Directory.CreateDirectory(_logDirectory);
-            apod_wallpaper.UserSecretStore.SetSecretDirectoryOverride(_secretStoreDirectory);
             apod_wallpaper.AppLogger.SetLogDirectoryOverride(_logDirectory);
             _settingsStore = new InMemorySettingsStore(CreateDefaultSettingsSnapshot());
+            _secretStore = new apod_wallpaper.DpapiUserSecretStore(_secretStoreDirectory);
 
             try
             {
@@ -67,7 +68,6 @@ namespace apod_wallpaper.SmokeTests
             }
             finally
             {
-                apod_wallpaper.UserSecretStore.ClearSecretDirectoryOverride();
                 apod_wallpaper.AppLogger.ClearLogDirectoryOverride();
                 TryDeleteDirectory(_secretStoreDirectory);
                 TryDeleteDirectory(_logDirectory);
@@ -517,7 +517,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                 }).GetAwaiter().GetResult();
 
                 Assert(saveResult.Succeeded, "Expected protected API key save to succeed.");
-                Assert(apod_wallpaper.UserSecretStore.GetNasaApiKey() == "protected-test-key", "Expected API key to be stored in protected storage.");
+                Assert(_secretStore.GetNasaApiKey() == "protected-test-key", "Expected API key to be stored in protected storage.");
                 Assert(string.IsNullOrWhiteSpace(apod_wallpaper.Properties.Settings.Default.NasaApiKey), "Expected plaintext settings slot to stay empty.");
                 Assert(GetValueOrThrow(controller.GetSettingsAsync().GetAwaiter().GetResult(), "Unable to read settings after protected save.").NasaApiKey == "protected-test-key", "Expected facade settings to surface the protected API key.");
             }
@@ -542,14 +542,15 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                 apod_wallpaper.Properties.Settings.Default.Save();
 
                 var store = new apod_wallpaper.JsonSettingsStore(
-                    Path.Combine(tempDirectory, "settings.json"),
-                    new apod_wallpaper.LegacyPropertiesSettingsBridge());
+                    Path.Combine(tempDirectory, "settings.json"));
+                apod_wallpaper.LegacySettingsMigration.MigrateIfNeeded(store, _secretStore, new apod_wallpaper.LegacyPropertiesSettingsBridge());
                 var controller = new apod_wallpaper.ApplicationController(
                     store,
+                    _secretStore,
                     new FakeStartupRegistrationService());
                 var initialization = controller.InitializeAsync().GetAwaiter().GetResult();
                 Assert(initialization.Succeeded, "Expected controller initialization to succeed during legacy API key migration.");
-                Assert(apod_wallpaper.UserSecretStore.GetNasaApiKey() == "legacy-plaintext-key", "Expected legacy API key to migrate into protected storage.");
+                Assert(_secretStore.GetNasaApiKey() == "legacy-plaintext-key", "Expected legacy API key to migrate into protected storage.");
                 Assert(string.IsNullOrWhiteSpace(apod_wallpaper.Properties.Settings.Default.NasaApiKey), "Expected legacy plaintext setting to be cleared after migration.");
             }
             finally
@@ -613,7 +614,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
 
             try
             {
-                var store = new apod_wallpaper.JsonSettingsStore(settingsPath, new apod_wallpaper.LegacyPropertiesSettingsBridge());
+                var store = new apod_wallpaper.JsonSettingsStore(settingsPath);
                 var snapshot = new apod_wallpaper.ApplicationSettingsSnapshot
                 {
                     TrayDoubleClickAction = true,
@@ -667,8 +668,8 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                 apod_wallpaper.Properties.Settings.Default.NasaApiKey = "legacy-secret-key";
                 apod_wallpaper.Properties.Settings.Default.Save();
 
-                var store = new apod_wallpaper.JsonSettingsStore(settingsPath, new apod_wallpaper.LegacyPropertiesSettingsBridge());
-                store.MigrateLegacySettingsIfNeeded();
+                var store = new apod_wallpaper.JsonSettingsStore(settingsPath);
+                apod_wallpaper.LegacySettingsMigration.MigrateIfNeeded(store, _secretStore, new apod_wallpaper.LegacyPropertiesSettingsBridge());
 
                 Assert(File.Exists(settingsPath), "Expected migration to create settings.json.");
                 var migrated = store.Load();
@@ -681,7 +682,8 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
                 Assert(migrated.LastAutoRefreshRunDate == "2026-04-20", "Expected last run date to migrate into json store.");
                 Assert(migrated.LastAutoRefreshAppliedDate == "2026-04-19", "Expected last applied date to migrate into json store.");
                 Assert(string.IsNullOrWhiteSpace(apod_wallpaper.Properties.Settings.Default.ImagesDirectoryPath), "Expected legacy non-secret settings to be cleared after migration.");
-                Assert(apod_wallpaper.Properties.Settings.Default.NasaApiKey == "legacy-secret-key", "Expected legacy secret key to stay until DPAPI migration handles it.");
+                Assert(string.IsNullOrWhiteSpace(apod_wallpaper.Properties.Settings.Default.NasaApiKey), "Expected legacy secret key to be cleared after protected migration.");
+                Assert(_secretStore.GetNasaApiKey() == "legacy-secret-key", "Expected legacy secret key to migrate into protected storage.");
             }
             finally
             {
@@ -869,6 +871,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
         {
             return new apod_wallpaper.ApplicationController(
                 _settingsStore,
+                _secretStore,
                 new FakeStartupRegistrationService());
         }
 
@@ -970,11 +973,15 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
         private sealed class InMemorySettingsStore : apod_wallpaper.IApplicationSettingsStore
         {
             private apod_wallpaper.ApplicationSettingsSnapshot _snapshot;
-            private string _legacyApiKey;
 
             public InMemorySettingsStore(apod_wallpaper.ApplicationSettingsSnapshot initialSnapshot)
             {
                 _snapshot = (initialSnapshot ?? new apod_wallpaper.ApplicationSettingsSnapshot()).Clone();
+            }
+
+            public bool Exists()
+            {
+                return _snapshot != null;
             }
 
             public apod_wallpaper.ApplicationSettingsSnapshot Load()
@@ -985,16 +992,6 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             public void Save(apod_wallpaper.ApplicationSettingsSnapshot settings)
             {
                 _snapshot = (settings ?? new apod_wallpaper.ApplicationSettingsSnapshot()).Clone();
-            }
-
-            public string LoadLegacyApiKey()
-            {
-                return _legacyApiKey;
-            }
-
-            public void ClearLegacyApiKey()
-            {
-                _legacyApiKey = string.Empty;
             }
         }
 

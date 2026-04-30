@@ -16,9 +16,11 @@ namespace apod_wallpaper
                 if (createdNew)
                 {
                     var settingsStore = new JsonSettingsStore();
-                    settingsStore.MigrateLegacySettingsIfNeeded();
+                    var secretStore = new DpapiUserSecretStore();
+                    LegacySettingsMigration.MigrateIfNeeded(settingsStore, secretStore, new LegacyPropertiesSettingsBridge());
                     IApplicationBackendFacade controller = new ApplicationController(
                         settingsStore,
+                        secretStore,
                         new StartupService());
                     var initialization = controller.InitializeAsync().GetAwaiter().GetResult();
                     if (!initialization.Succeeded)
