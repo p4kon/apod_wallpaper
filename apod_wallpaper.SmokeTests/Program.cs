@@ -13,13 +13,19 @@ namespace apod_wallpaper.SmokeTests
     {
         private static int _failures;
         private static string _secretStoreDirectory;
+        private static string _logDirectory;
+        private static InMemorySettingsStore _settingsStore;
 
         [STAThread]
         private static int Main()
         {
             _secretStoreDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_smoke_secrets_" + Guid.NewGuid().ToString("N"));
+            _logDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_smoke_logs_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_secretStoreDirectory);
+            Directory.CreateDirectory(_logDirectory);
             apod_wallpaper.UserSecretStore.SetSecretDirectoryOverride(_secretStoreDirectory);
+            apod_wallpaper.AppLogger.SetLogDirectoryOverride(_logDirectory);
+            _settingsStore = new InMemorySettingsStore(CreateDefaultSettingsSnapshot());
 
             try
             {
@@ -62,7 +68,9 @@ namespace apod_wallpaper.SmokeTests
             finally
             {
                 apod_wallpaper.UserSecretStore.ClearSecretDirectoryOverride();
+                apod_wallpaper.AppLogger.ClearLogDirectoryOverride();
                 TryDeleteDirectory(_secretStoreDirectory);
+                TryDeleteDirectory(_logDirectory);
             }
         }
 
@@ -424,66 +432,25 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
 
         private static void SchedulerUsesHourlyPollingForDemoKey()
         {
-            var snapshot = CaptureSettings();
-            apod_wallpaper.ApplicationController controller = null;
-            try
+            var pollingInterval = apod_wallpaper.ApplicationController.ResolveSchedulerPollingInterval(new apod_wallpaper.ApplicationSettingsSnapshot
             {
-                controller = CreateController();
-                var saveResult = controller.SaveSettingsAsync(new apod_wallpaper.ApplicationSettingsSnapshot
-                {
-                    TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
-                    WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
-                    AutoRefreshEnabled = true,
-                    StartWithWindows = snapshot.StartWithWindows,
-                    ImagesDirectoryPath = snapshot.ImagesDirectoryPath,
-                    NasaApiKey = "DEMO_KEY",
-                    NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Unknown.ToString(),
-                    LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
-                    LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
-                }).GetAwaiter().GetResult();
-                Assert(saveResult.Succeeded, "Expected DEMO_KEY scheduler settings save to succeed.");
+                AutoRefreshEnabled = true,
+                NasaApiKey = "DEMO_KEY",
+            });
 
-                Assert(controller.InitializeAsync().GetAwaiter().GetResult().Succeeded, "Expected controller initialization to succeed.");
-                Assert(controller.Scheduler.PollingInterval == TimeSpan.FromHours(1), "Expected DEMO_KEY polling interval to be one hour.");
-            }
-            finally
-            {
-                if (controller != null)
-                    controller.ShutdownAsync().GetAwaiter().GetResult();
-                RestoreSettings(snapshot);
-            }
+            Assert(pollingInterval == TimeSpan.FromHours(1), "Expected DEMO_KEY polling interval to be one hour.");
         }
 
         private static void SchedulerUsesThirtyMinutePollingForPersonalKey()
         {
-            var snapshot = CaptureSettings();
-            apod_wallpaper.ApplicationController controller = null;
-            try
+            var pollingInterval = apod_wallpaper.ApplicationController.ResolveSchedulerPollingInterval(new apod_wallpaper.ApplicationSettingsSnapshot
             {
-                controller = CreateController();
-                var saveResult = controller.SaveSettingsAsync(new apod_wallpaper.ApplicationSettingsSnapshot
-                {
-                    TrayDoubleClickAction = snapshot.TrayDoubleClickAction,
-                    WallpaperStyleIndex = snapshot.WallpaperStyleIndex,
-                    AutoRefreshEnabled = true,
-                    StartWithWindows = snapshot.StartWithWindows,
-                    ImagesDirectoryPath = snapshot.ImagesDirectoryPath,
-                    NasaApiKey = "personal-key",
-                    NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Valid.ToString(),
-                    LastAutoRefreshRunDate = snapshot.LastAutoRefreshRunDate,
-                    LastAutoRefreshAppliedDate = snapshot.LastAutoRefreshAppliedDate,
-                }).GetAwaiter().GetResult();
-                Assert(saveResult.Succeeded, "Expected personal-key scheduler settings save to succeed.");
+                AutoRefreshEnabled = true,
+                NasaApiKey = "personal-key",
+                NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Valid.ToString(),
+            });
 
-                Assert(controller.InitializeAsync().GetAwaiter().GetResult().Succeeded, "Expected controller initialization to succeed.");
-                Assert(controller.Scheduler.PollingInterval == TimeSpan.FromMinutes(30), "Expected personal key polling interval to be 30 minutes.");
-            }
-            finally
-            {
-                if (controller != null)
-                    controller.ShutdownAsync().GetAwaiter().GetResult();
-                RestoreSettings(snapshot);
-            }
+            Assert(pollingInterval == TimeSpan.FromMinutes(30), "Expected personal key polling interval to be 30 minutes.");
         }
 
         private static void WallpaperServiceRejectsInvalidLocalFile()
@@ -529,9 +496,12 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
         private static void ApiKeyIsStoredOutsidePlaintextSettings()
         {
             var snapshot = CaptureSettings();
+            var legacyPlaintextApiKey = apod_wallpaper.Properties.Settings.Default.NasaApiKey;
             try
             {
                 ResetSecretStore();
+                apod_wallpaper.Properties.Settings.Default.NasaApiKey = string.Empty;
+                apod_wallpaper.Properties.Settings.Default.Save();
                 var controller = CreateController();
                 var saveResult = controller.SaveSettingsAsync(new apod_wallpaper.ApplicationSettingsSnapshot
                 {
@@ -554,6 +524,8 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             finally
             {
                 RestoreSettings(snapshot);
+                apod_wallpaper.Properties.Settings.Default.NasaApiKey = legacyPlaintextApiKey;
+                apod_wallpaper.Properties.Settings.Default.Save();
                 ResetSecretStore();
             }
         }
@@ -561,13 +533,20 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
         private static void LegacyApiKeyMigratesToProtectedStorage()
         {
             var snapshot = CaptureSettings();
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_legacy_api_migration_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
             try
             {
                 ResetSecretStore();
                 apod_wallpaper.Properties.Settings.Default.NasaApiKey = "legacy-plaintext-key";
                 apod_wallpaper.Properties.Settings.Default.Save();
 
-                var controller = CreateController();
+                var store = new apod_wallpaper.JsonSettingsStore(
+                    Path.Combine(tempDirectory, "settings.json"),
+                    new apod_wallpaper.LegacyPropertiesSettingsBridge());
+                var controller = new apod_wallpaper.ApplicationController(
+                    store,
+                    new FakeStartupRegistrationService());
                 var initialization = controller.InitializeAsync().GetAwaiter().GetResult();
                 Assert(initialization.Succeeded, "Expected controller initialization to succeed during legacy API key migration.");
                 Assert(apod_wallpaper.UserSecretStore.GetNasaApiKey() == "legacy-plaintext-key", "Expected legacy API key to migrate into protected storage.");
@@ -577,6 +556,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             {
                 RestoreSettings(snapshot);
                 ResetSecretStore();
+                TryDeleteDirectory(tempDirectory);
             }
         }
 
@@ -888,8 +868,24 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
         private static apod_wallpaper.ApplicationController CreateController()
         {
             return new apod_wallpaper.ApplicationController(
-                new apod_wallpaper.JsonSettingsStore(),
-                new apod_wallpaper.StartupService());
+                _settingsStore,
+                new FakeStartupRegistrationService());
+        }
+
+        private static apod_wallpaper.ApplicationSettingsSnapshot CreateDefaultSettingsSnapshot()
+        {
+            return new apod_wallpaper.ApplicationSettingsSnapshot
+            {
+                TrayDoubleClickAction = false,
+                WallpaperStyleIndex = (int)apod_wallpaper.WallpaperStyle.Smart,
+                AutoRefreshEnabled = false,
+                StartWithWindows = true,
+                NasaApiKey = "DEMO_KEY",
+                NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Unknown.ToString(),
+                ImagesDirectoryPath = string.Empty,
+                LastAutoRefreshRunDate = string.Empty,
+                LastAutoRefreshAppliedDate = string.Empty,
+            };
         }
 
         private static T GetValueOrThrow<T>(apod_wallpaper.OperationResult<T> result, string fallbackMessage)
@@ -969,6 +965,44 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             public System.Collections.Generic.IReadOnlyList<apod_wallpaper.ApodEntry> GetEntries(DateTime startDate, DateTime endDate) => new[] { _latestEntry };
             public Task<System.Collections.Generic.IReadOnlyList<apod_wallpaper.ApodEntry>> GetEntriesAsync(DateTime startDate, DateTime endDate) => Task.FromResult(GetEntries(startDate, endDate));
             public Task<apod_wallpaper.ApiKeyValidationState> ValidateApiKeyAsync(string apiKey) => Task.FromResult(apod_wallpaper.ApiKeyValidationState.Valid);
+        }
+
+        private sealed class InMemorySettingsStore : apod_wallpaper.IApplicationSettingsStore
+        {
+            private apod_wallpaper.ApplicationSettingsSnapshot _snapshot;
+            private string _legacyApiKey;
+
+            public InMemorySettingsStore(apod_wallpaper.ApplicationSettingsSnapshot initialSnapshot)
+            {
+                _snapshot = (initialSnapshot ?? new apod_wallpaper.ApplicationSettingsSnapshot()).Clone();
+            }
+
+            public apod_wallpaper.ApplicationSettingsSnapshot Load()
+            {
+                return (_snapshot ?? new apod_wallpaper.ApplicationSettingsSnapshot()).Clone();
+            }
+
+            public void Save(apod_wallpaper.ApplicationSettingsSnapshot settings)
+            {
+                _snapshot = (settings ?? new apod_wallpaper.ApplicationSettingsSnapshot()).Clone();
+            }
+
+            public string LoadLegacyApiKey()
+            {
+                return _legacyApiKey;
+            }
+
+            public void ClearLegacyApiKey()
+            {
+                _legacyApiKey = string.Empty;
+            }
+        }
+
+        private sealed class FakeStartupRegistrationService : apod_wallpaper.IStartupRegistrationService
+        {
+            public void SetStartWithWindows(bool enabled)
+            {
+            }
         }
 
         private sealed class InMemoryApodMetadataCache : apod_wallpaper.IApodMetadataCache

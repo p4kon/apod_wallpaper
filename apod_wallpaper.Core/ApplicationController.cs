@@ -566,7 +566,7 @@ namespace apod_wallpaper
             }
         }
 
-        private static TimeSpan ResolveSchedulerPollingInterval(ApplicationSettingsSnapshot settings)
+        internal static TimeSpan ResolveSchedulerPollingInterval(ApplicationSettingsSnapshot settings)
         {
             if (settings == null || string.IsNullOrWhiteSpace(settings.NasaApiKey) || string.Equals(settings.NasaApiKey.Trim(), DemoApiKey, StringComparison.OrdinalIgnoreCase))
                 return TimeSpan.FromHours(1);
