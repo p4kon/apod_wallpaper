@@ -38,7 +38,6 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Security" />
     <Reference Include="System.Runtime.Serialization" />
-    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
@@ -79,6 +78,7 @@
     <Compile Include="ApodEntry.cs" />
     <Compile Include="ApodErrorTranslator.cs" />
     <Compile Include="ApodMetadataCache.cs" />
+    <Compile Include="DisplayMetrics.cs" />
     <Compile Include="ImageFormatCatalog.cs" />
     <Compile Include="LocalImageValidator.cs" />
     <Compile Include="MonthRefreshMode.cs" />

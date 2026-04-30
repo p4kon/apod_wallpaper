@@ -3,7 +3,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Windows.Forms;
 
 namespace apod_wallpaper
 {
@@ -27,7 +26,7 @@ namespace apod_wallpaper
             if (string.IsNullOrWhiteSpace(originalImagePath) || !File.Exists(originalImagePath))
                 throw new FileNotFoundException("Wallpaper image was not found.", originalImagePath);
 
-            var screenBounds = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
+            var screenBounds = DisplayMetrics.GetPrimaryScreenBounds();
             using (var image = Image.FromFile(originalImagePath))
             {
                 var imageAspect = image.Width / (double)image.Height;
