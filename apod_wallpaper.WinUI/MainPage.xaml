@@ -4,7 +4,6 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="using:apod_wallpaper.WinUI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
@@ -20,10 +19,10 @@
             </Grid.RowDefinitions>
 
             <StackPanel Spacing="6">
-                <TextBlock FontSize="28" FontWeight="SemiBold" Text="Control Screen" />
+                <TextBlock FontSize="28" FontWeight="SemiBold" Text="Preview Workspace" />
                 <TextBlock
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="This first screen renders the full startup state from one backend call. It is the base surface that will later evolve into the live editable wallpaper workflow."
+                    Text="The main wallpaper flow now lives here: choose a date, load preview, open the NASA page, and track Success / Unavailable / Error predictably."
                     TextWrapping="Wrap" />
             </StackPanel>
 
@@ -35,7 +34,162 @@
                 Severity="Informational"
                 Title="Starting backend" />
 
-            <Grid Grid.Row="2" ColumnSpacing="16" RowSpacing="16">
+            <Border
+                Grid.Row="2"
+                Padding="20"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="16">
+                <Grid RowSpacing="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Preview and date" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="This is the main user flow. Rapid date changes should not freeze the UI or leave stale preview state behind."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <DatePicker
+                            x:Name="PreviewDatePicker"
+                            Grid.Column="1"
+                            DateChanged="PreviewDatePicker_DateChanged"
+                            DayVisible="False"
+                            HorizontalAlignment="Left" />
+
+                        <Button
+                            x:Name="ReloadPreviewButton"
+                            Grid.Column="2"
+                            Click="ReloadPreviewButton_Click"
+                            Content="Reload preview" />
+
+                        <Button
+                            x:Name="OpenNasaPageButton"
+                            Grid.Column="3"
+                            Click="OpenNasaPageButton_Click"
+                            Content="Open NASA page" />
+                    </Grid>
+
+                    <InfoBar
+                        x:Name="PreviewStatusBar"
+                        Grid.Row="1"
+                        IsClosable="False"
+                        IsOpen="True"
+                        Severity="Informational"
+                        Title="Preview idle" />
+
+                    <Grid Grid.Row="2" ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.1*" />
+                            <ColumnDefinition Width="0.9*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border
+                            Grid.Column="0"
+                            MinHeight="360"
+                            Padding="16"
+                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="16">
+                            <Grid>
+                                <Image
+                                    x:Name="PreviewImage"
+                                    Stretch="Uniform"
+                                    Visibility="Collapsed" />
+
+                                <ProgressRing
+                                    x:Name="PreviewProgressRing"
+                                    Width="56"
+                                    Height="56"
+                                    IsActive="False"
+                                    Visibility="Collapsed" />
+
+                                <StackPanel
+                                    x:Name="PreviewPlaceholderPanel"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Spacing="8">
+                                    <TextBlock
+                                        x:Name="PreviewPlaceholderTitleText"
+                                        FontSize="18"
+                                        FontWeight="SemiBold"
+                                        HorizontalAlignment="Center"
+                                        Text="Preview not loaded yet" />
+                                    <TextBlock
+                                        x:Name="PreviewPlaceholderText"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        HorizontalAlignment="Center"
+                                        Text="Choose a date to load APOD preview."
+                                        TextAlignment="Center"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border
+                            Grid.Column="1"
+                            Padding="16"
+                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="16">
+                            <StackPanel Spacing="12">
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Preview result" />
+
+                                <Grid ColumnSpacing="12" RowSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Text="Requested date" />
+                                    <TextBlock x:Name="RequestedDateText" Grid.Row="0" Grid.Column="1" FontWeight="SemiBold" Text="Not loaded" />
+
+                                    <TextBlock Grid.Row="1" Text="Resolved date" />
+                                    <TextBlock x:Name="ResolvedDateText" Grid.Row="1" Grid.Column="1" FontWeight="SemiBold" Text="Not loaded" />
+
+                                    <TextBlock Grid.Row="2" Text="Status" />
+                                    <TextBlock x:Name="PreviewWorkflowStatusText" Grid.Row="2" Grid.Column="1" FontWeight="SemiBold" Text="Idle" />
+
+                                    <TextBlock Grid.Row="3" Text="Source" />
+                                    <TextBlock x:Name="PreviewSourceText" Grid.Row="3" Grid.Column="1" FontWeight="SemiBold" Text="Unknown" />
+
+                                    <TextBlock Grid.Row="4" Text="Preview file" />
+                                    <TextBlock x:Name="PreviewLocationText" Grid.Row="4" Grid.Column="1" FontWeight="SemiBold" Text="Not loaded" TextWrapping="WrapWholeWords" />
+
+                                    <TextBlock Grid.Row="5" Text="Message" />
+                                    <TextBlock x:Name="PreviewMessageText" Grid.Row="5" Grid.Column="1" FontWeight="SemiBold" Text="Waiting for request." TextWrapping="WrapWholeWords" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="3" ColumnSpacing="16" RowSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
@@ -132,7 +286,7 @@
                 </Border>
             </Grid>
 
-            <Grid Grid.Row="3" ColumnSpacing="16" RowSpacing="16">
+            <Grid Grid.Row="4" ColumnSpacing="16" RowSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="1.2*" />
                     <ColumnDefinition Width="0.8*" />
@@ -162,30 +316,15 @@
                     BorderThickness="1"
                     CornerRadius="16">
                     <StackPanel Spacing="8">
-                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="Host diagnostics" />
-                        <TextBlock
-                            Text="Settings store: JsonSettingsStore&#x0a;Secret store: DpapiUserSecretStore&#x0a;Startup adapter: StoreStartupRegistrationService&#x0a;Backend facade: ApplicationController"
-                            TextWrapping="Wrap" />
+                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="Tray spike status" />
+                        <TextBlock x:Name="TrayStatusText" Text="Tray spike not initialized yet." TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
             </Grid>
 
-            <Border
-                Grid.Row="4"
-                Padding="20"
-                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="16">
-                <StackPanel Spacing="8">
-                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Tray spike status" />
-                    <TextBlock x:Name="TrayStatusText" Text="Tray spike not initialized yet." TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
             <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Left" Spacing="12">
                 <Button Click="HideToTrayButton_Click" Content="Hide to tray" />
-                <Button Click="RefreshButton_Click" Content="Refresh snapshot" />
+                <Button Click="RefreshButton_Click" Content="Refresh startup state" />
                 <Button Click="ExitButton_Click" Content="Exit application" />
             </StackPanel>
         </Grid>
