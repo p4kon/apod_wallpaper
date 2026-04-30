@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
-namespace apod_wallpaper.WinUI;
+namespace ApodWallpaper.WinUI;
 
 public sealed partial class MainPage : Page
 {

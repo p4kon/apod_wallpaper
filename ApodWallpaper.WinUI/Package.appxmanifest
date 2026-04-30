@@ -16,7 +16,7 @@
   <mp:PhoneIdentity PhoneProductId="DBC3583C-3BE3-4B57-8C61-672FB5F6E9A5" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>apod_wallpaper.WinUI</DisplayName>
+    <DisplayName>APOD Wallpaper</DisplayName>
     <PublisherDisplayName>AppPublisher</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -35,8 +35,8 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="apod_wallpaper.WinUI"
-        Description="apod_wallpaper.WinUI"
+        DisplayName="APOD Wallpaper"
+        Description="Minimal desktop app for APOD wallpaper preview, download, and apply."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">

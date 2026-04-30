@@ -1,4 +1,4 @@
-namespace apod_wallpaper.WinUI;
+namespace ApodWallpaper.WinUI;
 
 internal sealed class StoreStartupRegistrationService : apod_wallpaper.IStartupRegistrationService
 {

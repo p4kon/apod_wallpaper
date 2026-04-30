@@ -8,7 +8,7 @@ Accepted as the working implementation path for the new frontend.
 
 The new frontend will target **WinUI 3 (Packaged desktop app)** on Windows.
 
-- New host project name target: `apod_wallpaper.WinUI`
+- New host project name target: `ApodWallpaper.WinUI`
 - `apod_wallpaper.Core` remains the backend library
 - The new frontend is a thin host over the existing backend contracts
 - No new frontend code should depend on WinForms-specific APIs
@@ -34,7 +34,7 @@ WinUI 3 is currently the best fit for the product goals:
 
 ### Proof-of-Concept
 
-Before creating the full `apod_wallpaper.WinUI` production frontend, create a short-lived packaged WinUI 3 proof-of-concept that validates the two riskiest product assumptions:
+Before creating the full `ApodWallpaper.WinUI` production frontend, create a short-lived packaged WinUI 3 proof-of-concept that validates the two riskiest product assumptions:
 
 1. **Tray behavior**
 2. **Wallpaper apply from packaged host**
@@ -122,7 +122,7 @@ The first frontend phase should proceed in this order:
 2. Create PoC packaged WinUI 3 app.
 3. Validate tray behavior and wallpaper apply.
 4. Confirm host viability.
-5. Create the real `apod_wallpaper.WinUI` project.
+5. Create the real `ApodWallpaper.WinUI` project.
 6. Build the production frontend on top of `apod_wallpaper.Core`.
 
 ## Notes

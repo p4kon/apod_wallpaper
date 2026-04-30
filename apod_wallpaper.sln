@@ -11,7 +11,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "apod_wallpaper.SmokeTests",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "apod_wallpaper.Net8Probe", "apod_wallpaper.Net8Probe\apod_wallpaper.Net8Probe.csproj", "{285CE828-9B18-417D-84D3-12A13FB902A8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "apod_wallpaper.WinUI", "apod_wallpaper.WinUI\apod_wallpaper.WinUI.csproj", "{FD7C7E55-9DC8-43EE-9945-50EE7A526CC3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApodWallpaper.WinUI", "ApodWallpaper.WinUI\ApodWallpaper.WinUI.csproj", "{FD7C7E55-9DC8-43EE-9945-50EE7A526CC3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
