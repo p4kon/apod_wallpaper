@@ -23,6 +23,8 @@ The PoC should validate only the host/platform risk areas:
 5. Wallpaper apply from the packaged context
 6. Capability and packaged-storage behavior analysis
 
+Tray validation should be treated as the **first technical gate** inside the PoC, not as a later UI feature.
+
 ## Explicit Non-Goals
 
 The PoC should **not** attempt to build:
@@ -161,7 +163,7 @@ The PoC phase should end with:
 ### If PoC passes
 
 - Create the real `apod_wallpaper.WinUI` frontend project
-- Start implementation of the production UI
+- Start implementation of the production UI beginning with a single-page preview/apply surface
 
 ### If PoC fails
 

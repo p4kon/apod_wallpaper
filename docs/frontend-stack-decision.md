@@ -120,12 +120,27 @@ The first frontend phase should proceed in this order:
 
 1. Complete the required Core target-framework migration pass.
 2. Create PoC packaged WinUI 3 app.
-3. Validate tray behavior and wallpaper apply.
-4. Confirm host viability.
-5. Create the real `apod_wallpaper.WinUI` project.
-6. Build the first production screen as a single-page preview/apply surface.
-7. Add a larger shell only after the real preview/apply/settings flow proves multiple surfaces are needed.
-8. Build the production frontend on top of `apod_wallpaper.Core`.
+3. Run a dedicated technical spike for tray behavior in packaged WinUI 3.
+4. Validate wallpaper apply from the packaged host.
+5. Confirm overall host viability.
+6. Create the real `apod_wallpaper.WinUI` project.
+7. Build the first production screen as a single-page preview/apply surface.
+8. Add a larger shell only after the real preview/apply/settings flow proves multiple surfaces are needed.
+9. Build the production frontend on top of `apod_wallpaper.Core`.
+
+### Ordering Constraint
+
+Do **not** start production frontend feature work before tray viability is proven.
+
+For this product, tray behavior is not accessory polish. It is part of the app's core runtime model.
+
+That means:
+
+- no preview screen build-out before tray spike
+- no settings UX build-out before tray spike
+- no shell work before tray spike
+
+If the packaged WinUI tray path fails, frontend implementation order must pause and the host strategy must be revisited before investing in more UI code.
 
 ## Notes
 
