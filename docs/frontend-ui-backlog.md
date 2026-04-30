@@ -158,3 +158,35 @@ Until preview/apply/settings flows are proven in the real host:
   - APOD availability state
   - image vs non-image classification
 - The frontend should render these states, not infer them.
+
+## State Screen vs Settings Screen
+
+To avoid duplicate screens with the same data, the frontend should treat startup state and settings as the **same control surface**.
+
+### Task 5 Scope
+
+Task 5 should build the first **readonly control screen** from `GetInitialStateAsync()`:
+
+- selected date
+- wallpaper style
+- images directory
+- auto-check state
+- startup state
+- API key state
+
+This screen exists to prove:
+
+- one-call startup rendering
+- clean loading model
+- stable state presentation
+
+### Task 8 Scope
+
+Task 8 should not invent a second screen with the same data.
+
+Instead, Task 8 should evolve the same control surface from readonly state cards into live editable controls where appropriate.
+
+That means:
+
+- Task 5 = render state clearly
+- Task 8 = make the same settings blocks interactive

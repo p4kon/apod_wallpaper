@@ -9,7 +9,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer>
-        <Grid Padding="32" RowSpacing="16">
+        <Grid MaxWidth="1040" Padding="28" HorizontalAlignment="Center" RowSpacing="16">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -20,8 +20,11 @@
             </Grid.RowDefinitions>
 
             <StackPanel Spacing="6">
-                <TextBlock FontSize="28" FontWeight="SemiBold" Text="APOD Wallpaper" />
-                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="WinUI packaged host now boots the shared Core backend through a dedicated composition root." TextWrapping="Wrap" />
+                <TextBlock FontSize="28" FontWeight="SemiBold" Text="Control Screen" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="This first screen renders the full startup state from one backend call. It is the base surface that will later evolve into the live editable wallpaper workflow."
+                    TextWrapping="Wrap" />
             </StackPanel>
 
             <InfoBar
@@ -32,34 +35,140 @@
                 Severity="Informational"
                 Title="Starting backend" />
 
-            <Border
-                Grid.Row="2"
-                Padding="20"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="12">
-                <StackPanel Spacing="8">
-                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Initial snapshot" />
-                    <TextBlock x:Name="SnapshotSummaryText" Text="Loading backend state..." TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+            <Grid Grid.Row="2" ColumnSpacing="16" RowSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <Border
-                Grid.Row="3"
-                Padding="20"
-                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="12">
-                <StackPanel Spacing="8">
-                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Composition root" />
-                    <TextBlock Text="Settings store: JsonSettingsStore" />
-                    <TextBlock Text="Secret store: DpapiUserSecretStore" />
-                    <TextBlock Text="Startup adapter: StoreStartupRegistrationService" />
-                    <TextBlock Text="Backend facade: ApplicationController" />
-                </StackPanel>
-            </Border>
+                <Border
+                    Grid.Column="0"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16">
+                    <StackPanel Spacing="14">
+                        <StackPanel Spacing="4">
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Current state" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Readonly startup state from GetInitialStateAsync()."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <Grid ColumnSpacing="16" RowSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="Selected date" />
+                            <TextBlock x:Name="PreferredDateText" Grid.Row="0" Grid.Column="1" FontWeight="SemiBold" Text="Loading..." />
+
+                            <TextBlock Grid.Row="1" Text="Wallpaper style" />
+                            <TextBlock x:Name="WallpaperStyleText" Grid.Row="1" Grid.Column="1" FontWeight="SemiBold" Text="Loading..." />
+
+                            <TextBlock Grid.Row="2" Text="Auto-check" />
+                            <TextBlock x:Name="AutoCheckText" Grid.Row="2" Grid.Column="1" FontWeight="SemiBold" Text="Loading..." />
+
+                            <TextBlock Grid.Row="3" Text="Start with Windows" />
+                            <TextBlock x:Name="StartupText" Grid.Row="3" Grid.Column="1" FontWeight="SemiBold" Text="Loading..." />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    Grid.Column="1"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16">
+                    <StackPanel Spacing="14">
+                        <StackPanel Spacing="4">
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Backend-backed settings" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="These values will become live controls in the next settings task."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <Grid ColumnSpacing="16" RowSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="API key state" />
+                            <TextBlock x:Name="ApiKeyStateText" Grid.Row="0" Grid.Column="1" FontWeight="SemiBold" Text="Loading..." />
+
+                            <TextBlock Grid.Row="1" Text="Images folder" />
+                            <TextBlock x:Name="ImagesDirectoryText" Grid.Row="1" Grid.Column="1" FontWeight="SemiBold" Text="Loading..." TextWrapping="WrapWholeWords" />
+
+                            <TextBlock Grid.Row="2" Text="Storage mode" />
+                            <TextBlock x:Name="StorageModeText" Grid.Row="2" Grid.Column="1" FontWeight="SemiBold" Text="Loading..." />
+
+                            <TextBlock Grid.Row="3" Text="Local image index" />
+                            <TextBlock x:Name="LocalImageIndexText" Grid.Row="3" Grid.Column="1" FontWeight="SemiBold" Text="Loading..." />
+
+                            <TextBlock Grid.Row="4" Text="Double-click action" />
+                            <TextBlock x:Name="TrayActionText" Grid.Row="4" Grid.Column="1" FontWeight="SemiBold" Text="Loading..." />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Grid Grid.Row="3" ColumnSpacing="16" RowSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1.2*" />
+                    <ColumnDefinition Width="0.8*" />
+                </Grid.ColumnDefinitions>
+
+                <Border
+                    Grid.Column="0"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="Summary" />
+                        <TextBlock
+                            x:Name="SnapshotSummaryText"
+                            Text="Loading backend state..."
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    Grid.Column="1"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="Host diagnostics" />
+                        <TextBlock
+                            Text="Settings store: JsonSettingsStore&#x0a;Secret store: DpapiUserSecretStore&#x0a;Startup adapter: StoreStartupRegistrationService&#x0a;Backend facade: ApplicationController"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </Grid>
 
             <Border
                 Grid.Row="4"
@@ -67,14 +176,14 @@
                 Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
-                CornerRadius="12">
+                CornerRadius="16">
                 <StackPanel Spacing="8">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="Tray spike status" />
                     <TextBlock x:Name="TrayStatusText" Text="Tray spike not initialized yet." TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
-            <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="12">
+            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Left" Spacing="12">
                 <Button Click="HideToTrayButton_Click" Content="Hide to tray" />
                 <Button Click="RefreshButton_Click" Content="Refresh snapshot" />
                 <Button Click="ExitButton_Click" Content="Exit application" />

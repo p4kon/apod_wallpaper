@@ -87,15 +87,26 @@ public sealed partial class MainPage : Page
         StatusBar.Title = "Backend initialized";
         StatusBar.Message = "The WinUI host created ApplicationController and loaded the initial snapshot in one backend call.";
 
+        PreferredDateText.Text = snapshot.PreferredDisplayDate.ToString("yyyy-MM-dd");
+        WallpaperStyleText.Text = snapshot.SelectedWallpaperStyle.ToString();
+        AutoCheckText.Text = snapshot.Settings.AutoRefreshEnabled ? "Enabled" : "Disabled";
+        StartupText.Text = snapshot.Settings.StartWithWindows ? "Enabled" : "Disabled";
+        ApiKeyStateText.Text = FormatApiKeyState(snapshot);
+        ImagesDirectoryText.Text = !string.IsNullOrWhiteSpace(snapshot.StoragePaths.ImagesDirectory)
+            ? snapshot.StoragePaths.ImagesDirectory
+            : "Not configured";
+        StorageModeText.Text = snapshot.StoragePaths.Mode.ToString();
+        LocalImageIndexText.Text = snapshot.LocalImageIndexReady ? "Ready" : "Not ready yet";
+        TrayActionText.Text = snapshot.Settings.TrayDoubleClickAction
+            ? "Apply latest APOD"
+            : "Default window action";
+
         SnapshotSummaryText.Text = string.Join(Environment.NewLine, new[]
         {
-            "Preferred date: " + snapshot.PreferredDisplayDate.ToString("yyyy-MM-dd"),
-            "Wallpaper style: " + snapshot.SelectedWallpaperStyle,
-            "API key state: " + snapshot.ApiKeyValidationState,
-            "Storage mode: " + snapshot.StoragePaths.Mode,
-            "Images directory: " + snapshot.StoragePaths.ImagesDirectory,
+            "One backend call returned both current state and persisted settings.",
+            "This screen is intentionally readonly for now.",
+            "Next step will turn these same state blocks into live settings controls without adding duplicate screens.",
             "Settings file: " + snapshot.StoragePaths.SettingsFilePath,
-            "Local image index ready: " + snapshot.LocalImageIndexReady,
         });
     }
 
@@ -135,6 +146,30 @@ public sealed partial class MainPage : Page
         StatusBar.Title = "Backend startup failed";
         StatusBar.Message = message;
         SnapshotSummaryText.Text = message;
+        PreferredDateText.Text = "Unavailable";
+        WallpaperStyleText.Text = "Unavailable";
+        AutoCheckText.Text = "Unavailable";
+        StartupText.Text = "Unavailable";
+        ApiKeyStateText.Text = "Unavailable";
+        ImagesDirectoryText.Text = "Unavailable";
+        StorageModeText.Text = "Unavailable";
+        LocalImageIndexText.Text = "Unavailable";
+        TrayActionText.Text = "Unavailable";
+    }
+
+    private static string FormatApiKeyState(apod_wallpaper.ApplicationInitialStateSnapshot snapshot)
+    {
+        var rawKey = snapshot.Settings != null ? snapshot.Settings.NasaApiKey : null;
+        var usesDemoKey = string.IsNullOrWhiteSpace(rawKey) ||
+            string.Equals(rawKey, "DEMO_KEY", StringComparison.OrdinalIgnoreCase);
+
+        if (snapshot.ApiKeyValidationState == apod_wallpaper.ApiKeyValidationState.Valid && !usesDemoKey)
+            return "Valid personal key";
+
+        if (snapshot.ApiKeyValidationState == apod_wallpaper.ApiKeyValidationState.Invalid)
+            return "Invalid key, using DEMO_KEY";
+
+        return "DEMO_KEY / no personal key";
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
