@@ -21,6 +21,7 @@ The PoC should validate only the host/platform risk areas:
 3. Main window show/hide lifecycle
 4. Calling `apod_wallpaper.Core` from the new host
 5. Wallpaper apply from the packaged context
+6. Capability and packaged-storage behavior analysis
 
 ## Explicit Non-Goals
 
@@ -32,6 +33,9 @@ The PoC should **not** attempt to build:
 - API key editor UX
 - final app navigation
 - full Store metadata
+- final startup registration UX
+
+Startup registration integration is **out of scope** for this PoC and should be validated later in the Store technical debt phase.
 
 Those belong to the real frontend implementation after the PoC passes.
 
@@ -44,6 +48,8 @@ The PoC must prove the following behavior works:
 3. The tray interaction can restore the main window.
 4. The tray interaction can trigger at least one backend action.
 5. The host can call backend initialization and at least one wallpaper workflow operation successfully.
+6. The host can document which capabilities or restricted capabilities were required, if any.
+7. The host can confirm whether backend storage works unchanged in packaged context or requires a dedicated Store storage adaptation.
 
 ## Minimal Backend Integration
 
@@ -55,6 +61,19 @@ The PoC must use the real backend composition shape:
 - `ApplicationController`
 
 It is acceptable for the PoC startup registration service to be a temporary no-op implementation if startup integration is not part of the spike.
+
+## Current Known Backend Constraint
+
+At the moment, `apod_wallpaper.Core` exposes storage modes for:
+
+- `LocalApplicationData`
+- `Portable`
+
+It does **not** currently expose a dedicated `StoreStorageMode`.
+
+This means the PoC must explicitly validate whether the existing `LocalApplicationData` layout works correctly under a packaged WinUI 3 host.
+
+If packaged storage behavior requires a dedicated adaptation, that is a valid PoC finding and should be recorded as required host/backend follow-up work.
 
 ## Required Scenarios
 
@@ -90,6 +109,14 @@ The PoC passes only if all scenarios below work:
 - Host triggers a backend wallpaper apply flow
 - Wallpaper changes successfully from packaged host context
 
+### Scenario 6: Capability and storage analysis
+
+- Verify whether wallpaper apply works without `runFullTrust`
+- If not, record exactly which capability or restricted capability is required
+- Verify whether tray behavior needs additional packaged capabilities
+- Verify that backend settings/secrets/storage can initialize and write successfully in packaged context
+- If storage fails, capture whether the fix belongs in host composition or in a new backend storage mode
+
 ## Success Criteria
 
 The PoC is successful if:
@@ -97,7 +124,9 @@ The PoC is successful if:
 1. Tray lifecycle is stable.
 2. Packaged host can call backend without architectural hacks.
 3. Wallpaper apply works.
-4. No blocker is found that would force a redesign of the app's Windows behavior.
+4. Capability requirements are understood and documented.
+5. Storage behavior in packaged context is understood and documented.
+6. No blocker is found that would force a redesign of the app's Windows behavior.
 
 ## Failure Criteria
 
@@ -107,6 +136,7 @@ The PoC is considered failed if any of the following happen:
 2. Wallpaper application fails due to packaged host restrictions.
 3. The only workaround requires a second hidden helper process or architectural split that materially complicates the product.
 4. The host must depend on WinForms in order to function.
+5. Packaged storage fails in a way that forces a broader backend redesign instead of a bounded host/storage adaptation.
 
 ## Deliverables
 
@@ -118,6 +148,13 @@ The PoC phase should end with:
    - what worked
    - what did not work
    - what host changes are required for the real project
+3. A capability analysis note:
+   - whether `runFullTrust` was required
+   - whether any other packaged capability was required
+   - whether tray and wallpaper apply behave differently under packaged restrictions
+4. A storage analysis note:
+   - whether current backend storage worked unchanged
+   - whether a Store-specific storage adaptation is needed
 
 ## Decision After PoC
 
