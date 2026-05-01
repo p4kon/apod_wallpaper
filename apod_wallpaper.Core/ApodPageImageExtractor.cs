@@ -23,6 +23,22 @@ namespace apod_wallpaper
             "(?<url>(?:https?:)?//[^\\s\"'<>]+\\.(?:jpg|jpeg|png|gif|bmp|webp|tif|tiff)|(?:\\.?\\.?/)?image/[^\\s\"'<>]+\\.(?:jpg|jpeg|png|gif|bmp|webp|tif|tiff))",
             RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
+        private static readonly Regex VideoTagSourceRegex = new Regex(
+            "<source\\b[^>]*src\\s*=\\s*[\"'](?<src>[^\"']+)[\"'][^>]*type\\s*=\\s*[\"']video/[^\"']+[\"'][^>]*>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+        private static readonly Regex VideoTagRegex = new Regex(
+            "<video\\b[^>]*>.*?</video>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+        private static readonly Regex IframeRegex = new Regex(
+            "<iframe\\b[^>]*src\\s*=\\s*[\"'](?<src>[^\"']+)[\"'][^>]*>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+        private static readonly Regex VideoPathRegex = new Regex(
+            "(?<url>(?:https?:)?//[^\\s\"'<>]+\\.(?:mp4|mov|webm|m4v)|(?:\\.?\\.?/)?image/[^\\s\"'<>]+\\.(?:mp4|mov|webm|m4v)|https?:\\/\\/(?:www\\.)?youtube\\.com\\/embed\\/[^\\s\"'<>]+|https?:\\/\\/(?:www\\.)?youtube\\.com\\/watch\\?[^\\s\"'<>]+|https?:\\/\\/youtu\\.be\\/[^\\s\"'<>]+)",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
         public static bool TryExtract(string html, string pageUrl, out string previewUrl, out string imageUrl)
         {
             previewUrl = null;
@@ -81,6 +97,57 @@ namespace apod_wallpaper
             previewUrl = bestCandidate.PreviewUrl ?? bestCandidate.ImageUrl;
             imageUrl = bestCandidate.ImageUrl ?? bestCandidate.PreviewUrl;
             return !string.IsNullOrWhiteSpace(previewUrl) || !string.IsNullOrWhiteSpace(imageUrl);
+        }
+
+        public static bool TryExtractVideo(string html, string pageUrl, out string videoUrl)
+        {
+            videoUrl = null;
+
+            if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(pageUrl))
+                return false;
+
+            var baseUri = new Uri(pageUrl, UriKind.Absolute);
+            var relevantHtml = ExtractRelevantHtml(html);
+            if (string.IsNullOrWhiteSpace(relevantHtml))
+                return false;
+
+            foreach (Match match in VideoTagSourceRegex.Matches(relevantHtml))
+            {
+                var sourceUrl = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
+                if (LooksLikeVideoUrl(sourceUrl))
+                {
+                    videoUrl = sourceUrl;
+                    return true;
+                }
+            }
+
+            foreach (Match match in IframeRegex.Matches(relevantHtml))
+            {
+                var sourceUrl = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
+                if (LooksLikeVideoUrl(sourceUrl))
+                {
+                    videoUrl = sourceUrl;
+                    return true;
+                }
+            }
+
+            foreach (Match match in VideoPathRegex.Matches(relevantHtml))
+            {
+                var sourceUrl = ToAbsoluteUrl(baseUri, match.Groups["url"].Value);
+                if (LooksLikeVideoUrl(sourceUrl))
+                {
+                    videoUrl = sourceUrl;
+                    return true;
+                }
+            }
+
+            if (VideoTagRegex.IsMatch(relevantHtml))
+            {
+                videoUrl = pageUrl;
+                return true;
+            }
+
+            return false;
         }
 
         private static string ExtractRelevantHtml(string html)
@@ -149,6 +216,33 @@ namespace apod_wallpaper
                 return false;
 
             return ImageFormatCatalog.IsSupportedImageExtension(extension);
+        }
+
+        public static bool LooksLikeVideoUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return false;
+
+            if (url.IndexOf("youtube.com/embed/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                url.IndexOf("youtube.com/watch", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                url.IndexOf("youtu.be/", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            Uri uri;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out uri) && !Uri.TryCreate(url, UriKind.Relative, out uri))
+                return false;
+
+            var path = uri.IsAbsoluteUri ? uri.AbsolutePath : uri.OriginalString;
+            var extension = System.IO.Path.GetExtension(path);
+            if (string.IsNullOrWhiteSpace(extension))
+                return false;
+
+            return extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".mov", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".webm", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".m4v", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string ToAbsoluteUrl(Uri baseUri, string candidate)

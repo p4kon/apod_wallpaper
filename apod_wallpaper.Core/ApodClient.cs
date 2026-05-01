@@ -405,8 +405,15 @@ namespace apod_wallpaper
             string imageUrl;
             if (!ApodPageImageExtractor.TryExtract(pageHtml, pageUrl, out previewUrl, out imageUrl))
             {
+                string videoUrl;
+                if (ApodPageImageExtractor.TryExtractVideo(pageHtml, pageUrl, out videoUrl))
+                {
+                    AppLogger.Web("source=apod_html scope=page_only result=video date=" + date.ToString("yyyy-MM-dd") + " url=" + (videoUrl ?? "<null>"));
+                    return CreateVideoEntry(date, videoUrl);
+                }
+
                 AppLogger.Web("source=apod_html scope=page_only result=no_image date=" + date.ToString("yyyy-MM-dd"));
-                throw new InvalidOperationException("Unable to extract APOD image from the page for " + date.ToString("yyyy-MM-dd") + ".");
+                throw new InvalidOperationException("Unable to extract APOD image or known video from the page for " + date.ToString("yyyy-MM-dd") + ".");
             }
 
             AppLogger.Web("source=apod_html scope=page_only result=image date=" + date.ToString("yyyy-MM-dd") + " preview=" + (previewUrl ?? "<null>") + " image=" + (imageUrl ?? "<null>"));
@@ -432,8 +439,15 @@ namespace apod_wallpaper
             string imageUrl;
             if (!ApodPageImageExtractor.TryExtract(pageHtml, pageUrl, out previewUrl, out imageUrl))
             {
+                string videoUrl;
+                if (ApodPageImageExtractor.TryExtractVideo(pageHtml, pageUrl, out videoUrl))
+                {
+                    AppLogger.Web("source=apod_html scope=page_only_async result=video date=" + date.ToString("yyyy-MM-dd") + " url=" + (videoUrl ?? "<null>"));
+                    return CreateVideoEntry(date, videoUrl);
+                }
+
                 AppLogger.Web("source=apod_html scope=page_only_async result=no_image date=" + date.ToString("yyyy-MM-dd"));
-                throw new InvalidOperationException("Unable to extract APOD image from the page for " + date.ToString("yyyy-MM-dd") + ".");
+                throw new InvalidOperationException("Unable to extract APOD image or known video from the page for " + date.ToString("yyyy-MM-dd") + ".");
             }
 
             AppLogger.Web("source=apod_html scope=page_only_async result=image date=" + date.ToString("yyyy-MM-dd") + " preview=" + (previewUrl ?? "<null>") + " image=" + (imageUrl ?? "<null>"));
@@ -446,6 +460,19 @@ namespace apod_wallpaper
                 MediaType = "image",
                 ResolvedFromSource = "html_fallback",
                 IsFallbackImage = true,
+            };
+        }
+
+        private static ApodEntry CreateVideoEntry(DateTime date, string videoUrl)
+        {
+            return new ApodEntry
+            {
+                Date = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                Url = videoUrl,
+                HdUrl = null,
+                MediaType = "video",
+                ResolvedFromSource = "html_fallback",
+                IsFallbackImage = false,
             };
         }
 
