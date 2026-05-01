@@ -25,6 +25,9 @@ public sealed partial class MainPage : Page
         public required TextBlock DayNumberText { get; init; }
         public required TextBlock StatusText { get; init; }
         public bool IsLoading { get; set; }
+        public apod_wallpaper.ApodCalendarDayState? CurrentDayState { get; set; }
+        public DateTime LatestPublishedDate { get; set; }
+        public string? LastVisualSignature { get; set; }
     }
 
     private static readonly SolidColorBrush CalendarGreenBrush = new(ColorHelper.FromArgb(0xFF, 0x3D, 0x8C, 0x63));
@@ -52,6 +55,7 @@ public sealed partial class MainPage : Page
     private long _lastPreviewBackendElapsedMs;
     private long _lastMonthCachedElapsedMs;
     private string? _pendingPreviewLocation;
+    private const int WarmupVisualStepDelayMs = 16;
 
     public MainPage()
     {
@@ -217,7 +221,7 @@ public sealed partial class MainPage : Page
         }
 
         _currentMonthState = cachedResult.Value;
-        RenderCalendarMonth(_currentMonthState);
+        await ApplyCalendarMonthStateAsync(_currentMonthState, progressive: false, requestVersion);
         SetMonthReadyState(_currentMonthState, warmed: false);
 
         if (!ShouldWarmMonth(month))
@@ -250,7 +254,7 @@ public sealed partial class MainPage : Page
         }
 
         _currentMonthState = refreshedResult.Value;
-        RenderCalendarMonth(_currentMonthState);
+        await ApplyCalendarMonthStateAsync(_currentMonthState, progressive: true, requestVersion);
         if (!IsCurrentMonth(month))
             _warmedMonths.Add(month.Date);
 
@@ -284,7 +288,7 @@ public sealed partial class MainPage : Page
         SelectedDateText.Text = "Calendar unavailable";
     }
 
-    private void RenderCalendarMonth(apod_wallpaper.ApodCalendarMonthState monthState)
+    private async Task ApplyCalendarMonthStateAsync(apod_wallpaper.ApodCalendarMonthState monthState, bool progressive, int requestVersion)
     {
         EnsureCalendarGridDefinitions();
         EnsureCalendarMonthBuilt(monthState.Month);
@@ -294,6 +298,7 @@ public sealed partial class MainPage : Page
 
         var monthStart = monthState.Month;
         var daysInMonth = DateTime.DaysInMonth(monthStart.Year, monthStart.Month);
+        var changedVisuals = new List<(CalendarDayVisual Visual, apod_wallpaper.ApodCalendarDayState? DayState)>();
 
         for (var day = 1; day <= daysInMonth; day++)
         {
@@ -301,7 +306,27 @@ public sealed partial class MainPage : Page
             monthState.TryGetDay(date, out var dayState);
 
             if (_calendarDayVisuals.TryGetValue(date.Date, out var visual))
-                UpdateCalendarDayVisual(visual, date, dayState, monthState.LatestPublishedDate, isLoading: false);
+            {
+                if (NeedsCalendarDayUpdate(visual, dayState, monthState.LatestPublishedDate, isLoading: false))
+                    changedVisuals.Add((visual, dayState));
+            }
+        }
+
+        if (!progressive || changedVisuals.Count <= 1)
+        {
+            foreach (var changedVisual in changedVisuals)
+                UpdateCalendarDayVisual(changedVisual.Visual, changedVisual.Visual.Date, changedVisual.DayState, monthState.LatestPublishedDate, isLoading: false);
+
+            return;
+        }
+
+        foreach (var changedVisual in changedVisuals)
+        {
+            if (requestVersion != _monthRequestVersion)
+                return;
+
+            UpdateCalendarDayVisual(changedVisual.Visual, changedVisual.Visual.Date, changedVisual.DayState, monthState.LatestPublishedDate, isLoading: false);
+            await Task.Delay(WarmupVisualStepDelayMs);
         }
     }
 
@@ -398,6 +423,9 @@ public sealed partial class MainPage : Page
         visual.Button.IsEnabled = !isFuture;
         visual.Button.Tag = date;
         visual.IsLoading = isLoading;
+        visual.CurrentDayState = dayState;
+        visual.LatestPublishedDate = latestPublishedDate;
+        visual.LastVisualSignature = BuildCalendarDaySignature(date, dayState, latestPublishedDate, isLoading);
 
         ToolTipService.SetToolTip(
             visual.Button,
@@ -415,7 +443,7 @@ public sealed partial class MainPage : Page
         RefreshSelectedDateText();
 
         if (_currentMonthState != null)
-            RenderCalendarMonth(_currentMonthState);
+            await ApplyCalendarMonthStateAsync(_currentMonthState, progressive: false, _monthRequestVersion);
         else
             UpdateCalendarSelectionOnly();
 
@@ -475,7 +503,7 @@ public sealed partial class MainPage : Page
             return;
 
         _currentMonthState = refreshedResult.Value;
-        RenderCalendarMonth(_currentMonthState);
+        await ApplyCalendarMonthStateAsync(_currentMonthState, progressive: false, _monthRequestVersion);
         SetMonthReadyState(_currentMonthState, warmed: false);
     }
 
@@ -911,16 +939,45 @@ public sealed partial class MainPage : Page
 
     private void UpdateCalendarSelectionOnly()
     {
-        var latestPublishedDate = _currentMonthState?.LatestPublishedDate ?? GetLoadingLatestPublishedDate(_visibleMonth);
         foreach (var visual in _calendarDayVisuals.Values)
         {
-            UpdateCalendarDayVisual(
-                visual,
-                visual.Date,
-                dayState: null,
-                latestPublishedDate,
-                isLoading: visual.IsLoading);
+            if (!NeedsCalendarDayUpdate(visual, visual.CurrentDayState, visual.LatestPublishedDate, visual.IsLoading))
+                continue;
+
+            UpdateCalendarDayVisual(visual, visual.Date, visual.CurrentDayState, visual.LatestPublishedDate, visual.IsLoading);
         }
+    }
+
+    private bool NeedsCalendarDayUpdate(
+        CalendarDayVisual visual,
+        apod_wallpaper.ApodCalendarDayState? dayState,
+        DateTime latestPublishedDate,
+        bool isLoading)
+    {
+        var targetSignature = BuildCalendarDaySignature(visual.Date, dayState, latestPublishedDate, isLoading);
+        return !string.Equals(visual.LastVisualSignature, targetSignature, StringComparison.Ordinal);
+    }
+
+    private string BuildCalendarDaySignature(
+        DateTime date,
+        apod_wallpaper.ApodCalendarDayState? dayState,
+        DateTime latestPublishedDate,
+        bool isLoading)
+    {
+        var isFuture = date.Date > latestPublishedDate.Date;
+        var hasLocalImage = dayState?.IsLocalImageAvailable == true;
+        var hasRemoteImage = dayState?.IsKnown == true && dayState.HasImage && !hasLocalImage;
+        var isUnsupported = dayState?.IsKnown == true && !dayState.HasImage;
+        var isSelected = _selectedDate.Date == date.Date;
+
+        return string.Join(
+            "|",
+            isFuture ? "future" : "active",
+            hasLocalImage ? "local" : "no-local",
+            hasRemoteImage ? "remote" : "no-remote",
+            isUnsupported ? "unsupported" : "supported",
+            isLoading ? "loading" : "ready",
+            isSelected ? "selected" : "idle");
     }
 
     private static DateTime GetLoadingLatestPublishedDate(DateTime month)
