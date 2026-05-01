@@ -838,6 +838,7 @@ public sealed partial class MainPage : Page
                 using IRandomAccessStream stream = await previewFile.OpenReadAsync();
                 await bitmap.SetSourceAsync(stream);
                 PreviewImage.Source = bitmap;
+                CompletePreviewImageRender();
             }
             else
             {
@@ -860,6 +861,11 @@ public sealed partial class MainPage : Page
     }
 
     private void PreviewImage_ImageOpened(object sender, RoutedEventArgs e)
+    {
+        CompletePreviewImageRender();
+    }
+
+    private void CompletePreviewImageRender()
     {
         if (!_previewImageStopwatch.IsRunning)
             return;
