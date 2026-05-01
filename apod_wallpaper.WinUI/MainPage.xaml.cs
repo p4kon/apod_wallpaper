@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +18,15 @@ namespace apod_wallpaper.WinUI;
 
 public sealed partial class MainPage : Page
 {
+    private sealed class CalendarDayVisual
+    {
+        public required DateTime Date { get; init; }
+        public required Button Button { get; init; }
+        public required TextBlock DayNumberText { get; init; }
+        public required TextBlock StatusText { get; init; }
+        public bool IsLoading { get; set; }
+    }
+
     private static readonly SolidColorBrush CalendarGreenBrush = new(ColorHelper.FromArgb(0xFF, 0x3D, 0x8C, 0x63));
     private static readonly SolidColorBrush CalendarBlueBrush = new(ColorHelper.FromArgb(0xFF, 0x2F, 0x79, 0xD9));
     private static readonly SolidColorBrush CalendarRedBrush = new(ColorHelper.FromArgb(0xFF, 0xC4, 0x5A, 0x5A));
@@ -35,8 +44,10 @@ public sealed partial class MainPage : Page
     private int _previewRequestVersion;
     private int _monthRequestVersion;
     private readonly HashSet<DateTime> _warmedMonths = new();
+    private readonly Dictionary<DateTime, CalendarDayVisual> _calendarDayVisuals = new();
     private DateTime _selectedDate = DateTime.Today;
     private DateTime _visibleMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? _renderedCalendarMonth;
     private readonly Stopwatch _previewImageStopwatch = new();
     private long _lastPreviewBackendElapsedMs;
     private long _lastMonthCachedElapsedMs;
@@ -48,7 +59,7 @@ public sealed partial class MainPage : Page
         EnsureCalendarGridDefinitions();
         VisibleMonthText.Text = _visibleMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
         RefreshSelectedDateText();
-        RenderCalendarSkeleton(_visibleMonth);
+        EnsureCalendarMonthBuilt(_visibleMonth);
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -163,7 +174,8 @@ public sealed partial class MainPage : Page
         _visibleMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
         RefreshSelectedDateText();
         VisibleMonthText.Text = _visibleMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
-        RenderCalendarSkeleton(_visibleMonth);
+        EnsureCalendarMonthBuilt(_visibleMonth);
+        UpdateCalendarSelectionOnly();
 
         SnapshotSummaryText.Text = string.Join(Environment.NewLine, new[]
         {
@@ -184,7 +196,8 @@ public sealed partial class MainPage : Page
         var month = new DateTime(_visibleMonth.Year, _visibleMonth.Month, 1);
         var requestVersion = Interlocked.Increment(ref _monthRequestVersion);
         VisibleMonthText.Text = month.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
-        RenderCalendarSkeleton(month);
+        EnsureCalendarMonthBuilt(month);
+        SetCalendarToLoadingState(month);
 
         MonthStatusBar.Severity = InfoBarSeverity.Informational;
         MonthStatusBar.Title = "Loading cached month state";
@@ -268,39 +281,82 @@ public sealed partial class MainPage : Page
         MonthStatusBar.Severity = InfoBarSeverity.Error;
         MonthStatusBar.Title = "Calendar month failed";
         MonthStatusBar.Message = message;
-        CalendarDaysGrid.Children.Clear();
         SelectedDateText.Text = "Calendar unavailable";
     }
 
     private void RenderCalendarMonth(apod_wallpaper.ApodCalendarMonthState monthState)
     {
         EnsureCalendarGridDefinitions();
-        CalendarDaysGrid.Children.Clear();
+        EnsureCalendarMonthBuilt(monthState.Month);
 
         VisibleMonthText.Text = monthState.Month.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
         RefreshSelectedDateText();
 
         var monthStart = monthState.Month;
         var daysInMonth = DateTime.DaysInMonth(monthStart.Year, monthStart.Month);
-        var startOffset = GetMondayFirstOffset(monthStart.DayOfWeek);
 
         for (var day = 1; day <= daysInMonth; day++)
         {
             var date = new DateTime(monthStart.Year, monthStart.Month, day);
             monthState.TryGetDay(date, out var dayState);
 
-            var cellIndex = startOffset + (day - 1);
-            var row = cellIndex / 7;
-            var column = cellIndex % 7;
-
-            var button = CreateCalendarDayButton(date, dayState, monthState.LatestPublishedDate);
-            Grid.SetRow(button, row);
-            Grid.SetColumn(button, column);
-            CalendarDaysGrid.Children.Add(button);
+            if (_calendarDayVisuals.TryGetValue(date.Date, out var visual))
+                UpdateCalendarDayVisual(visual, date, dayState, monthState.LatestPublishedDate, isLoading: false);
         }
     }
 
-    private Button CreateCalendarDayButton(DateTime date, apod_wallpaper.ApodCalendarDayState? dayState, DateTime latestPublishedDate)
+    private CalendarDayVisual CreateCalendarDayVisual(DateTime date)
+    {
+        var dayNumberText = new TextBlock
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+
+        var statusText = new TextBlock
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            FontSize = 10,
+            Opacity = 0.92,
+        };
+
+        var content = new StackPanel
+        {
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        content.Children.Add(dayNumberText);
+        content.Children.Add(statusText);
+
+        var button = new Button
+        {
+            Content = content,
+            Padding = new Thickness(6),
+            MinHeight = 58,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            CornerRadius = new CornerRadius(12),
+            Tag = date,
+        };
+
+        button.Click += CalendarDayButton_Click;
+
+        return new CalendarDayVisual
+        {
+            Date = date.Date,
+            Button = button,
+            DayNumberText = dayNumberText,
+            StatusText = statusText,
+            IsLoading = true,
+        };
+    }
+
+    private void UpdateCalendarDayVisual(
+        CalendarDayVisual visual,
+        DateTime date,
+        apod_wallpaper.ApodCalendarDayState? dayState,
+        DateTime latestPublishedDate,
+        bool isLoading)
     {
         var isFuture = date.Date > latestPublishedDate.Date;
         var hasLocalImage = dayState?.IsLocalImageAvailable == true;
@@ -329,46 +385,25 @@ public sealed partial class MainPage : Page
             background = CalendarRedBrush;
         }
 
-        var content = new StackPanel
-        {
-            Spacing = 2,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        visual.DayNumberText.Text = date.Day.ToString(CultureInfo.InvariantCulture);
+        visual.DayNumberText.FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal;
+        visual.StatusText.Text = isLoading
+            ? (isFuture ? "future" : "loading")
+            : BuildMiniStatusLabel(isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown);
 
-        content.Children.Add(new TextBlock
-        {
-            Text = date.Day.ToString(CultureInfo.InvariantCulture),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal,
-        });
+        visual.Button.Background = background;
+        visual.Button.Foreground = foreground;
+        visual.Button.BorderBrush = isSelected ? CalendarSelectedBorderBrush : background;
+        visual.Button.BorderThickness = isSelected ? new Thickness(2) : new Thickness(1);
+        visual.Button.IsEnabled = !isFuture;
+        visual.Button.Tag = date;
+        visual.IsLoading = isLoading;
 
-        content.Children.Add(new TextBlock
-        {
-            Text = BuildMiniStatusLabel(isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            FontSize = 10,
-            Opacity = 0.92,
-        });
-
-        var button = new Button
-        {
-            Content = content,
-            Padding = new Thickness(6),
-            MinHeight = 58,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            Background = background,
-            Foreground = foreground,
-            BorderBrush = isSelected ? CalendarSelectedBorderBrush : background,
-            BorderThickness = isSelected ? new Thickness(2) : new Thickness(1),
-            CornerRadius = new CornerRadius(12),
-            Tag = date,
-            IsEnabled = !isFuture,
-        };
-
-        button.Click += CalendarDayButton_Click;
-        ToolTipService.SetToolTip(button, BuildDayTooltip(date, isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown));
-        return button;
+        ToolTipService.SetToolTip(
+            visual.Button,
+            isLoading && !isFuture
+                ? date.ToString("dddd, dd MMMM yyyy", CultureInfo.CurrentCulture) + Environment.NewLine + "Loading calendar state"
+                : BuildDayTooltip(date, isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown));
     }
 
     private async void CalendarDayButton_Click(object sender, RoutedEventArgs e)
@@ -381,6 +416,8 @@ public sealed partial class MainPage : Page
 
         if (_currentMonthState != null)
             RenderCalendarMonth(_currentMonthState);
+        else
+            UpdateCalendarSelectionOnly();
 
         await LoadPreviewForSelectedDateAsync();
     }
@@ -689,7 +726,6 @@ public sealed partial class MainPage : Page
         PreviewProgressRing.Visibility = Visibility.Collapsed;
         VisibleMonthText.Text = "Unavailable";
         SelectedDateText.Text = "Unavailable";
-        CalendarDaysGrid.Children.Clear();
     }
 
     private static string FormatApiKeyState(apod_wallpaper.ApplicationInitialStateSnapshot snapshot)
@@ -831,69 +867,72 @@ public sealed partial class MainPage : Page
             CalendarDaysGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
     }
 
-    private void RenderCalendarSkeleton(DateTime month)
+    private void EnsureCalendarMonthBuilt(DateTime month)
     {
         EnsureCalendarGridDefinitions();
-        CalendarDaysGrid.Children.Clear();
 
-        var monthStart = new DateTime(month.Year, month.Month, 1);
-        var daysInMonth = DateTime.DaysInMonth(monthStart.Year, monthStart.Month);
-        var startOffset = GetMondayFirstOffset(monthStart.DayOfWeek);
-        var today = DateTime.Today;
+        var normalizedMonth = new DateTime(month.Year, month.Month, 1);
+        if (_renderedCalendarMonth == normalizedMonth)
+            return;
+
+        CalendarDaysGrid.Children.Clear();
+        _calendarDayVisuals.Clear();
+        _renderedCalendarMonth = normalizedMonth;
+
+        var daysInMonth = DateTime.DaysInMonth(normalizedMonth.Year, normalizedMonth.Month);
+        var startOffset = GetMondayFirstOffset(normalizedMonth.DayOfWeek);
 
         for (var day = 1; day <= daysInMonth; day++)
         {
-            var date = new DateTime(monthStart.Year, monthStart.Month, day);
+            var date = new DateTime(normalizedMonth.Year, normalizedMonth.Month, day);
             var cellIndex = startOffset + (day - 1);
             var row = cellIndex / 7;
             var column = cellIndex % 7;
-            var isSelected = _selectedDate.Date == date.Date;
-            var isFuture = date.Date > today.Date;
 
-            var content = new StackPanel
-            {
-                Spacing = 2,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
+            var visual = CreateCalendarDayVisual(date);
+            _calendarDayVisuals[date.Date] = visual;
 
-            content.Children.Add(new TextBlock
-            {
-                Text = date.Day.ToString(CultureInfo.InvariantCulture),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal,
-            });
-
-            content.Children.Add(new TextBlock
-            {
-                Text = isFuture ? "future" : "loading",
-                HorizontalAlignment = HorizontalAlignment.Center,
-                FontSize = 10,
-                Opacity = 0.92,
-            });
-
-            var button = new Button
-            {
-                Content = content,
-                Padding = new Thickness(6),
-                MinHeight = 58,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                Background = isFuture ? CalendarFutureBrush : CalendarUnknownBrush,
-                Foreground = isFuture ? CalendarFutureForegroundBrush : CalendarDefaultForegroundBrush,
-                BorderBrush = isSelected ? CalendarSelectedBorderBrush : (isFuture ? CalendarFutureBrush : CalendarUnknownBrush),
-                BorderThickness = isSelected ? new Thickness(2) : new Thickness(1),
-                CornerRadius = new CornerRadius(12),
-                Tag = date,
-                IsEnabled = !isFuture,
-            };
-
-            button.Click += CalendarDayButton_Click;
-            ToolTipService.SetToolTip(button, date.ToString("dddd, dd MMMM yyyy", CultureInfo.CurrentCulture) + Environment.NewLine + (isFuture ? "Future date" : "Loading calendar state"));
-
-            Grid.SetRow(button, row);
-            Grid.SetColumn(button, column);
-            CalendarDaysGrid.Children.Add(button);
+            Grid.SetRow(visual.Button, row);
+            Grid.SetColumn(visual.Button, column);
+            CalendarDaysGrid.Children.Add(visual.Button);
         }
+
+        SetCalendarToLoadingState(normalizedMonth);
+    }
+
+    private void SetCalendarToLoadingState(DateTime month)
+    {
+        var latestPublishedDate = GetLoadingLatestPublishedDate(month);
+        foreach (var visual in _calendarDayVisuals.Values)
+        {
+            UpdateCalendarDayVisual(visual, visual.Date, dayState: null, latestPublishedDate, isLoading: true);
+        }
+    }
+
+    private void UpdateCalendarSelectionOnly()
+    {
+        var latestPublishedDate = _currentMonthState?.LatestPublishedDate ?? GetLoadingLatestPublishedDate(_visibleMonth);
+        foreach (var visual in _calendarDayVisuals.Values)
+        {
+            UpdateCalendarDayVisual(
+                visual,
+                visual.Date,
+                dayState: null,
+                latestPublishedDate,
+                isLoading: visual.IsLoading);
+        }
+    }
+
+    private static DateTime GetLoadingLatestPublishedDate(DateTime month)
+    {
+        var normalizedMonth = new DateTime(month.Year, month.Month, 1);
+        var today = DateTime.Today;
+        if (normalizedMonth.Year == today.Year && normalizedMonth.Month == today.Month)
+            return today;
+
+        return normalizedMonth < new DateTime(today.Year, today.Month, 1)
+            ? new DateTime(normalizedMonth.Year, normalizedMonth.Month, DateTime.DaysInMonth(normalizedMonth.Year, normalizedMonth.Month))
+            : normalizedMonth.AddDays(-1);
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
