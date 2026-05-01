@@ -498,6 +498,12 @@ namespace apod_wallpaper
 
             lock (DemoDatedApiSyncRoot)
             {
+                if (string.Equals(ResolveApiKey(), DemoApiKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    AppLogger.Web("source=nasa_api scope=demo_guard result=demo_html_only");
+                    return true;
+                }
+
                 if (_demoDatedApiBlockedUntilUtc <= DateTime.UtcNow)
                     return false;
 
