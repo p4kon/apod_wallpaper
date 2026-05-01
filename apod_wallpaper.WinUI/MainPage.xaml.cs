@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,11 +37,18 @@ public sealed partial class MainPage : Page
     private readonly HashSet<DateTime> _warmedMonths = new();
     private DateTime _selectedDate = DateTime.Today;
     private DateTime _visibleMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private readonly Stopwatch _previewImageStopwatch = new();
+    private long _lastPreviewBackendElapsedMs;
+    private long _lastMonthCachedElapsedMs;
+    private string? _pendingPreviewLocation;
 
     public MainPage()
     {
         InitializeComponent();
         EnsureCalendarGridDefinitions();
+        VisibleMonthText.Text = _visibleMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        RefreshSelectedDateText();
+        RenderCalendarSkeleton(_visibleMonth);
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -176,12 +184,16 @@ public sealed partial class MainPage : Page
         var month = new DateTime(_visibleMonth.Year, _visibleMonth.Month, 1);
         var requestVersion = Interlocked.Increment(ref _monthRequestVersion);
         VisibleMonthText.Text = month.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        RenderCalendarSkeleton(month);
 
         MonthStatusBar.Severity = InfoBarSeverity.Informational;
         MonthStatusBar.Title = "Loading cached month state";
         MonthStatusBar.Message = "Rendering cached knowledge first so the calendar appears immediately.";
 
+        var cachedStopwatch = Stopwatch.StartNew();
         var cachedResult = await _backendHost.Backend.GetCalendarMonthStateAsync(month, false, apod_wallpaper.MonthRefreshMode.Balanced);
+        cachedStopwatch.Stop();
+        _lastMonthCachedElapsedMs = cachedStopwatch.ElapsedMilliseconds;
         if (requestVersion != _monthRequestVersion)
             return;
 
@@ -210,7 +222,9 @@ public sealed partial class MainPage : Page
         if (_backendHost == null)
             return;
 
+        var refreshStopwatch = Stopwatch.StartNew();
         var refreshedResult = await _backendHost.Backend.GetCalendarMonthStateAsync(month, true, apod_wallpaper.MonthRefreshMode.Aggressive);
+        refreshStopwatch.Stop();
         if (requestVersion != _monthRequestVersion)
             return;
 
@@ -227,21 +241,25 @@ public sealed partial class MainPage : Page
         if (!IsCurrentMonth(month))
             _warmedMonths.Add(month.Date);
 
-        SetMonthReadyState(_currentMonthState, warmed: true);
+        SetMonthReadyState(_currentMonthState, warmed: true, refreshStopwatch.ElapsedMilliseconds);
     }
 
-    private void SetMonthReadyState(apod_wallpaper.ApodCalendarMonthState monthState, bool warmed)
+    private void SetMonthReadyState(apod_wallpaper.ApodCalendarMonthState monthState, bool warmed, long warmElapsedMs = 0)
     {
         var counts = CountMonthStates(monthState);
         MonthStatusBar.Severity = warmed ? InfoBarSeverity.Success : InfoBarSeverity.Informational;
         MonthStatusBar.Title = warmed ? "Month refreshed" : "Month loaded";
         MonthStatusBar.Message = string.Format(
             CultureInfo.InvariantCulture,
-            "Local: {0}  Remote image: {1}  Unsupported: {2}  Unknown: {3}",
+            warmed
+                ? "Local: {0}  Remote image: {1}  Unsupported: {2}  Unknown: {3}  (cache {4} ms, warmup {5} ms)"
+                : "Local: {0}  Remote image: {1}  Unsupported: {2}  Unknown: {3}  (cache {4} ms)",
             counts.Local,
             counts.RemoteImage,
             counts.Unsupported,
-            counts.Unknown);
+            counts.Unknown,
+            _lastMonthCachedElapsedMs,
+            warmElapsedMs);
     }
 
     private void SetMonthErrorState(DateTime month, string message)
@@ -376,7 +394,10 @@ public sealed partial class MainPage : Page
         var requestVersion = Interlocked.Increment(ref _previewRequestVersion);
         SetPreviewLoadingState(selectedDate);
 
+        var previewStopwatch = Stopwatch.StartNew();
         var operationResult = await _backendHost.Backend.LoadDayAsync(selectedDate);
+        previewStopwatch.Stop();
+        _lastPreviewBackendElapsedMs = previewStopwatch.ElapsedMilliseconds;
         if (requestVersion != _previewRequestVersion)
             return;
 
@@ -445,7 +466,11 @@ public sealed partial class MainPage : Page
     {
         PreviewStatusBar.Severity = InfoBarSeverity.Success;
         PreviewStatusBar.Title = "Preview loaded";
-        PreviewStatusBar.Message = workflow.Message ?? "Preview loaded successfully.";
+        PreviewStatusBar.Message = string.Format(
+            CultureInfo.InvariantCulture,
+            "{0} Backend: {1} ms. Rendering preview image...",
+            workflow.Message ?? "Preview metadata loaded successfully.",
+            _lastPreviewBackendElapsedMs);
 
         RequestedDateText.Text = workflow.RequestedDate.ToString("yyyy-MM-dd");
         ResolvedDateText.Text = workflow.ResolvedDate.HasValue
@@ -526,6 +551,8 @@ public sealed partial class MainPage : Page
         PreviewImage.Source = null;
         PreviewImage.Visibility = Visibility.Collapsed;
         PreviewPlaceholderPanel.Visibility = Visibility.Collapsed;
+        _pendingPreviewLocation = null;
+        _previewImageStopwatch.Reset();
 
         if (string.IsNullOrWhiteSpace(previewLocation))
             return false;
@@ -533,6 +560,9 @@ public sealed partial class MainPage : Page
         try
         {
             var bitmap = new BitmapImage();
+            bitmap.DecodePixelWidth = 960;
+            _pendingPreviewLocation = previewLocation;
+            _previewImageStopwatch.Restart();
             bitmap.UriSource = BuildPreviewUri(previewLocation);
             PreviewImage.Source = bitmap;
             PreviewImage.Visibility = Visibility.Visible;
@@ -548,6 +578,39 @@ public sealed partial class MainPage : Page
     private void RefreshSelectedDateText()
     {
         SelectedDateText.Text = "Selected date: " + _selectedDate.ToString("dddd, dd MMMM yyyy", CultureInfo.CurrentCulture);
+    }
+
+    private void PreviewImage_ImageOpened(object sender, RoutedEventArgs e)
+    {
+        if (!_previewImageStopwatch.IsRunning)
+            return;
+
+        _previewImageStopwatch.Stop();
+        PreviewStatusBar.Severity = InfoBarSeverity.Success;
+        PreviewStatusBar.Title = "Preview rendered";
+        PreviewStatusBar.Message = string.Format(
+            CultureInfo.InvariantCulture,
+            "Backend: {0} ms, image render: {1} ms.",
+            _lastPreviewBackendElapsedMs,
+            _previewImageStopwatch.ElapsedMilliseconds);
+    }
+
+    private void PreviewImage_ImageFailed(object sender, ExceptionRoutedEventArgs e)
+    {
+        if (_previewImageStopwatch.IsRunning)
+            _previewImageStopwatch.Stop();
+
+        PreviewStatusBar.Severity = InfoBarSeverity.Warning;
+        PreviewStatusBar.Title = "Preview metadata loaded";
+        PreviewStatusBar.Message = string.Format(
+            CultureInfo.InvariantCulture,
+            "Backend: {0} ms. The preview image failed to render in the host.",
+            _lastPreviewBackendElapsedMs);
+
+        PreviewPlaceholderTitleText.Text = "Preview image unavailable";
+        PreviewPlaceholderText.Text = "The backend resolved preview metadata, but WinUI could not render the image from " + (_pendingPreviewLocation ?? "the resolved source") + ".";
+        PreviewPlaceholderPanel.Visibility = Visibility.Visible;
+        PreviewImage.Visibility = Visibility.Collapsed;
     }
 
     private static Uri BuildPreviewUri(string previewLocation)

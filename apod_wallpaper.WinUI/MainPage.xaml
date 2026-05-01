@@ -216,10 +216,12 @@
                                 BorderThickness="1"
                                 CornerRadius="16">
                                 <Grid>
-                                    <Image
-                                        x:Name="PreviewImage"
-                                        Stretch="Uniform"
-                                        Visibility="Collapsed" />
+                                <Image
+                                    x:Name="PreviewImage"
+                                    ImageFailed="PreviewImage_ImageFailed"
+                                    ImageOpened="PreviewImage_ImageOpened"
+                                    Stretch="Uniform"
+                                    Visibility="Collapsed" />
 
                                     <ProgressRing
                                         x:Name="PreviewProgressRing"

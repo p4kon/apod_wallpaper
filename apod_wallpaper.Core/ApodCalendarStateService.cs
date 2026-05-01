@@ -31,7 +31,9 @@ namespace apod_wallpaper
                     return cachedState;
             }
 
-            var latestPublishedDate = _workflowService.GetLatestPublishedDate();
+            var latestPublishedDate = refreshMissingDates
+                ? _workflowService.GetLatestPublishedDate()
+                : DateTime.UtcNow.Date;
             var monthStatus = _workflowService.GetMonthStatus(monthKey, refreshMissingDates, latestPublishedDate, refreshMode);
             var monthState = new ApodCalendarMonthState(
                 monthKey,
