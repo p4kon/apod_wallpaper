@@ -39,6 +39,10 @@ namespace apod_wallpaper
             "(?<url>(?:https?:)?//[^\\s\"'<>]+\\.(?:mp4|mov|webm|m4v)|(?:\\.?\\.?/)?image/[^\\s\"'<>]+\\.(?:mp4|mov|webm|m4v)|https?:\\/\\/(?:www\\.)?youtube\\.com\\/embed\\/[^\\s\"'<>]+|https?:\\/\\/(?:www\\.)?youtube\\.com\\/watch\\?[^\\s\"'<>]+|https?:\\/\\/youtu\\.be\\/[^\\s\"'<>]+)",
             RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
+        private static readonly Regex ApodDateHeadingRegex = new Regex(
+            "\\b\\d{4}\\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2}\\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
         public static bool TryExtract(string html, string pageUrl, out string previewUrl, out string imageUrl)
         {
             previewUrl = null;
@@ -155,11 +159,13 @@ namespace apod_wallpaper
             if (string.IsNullOrWhiteSpace(html))
                 return html;
 
-            var startIndex = FindDateHeadingIndex(html);
-            if (startIndex < 0)
-                startIndex = 0;
+            var dateHeadingIndex = FindDateHeadingIndex(html);
+            var startIndex = dateHeadingIndex >= 0
+                ? FindRelevantBlockStart(html, dateHeadingIndex)
+                : 0;
 
-            var endIndex = html.IndexOf("</center>", startIndex, StringComparison.OrdinalIgnoreCase);
+            var endIndexSearchStart = dateHeadingIndex >= 0 ? dateHeadingIndex : startIndex;
+            var endIndex = html.IndexOf("</center>", endIndexSearchStart, StringComparison.OrdinalIgnoreCase);
             if (endIndex < 0)
                 endIndex = Math.Min(html.Length, startIndex + 4000);
             else
@@ -173,32 +179,20 @@ namespace apod_wallpaper
 
         private static int FindDateHeadingIndex(string html)
         {
-            var monthNames = new[]
-            {
-                "January", "February", "March", "April", "May", "June",
-                "July", "August", "September", "October", "November", "December"
-            };
+            var match = ApodDateHeadingRegex.Match(html);
+            return match.Success ? match.Index : -1;
+        }
 
-            foreach (var monthName in monthNames)
-            {
-                var monthIndex = html.IndexOf(monthName, StringComparison.OrdinalIgnoreCase);
-                if (monthIndex <= 0)
-                    continue;
+        private static int FindRelevantBlockStart(string html, int dateHeadingIndex)
+        {
+            if (dateHeadingIndex < 0)
+                return 0;
 
-                var yearIndex = monthIndex;
-                while (yearIndex > 0 && char.IsWhiteSpace(html[yearIndex - 1]))
-                    yearIndex--;
+            var centerIndex = html.LastIndexOf("<center", dateHeadingIndex, StringComparison.OrdinalIgnoreCase);
+            if (centerIndex >= 0)
+                return centerIndex;
 
-                var scanIndex = yearIndex - 1;
-                while (scanIndex >= 0 && char.IsDigit(html[scanIndex]))
-                    scanIndex--;
-
-                var candidateStart = scanIndex + 1;
-                if (candidateStart >= 0 && candidateStart < monthIndex)
-                    return candidateStart;
-            }
-
-            return -1;
+            return dateHeadingIndex;
         }
 
         public static bool LooksLikeImageUrl(string url)

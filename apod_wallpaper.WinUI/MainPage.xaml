@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer>
-        <Grid MaxWidth="1180" Padding="28" HorizontalAlignment="Center" RowSpacing="16">
+        <Grid Width="1180" MaxWidth="1180" Padding="28" HorizontalAlignment="Center" RowSpacing="16">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
