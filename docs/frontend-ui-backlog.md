@@ -159,6 +159,10 @@ Until preview/apply/settings flows are proven in the real host:
   - image vs non-image classification
 - The frontend should render these states, not infer them.
 
+## Known Follow-Ups
+
+- Startup still appears to trigger two overlapping paths for the first "today" preview in some sessions: the preview workflow and month-state initialization can both probe the same date at nearly the same time. This should be reduced carefully later without regressing month coloring or startup responsiveness.
+
 ## State Screen vs Settings Screen
 
 To avoid duplicate screens with the same data, the frontend should treat startup state and settings as the **same control surface**.

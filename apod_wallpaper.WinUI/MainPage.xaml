@@ -165,12 +165,16 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
-                        <Grid ColumnSpacing="16">
+                        <Grid ColumnSpacing="16" RowSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
                             <StackPanel Spacing="4">
                                 <TextBlock FontSize="18" FontWeight="SemiBold" Text="Preview and actions" />
@@ -191,6 +195,65 @@
                                 Grid.Column="2"
                                 Click="OpenNasaPageButton_Click"
                                 Content="Open NASA page" />
+
+                            <Grid Grid.Row="1" Grid.ColumnSpan="3" ColumnSpacing="12" RowSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
+                                    <TextBlock FontWeight="SemiBold" Text="Wallpaper style" />
+                                    <ComboBox
+                                        x:Name="WallpaperStyleComboBox"
+                                        MinWidth="180"
+                                        HorizontalAlignment="Stretch"
+                                        SelectionChanged="WallpaperStyleComboBox_SelectionChanged" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+                                    <Button
+                                        x:Name="DownloadOnlyButton"
+                                        Click="DownloadOnlyButton_Click"
+                                        Content="Download" />
+                                    <Button
+                                        x:Name="DownloadAndApplyButton"
+                                        Click="DownloadAndApplyButton_Click"
+                                        Content="Download and apply" />
+                                    <Button
+                                        x:Name="ApplyLatestButton"
+                                        Click="ApplyLatestButton_Click"
+                                        Content="Apply latest" />
+                                </StackPanel>
+
+                                <Grid Grid.Row="1" Grid.ColumnSpan="3" ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <InfoBar
+                                        x:Name="ActionStatusBar"
+                                        Grid.Column="0"
+                                        IsClosable="False"
+                                        IsOpen="True"
+                                        Severity="Informational"
+                                        Title="Actions idle" />
+
+                                    <ProgressRing
+                                        x:Name="ActionProgressRing"
+                                        Grid.Column="1"
+                                        Width="28"
+                                        Height="28"
+                                        IsActive="False"
+                                        Visibility="Collapsed" />
+                                </Grid>
+                            </Grid>
                         </Grid>
 
                         <InfoBar
