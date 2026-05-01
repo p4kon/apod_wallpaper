@@ -18,6 +18,12 @@ namespace apod_wallpaper.WinUI;
 
 public sealed partial class MainPage : Page
 {
+    private sealed class MonthCacheEntry
+    {
+        public required apod_wallpaper.ApodCalendarMonthState State { get; init; }
+        public long LastAccessStamp { get; set; }
+    }
+
     private sealed class CalendarDayVisual
     {
         public required DateTime Date { get; init; }
@@ -47,6 +53,8 @@ public sealed partial class MainPage : Page
     private int _previewRequestVersion;
     private int _monthRequestVersion;
     private readonly HashSet<DateTime> _warmedMonths = new();
+    private readonly Dictionary<DateTime, MonthCacheEntry> _hotMonthCache = new();
+    private readonly HashSet<DateTime> _monthsInFlight = new();
     private readonly Dictionary<DateTime, CalendarDayVisual> _calendarDayVisuals = new();
     private DateTime _selectedDate = DateTime.Today;
     private DateTime _visibleMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
@@ -55,7 +63,9 @@ public sealed partial class MainPage : Page
     private long _lastPreviewBackendElapsedMs;
     private long _lastMonthCachedElapsedMs;
     private string? _pendingPreviewLocation;
+    private long _monthCacheAccessStamp;
     private const int WarmupVisualStepDelayMs = 16;
+    private const int HotMonthCacheLimit = 6;
 
     public MainPage()
     {
@@ -203,12 +213,31 @@ public sealed partial class MainPage : Page
         EnsureCalendarMonthBuilt(month);
         SetCalendarToLoadingState(month);
 
+        _ = PrewarmWindowAsync(month, requestVersion);
+
+        if (TryGetHotMonthState(month, out var hotState))
+        {
+            _currentMonthState = hotState;
+            await ApplyCalendarMonthStateAsync(_currentMonthState, progressive: false, requestVersion);
+            SetMonthReadyState(_currentMonthState, warmed: _warmedMonths.Contains(month));
+
+            if (ShouldWarmMonth(month))
+            {
+                MonthStatusBar.Severity = InfoBarSeverity.Informational;
+                MonthStatusBar.Title = "Refreshing month in background";
+                MonthStatusBar.Message = BuildMonthWarmupMessage(month);
+                _ = WarmMonthAsync(month, requestVersion);
+            }
+
+            return;
+        }
+
         MonthStatusBar.Severity = InfoBarSeverity.Informational;
         MonthStatusBar.Title = "Loading cached month state";
         MonthStatusBar.Message = "Rendering cached knowledge first so the calendar appears immediately.";
 
         var cachedStopwatch = Stopwatch.StartNew();
-        var cachedResult = await _backendHost.Backend.GetCalendarMonthStateAsync(month, false, apod_wallpaper.MonthRefreshMode.Balanced);
+        var cachedResult = await GetOrLoadMonthStateAsync(month, refreshMissingDates: false, apod_wallpaper.MonthRefreshMode.Balanced);
         cachedStopwatch.Stop();
         _lastMonthCachedElapsedMs = cachedStopwatch.ElapsedMilliseconds;
         if (requestVersion != _monthRequestVersion)
@@ -503,8 +532,144 @@ public sealed partial class MainPage : Page
             return;
 
         _currentMonthState = refreshedResult.Value;
+        RememberMonthState(_currentMonthState);
         await ApplyCalendarMonthStateAsync(_currentMonthState, progressive: false, _monthRequestVersion);
         SetMonthReadyState(_currentMonthState, warmed: false);
+    }
+
+    private async Task PrewarmWindowAsync(DateTime visibleMonth, int requestVersion)
+    {
+        if (_backendHost == null)
+            return;
+
+        var monthsToPrewarm = new[]
+        {
+            visibleMonth.AddMonths(-1),
+            visibleMonth,
+            visibleMonth.AddMonths(1),
+        };
+
+        foreach (var month in monthsToPrewarm)
+        {
+            var normalizedMonth = new DateTime(month.Year, month.Month, 1);
+            if (requestVersion != _monthRequestVersion)
+                return;
+
+            if (TryGetHotMonthState(normalizedMonth, out _))
+                continue;
+
+            if (!_monthsInFlight.Add(normalizedMonth))
+                continue;
+
+            try
+            {
+                var cachedResult = await GetOrLoadMonthStateAsync(normalizedMonth, refreshMissingDates: false, apod_wallpaper.MonthRefreshMode.Balanced);
+                if (!cachedResult.Succeeded || cachedResult.Value == null)
+                    continue;
+
+                if (requestVersion != _monthRequestVersion)
+                    return;
+
+                RememberMonthState(cachedResult.Value);
+            }
+            finally
+            {
+                _monthsInFlight.Remove(normalizedMonth);
+            }
+        }
+    }
+
+    private async Task<apod_wallpaper.OperationResult<apod_wallpaper.ApodCalendarMonthState>> GetOrLoadMonthStateAsync(
+        DateTime month,
+        bool refreshMissingDates,
+        apod_wallpaper.MonthRefreshMode refreshMode)
+    {
+        if (_backendHost == null)
+            return apod_wallpaper.OperationResult<apod_wallpaper.ApodCalendarMonthState>.Failure(
+                new apod_wallpaper.OperationError(
+                    apod_wallpaper.OperationErrorCode.InitializationFailed,
+                    "Backend host is not available.",
+                    false));
+
+        var normalizedMonth = new DateTime(month.Year, month.Month, 1);
+        if (!refreshMissingDates && TryGetHotMonthState(normalizedMonth, out var hotState))
+        {
+            return apod_wallpaper.OperationResult<apod_wallpaper.ApodCalendarMonthState>.Success(hotState);
+        }
+
+        var result = await _backendHost.Backend.GetCalendarMonthStateAsync(normalizedMonth, refreshMissingDates, refreshMode);
+        if (result.Succeeded && result.Value != null)
+            RememberMonthState(result.Value);
+
+        return result;
+    }
+
+    private bool TryGetHotMonthState(DateTime month, out apod_wallpaper.ApodCalendarMonthState state)
+    {
+        var normalizedMonth = new DateTime(month.Year, month.Month, 1);
+        if (_hotMonthCache.TryGetValue(normalizedMonth, out var entry))
+        {
+            entry.LastAccessStamp = NextMonthCacheAccessStamp();
+            state = entry.State;
+            return true;
+        }
+
+        state = null!;
+        return false;
+    }
+
+    private void RememberMonthState(apod_wallpaper.ApodCalendarMonthState monthState)
+    {
+        var normalizedMonth = new DateTime(monthState.Month.Year, monthState.Month.Month, 1);
+        _hotMonthCache[normalizedMonth] = new MonthCacheEntry
+        {
+            State = monthState,
+            LastAccessStamp = NextMonthCacheAccessStamp(),
+        };
+
+        TrimHotMonthCache(normalizedMonth);
+    }
+
+    private void TrimHotMonthCache(DateTime pinnedMonth)
+    {
+        if (_hotMonthCache.Count <= HotMonthCacheLimit)
+            return;
+
+        var pinnedWindow = new HashSet<DateTime>
+        {
+            new DateTime(pinnedMonth.Year, pinnedMonth.Month, 1),
+            new DateTime(pinnedMonth.AddMonths(-1).Year, pinnedMonth.AddMonths(-1).Month, 1),
+            new DateTime(pinnedMonth.AddMonths(1).Year, pinnedMonth.AddMonths(1).Month, 1),
+        };
+
+        while (_hotMonthCache.Count > HotMonthCacheLimit)
+        {
+            DateTime? oldestKey = null;
+            long oldestStamp = long.MaxValue;
+
+            foreach (var pair in _hotMonthCache)
+            {
+                if (pinnedWindow.Contains(pair.Key))
+                    continue;
+
+                if (pair.Value.LastAccessStamp < oldestStamp)
+                {
+                    oldestStamp = pair.Value.LastAccessStamp;
+                    oldestKey = pair.Key;
+                }
+            }
+
+            if (!oldestKey.HasValue)
+                break;
+
+            _hotMonthCache.Remove(oldestKey.Value);
+            _warmedMonths.Remove(oldestKey.Value);
+        }
+    }
+
+    private long NextMonthCacheAccessStamp()
+    {
+        return Interlocked.Increment(ref _monthCacheAccessStamp);
     }
 
     private void SetPreviewLoadingState(DateTime selectedDate)
