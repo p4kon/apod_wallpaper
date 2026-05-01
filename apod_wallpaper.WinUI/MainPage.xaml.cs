@@ -155,6 +155,7 @@ public sealed partial class MainPage : Page
         _visibleMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
         RefreshSelectedDateText();
         VisibleMonthText.Text = _visibleMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        RenderCalendarSkeleton(_visibleMonth);
 
         SnapshotSummaryText.Text = string.Join(Environment.NewLine, new[]
         {
@@ -401,8 +402,23 @@ public sealed partial class MainPage : Page
                 break;
         }
 
-        if (_currentMonthState != null && _selectedDate.Month == _currentMonthState.Month.Month && _selectedDate.Year == _currentMonthState.Month.Year)
-            await LoadVisibleMonthAsync();
+        if (_selectedDate.Month == _visibleMonth.Month && _selectedDate.Year == _visibleMonth.Year)
+            await RefreshVisibleMonthFromCacheAsync();
+    }
+
+    private async Task RefreshVisibleMonthFromCacheAsync()
+    {
+        if (_backendHost == null)
+            return;
+
+        var month = new DateTime(_visibleMonth.Year, _visibleMonth.Month, 1);
+        var refreshedResult = await _backendHost.Backend.GetCalendarMonthStateAsync(month, true, apod_wallpaper.MonthRefreshMode.Balanced);
+        if (!refreshedResult.Succeeded || refreshedResult.Value == null)
+            return;
+
+        _currentMonthState = refreshedResult.Value;
+        RenderCalendarMonth(_currentMonthState);
+        SetMonthReadyState(_currentMonthState, warmed: false);
     }
 
     private void SetPreviewLoadingState(DateTime selectedDate)
@@ -750,6 +766,71 @@ public sealed partial class MainPage : Page
 
         for (var row = 0; row < 6; row++)
             CalendarDaysGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+    }
+
+    private void RenderCalendarSkeleton(DateTime month)
+    {
+        EnsureCalendarGridDefinitions();
+        CalendarDaysGrid.Children.Clear();
+
+        var monthStart = new DateTime(month.Year, month.Month, 1);
+        var daysInMonth = DateTime.DaysInMonth(monthStart.Year, monthStart.Month);
+        var startOffset = GetMondayFirstOffset(monthStart.DayOfWeek);
+        var today = DateTime.Today;
+
+        for (var day = 1; day <= daysInMonth; day++)
+        {
+            var date = new DateTime(monthStart.Year, monthStart.Month, day);
+            var cellIndex = startOffset + (day - 1);
+            var row = cellIndex / 7;
+            var column = cellIndex % 7;
+            var isSelected = _selectedDate.Date == date.Date;
+            var isFuture = date.Date > today.Date;
+
+            var content = new StackPanel
+            {
+                Spacing = 2,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+
+            content.Children.Add(new TextBlock
+            {
+                Text = date.Day.ToString(CultureInfo.InvariantCulture),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal,
+            });
+
+            content.Children.Add(new TextBlock
+            {
+                Text = isFuture ? "future" : "loading",
+                HorizontalAlignment = HorizontalAlignment.Center,
+                FontSize = 10,
+                Opacity = 0.92,
+            });
+
+            var button = new Button
+            {
+                Content = content,
+                Padding = new Thickness(6),
+                MinHeight = 58,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Background = isFuture ? CalendarFutureBrush : CalendarUnknownBrush,
+                Foreground = isFuture ? CalendarFutureForegroundBrush : CalendarDefaultForegroundBrush,
+                BorderBrush = isSelected ? CalendarSelectedBorderBrush : (isFuture ? CalendarFutureBrush : CalendarUnknownBrush),
+                BorderThickness = isSelected ? new Thickness(2) : new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Tag = date,
+                IsEnabled = !isFuture,
+            };
+
+            button.Click += CalendarDayButton_Click;
+            ToolTipService.SetToolTip(button, date.ToString("dddd, dd MMMM yyyy", CultureInfo.CurrentCulture) + Environment.NewLine + (isFuture ? "Future date" : "Loading calendar state"));
+
+            Grid.SetRow(button, row);
+            Grid.SetColumn(button, column);
+            CalendarDaysGrid.Children.Add(button);
+        }
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
