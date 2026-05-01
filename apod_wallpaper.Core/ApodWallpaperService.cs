@@ -52,6 +52,12 @@ namespace apod_wallpaper
                     cachedEntry.ResolvedFromSource = hasUsableLocalImage ? "local_file" : "cache";
                     return cachedEntry;
                 }
+
+                if (!ShouldRefreshCachedEntry(cached, date))
+                {
+                    cachedEntry.ResolvedFromSource = "cache";
+                    return cachedEntry;
+                }
             }
 
             if (!forceRefresh && LocalImageValidator.IsUsableImageFile(localImagePath))
@@ -76,6 +82,12 @@ namespace apod_wallpaper
                 if (cachedEntry.HasImage || hasUsableLocalImage)
                 {
                     cachedEntry.ResolvedFromSource = hasUsableLocalImage ? "local_file" : "cache";
+                    return cachedEntry;
+                }
+
+                if (!ShouldRefreshCachedEntry(cached, date))
+                {
+                    cachedEntry.ResolvedFromSource = "cache";
                     return cachedEntry;
                 }
             }

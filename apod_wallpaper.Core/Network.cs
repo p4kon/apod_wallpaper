@@ -259,7 +259,7 @@ namespace apod_wallpaper
             catch (WebException ex) when (ex.Response is HttpWebResponse response)
             {
                 AppLogger.Warn("HttpWebRequest fallback returned HTTP " + (int)response.StatusCode + " for text url=" + url + ".", ex);
-                return null;
+                throw new NetworkHttpStatusException((int)response.StatusCode, url);
             }
         }
 
@@ -387,7 +387,7 @@ namespace apod_wallpaper
             catch (WebException ex) when (ex.Response is HttpWebResponse response)
             {
                 AppLogger.Warn("HttpWebRequest fallback returned HTTP " + (int)response.StatusCode + " for bitmap url=" + url + ".", ex);
-                return null;
+                throw new NetworkHttpStatusException((int)response.StatusCode, url);
             }
         }
 

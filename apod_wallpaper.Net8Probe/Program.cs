@@ -221,6 +221,15 @@ namespace apod_wallpaper.Net8Probe
                 Assert(response != null, "Expected NASA API webrequest path to reach the remote server.");
                 Assert((int)response.StatusCode >= 400, "Expected a real HTTP response when NASA API rejects the request.");
             }
+            catch (TargetInvocationException ex) when (ex.InnerException != null &&
+                                                       ex.InnerException.GetType().FullName == "apod_wallpaper.Network+NetworkHttpStatusException")
+            {
+                var statusCodeProperty = ex.InnerException.GetType().GetProperty("StatusCode");
+                var statusCode = statusCodeProperty != null
+                    ? (int)statusCodeProperty.GetValue(ex.InnerException, null)
+                    : 0;
+                Assert(statusCode >= 400, "Expected a real HTTP status when NASA API rejects the request.");
+            }
         }
 
         private static void NetworkWebRequestFetchesHtml()

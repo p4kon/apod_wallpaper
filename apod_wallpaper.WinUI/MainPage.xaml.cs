@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI;
@@ -12,6 +15,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.Storage;
+using Windows.Storage.Streams;
 using Windows.System;
 
 namespace apod_wallpaper.WinUI;
@@ -63,11 +68,15 @@ public sealed partial class MainPage : Page
     private long _lastPreviewBackendElapsedMs;
     private long _lastMonthCachedElapsedMs;
     private string? _pendingPreviewLocation;
+    private string? _previewCacheDirectory;
     private long _monthCacheAccessStamp;
     private const int WarmupVisualStepDelayMs = 16;
     private const int PinnedMonthWindowRadius = 1;
     private const int RecentMonthHistoryLimit = 3;
     private const int HotMonthCacheLimit = (PinnedMonthWindowRadius * 2) + 1 + RecentMonthHistoryLimit;
+    private static readonly HttpClient PreviewAssetHttpClient = CreatePreviewAssetHttpClient();
+    private readonly Dictionary<string, Task<string?>> _previewAssetTasks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _previewAssetSyncRoot = new();
 
     public MainPage()
     {
@@ -185,6 +194,8 @@ public sealed partial class MainPage : Page
         TrayActionText.Text = snapshot.Settings.TrayDoubleClickAction
             ? "Apply latest APOD"
             : "Default window action";
+        _previewCacheDirectory = Path.Combine(snapshot.StoragePaths.CacheDirectory, "previews");
+        Directory.CreateDirectory(_previewCacheDirectory);
 
         _selectedDate = snapshot.PreferredDisplayDate.Date;
         _visibleMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
@@ -814,14 +825,27 @@ public sealed partial class MainPage : Page
 
         try
         {
+            var resolvedPreviewLocation = await ResolvePreviewAssetLocationAsync(previewLocation);
             var bitmap = new BitmapImage();
-            bitmap.DecodePixelWidth = 960;
-            _pendingPreviewLocation = previewLocation;
+            bitmap.DecodePixelWidth = ResolvePreviewDecodeWidth();
+            _pendingPreviewLocation = resolvedPreviewLocation;
             _previewImageStopwatch.Restart();
-            bitmap.UriSource = BuildPreviewUri(previewLocation);
-            PreviewImage.Source = bitmap;
+            var previewUri = BuildPreviewUri(resolvedPreviewLocation);
+
+            if (previewUri.IsFile)
+            {
+                var previewFile = await StorageFile.GetFileFromPathAsync(previewUri.LocalPath);
+                using IRandomAccessStream stream = await previewFile.OpenReadAsync();
+                await bitmap.SetSourceAsync(stream);
+                PreviewImage.Source = bitmap;
+            }
+            else
+            {
+                bitmap.UriSource = previewUri;
+                PreviewImage.Source = bitmap;
+            }
+
             PreviewImage.Visibility = Visibility.Visible;
-            await Task.CompletedTask;
             return true;
         }
         catch
@@ -880,6 +904,120 @@ public sealed partial class MainPage : Page
             return new Uri(previewLocation, UriKind.Absolute);
 
         return new Uri(previewLocation, UriKind.RelativeOrAbsolute);
+    }
+
+    private async Task<string> ResolvePreviewAssetLocationAsync(string previewLocation)
+    {
+        if (string.IsNullOrWhiteSpace(previewLocation))
+            return previewLocation;
+
+        if (!previewLocation.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !previewLocation.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return previewLocation;
+
+        var cachedPreviewPath = TryGetPreviewAssetCachePath(previewLocation);
+        if (string.IsNullOrWhiteSpace(cachedPreviewPath))
+            return previewLocation;
+
+        if (File.Exists(cachedPreviewPath))
+            return cachedPreviewPath;
+
+        var downloadedPath = await GetOrDownloadPreviewAssetAsync(previewLocation, cachedPreviewPath);
+        return !string.IsNullOrWhiteSpace(downloadedPath) && File.Exists(downloadedPath)
+            ? downloadedPath
+            : previewLocation;
+    }
+
+    private async Task<string?> GetOrDownloadPreviewAssetAsync(string previewUrl, string cachePath)
+    {
+        Task<string?>? downloadTask = null;
+        lock (_previewAssetSyncRoot)
+        {
+            if (!_previewAssetTasks.TryGetValue(previewUrl, out downloadTask))
+            {
+                downloadTask = DownloadPreviewAssetAsync(previewUrl, cachePath);
+                _previewAssetTasks[previewUrl] = downloadTask;
+            }
+        }
+
+        try
+        {
+            return await downloadTask;
+        }
+        finally
+        {
+            lock (_previewAssetSyncRoot)
+            {
+                if (_previewAssetTasks.TryGetValue(previewUrl, out var existingTask) && ReferenceEquals(existingTask, downloadTask))
+                    _previewAssetTasks.Remove(previewUrl);
+            }
+        }
+    }
+
+    private async Task<string?> DownloadPreviewAssetAsync(string previewUrl, string cachePath)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
+            var tempPath = cachePath + ".download";
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+
+            using var response = await PreviewAssetHttpClient.GetAsync(previewUrl, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+
+            using (var sourceStream = await response.Content.ReadAsStreamAsync())
+            using (var targetStream = File.Create(tempPath))
+            {
+                await sourceStream.CopyToAsync(targetStream);
+            }
+
+            if (File.Exists(cachePath))
+                File.Delete(cachePath);
+
+            File.Move(tempPath, cachePath);
+            return cachePath;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string? TryGetPreviewAssetCachePath(string previewUrl)
+    {
+        if (string.IsNullOrWhiteSpace(_previewCacheDirectory))
+            return null;
+
+        if (!Uri.TryCreate(previewUrl, UriKind.Absolute, out var previewUri))
+            return null;
+
+        var extension = Path.GetExtension(previewUri.AbsolutePath);
+        if (string.IsNullOrWhiteSpace(extension))
+            extension = ".jpg";
+
+        var normalizedExtension = extension.ToLowerInvariant();
+        var fileName = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(previewUrl))).ToLowerInvariant() + normalizedExtension;
+        return Path.Combine(_previewCacheDirectory, fileName);
+    }
+
+    private int ResolvePreviewDecodeWidth()
+    {
+        var surfaceWidth = PreviewSurfaceBorder?.ActualWidth ?? 0;
+        if (surfaceWidth <= 0)
+            surfaceWidth = 520;
+
+        var rasterizationScale = XamlRoot?.RasterizationScale ?? 1.0;
+        var targetWidth = (int)Math.Ceiling(surfaceWidth * rasterizationScale);
+        return Math.Max(320, Math.Min(720, targetWidth));
+    }
+
+    private static HttpClient CreatePreviewAssetHttpClient()
+    {
+        return new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(20),
+        };
     }
 
     private void TrayStatus_Changed(object? sender, EventArgs e)

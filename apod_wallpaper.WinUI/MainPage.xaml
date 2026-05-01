@@ -208,6 +208,7 @@
                             </Grid.ColumnDefinitions>
 
                             <Border
+                                x:Name="PreviewSurfaceBorder"
                                 Grid.Column="0"
                                 MinHeight="360"
                                 Padding="16"
