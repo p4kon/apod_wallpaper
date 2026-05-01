@@ -301,6 +301,16 @@ namespace apod_wallpaper
             {
                 return action();
             }
+            catch (ApodEntryUnavailableException ex)
+            {
+                return new ApodWorkflowResult
+                {
+                    Status = ApodWorkflowStatus.Unavailable,
+                    RequestedDate = requestedDate.Date,
+                    Message = ex.Message,
+                    Source = ApodDataSource.Unknown,
+                };
+            }
             catch (Exception ex)
             {
                 AppLogger.Warn("APOD workflow failed for " + requestedDate.ToString("yyyy-MM-dd") + ".", ex);
@@ -319,6 +329,16 @@ namespace apod_wallpaper
             try
             {
                 return await action().ConfigureAwait(false);
+            }
+            catch (ApodEntryUnavailableException ex)
+            {
+                return new ApodWorkflowResult
+                {
+                    Status = ApodWorkflowStatus.Unavailable,
+                    RequestedDate = requestedDate.Date,
+                    Message = ex.Message,
+                    Source = ApodDataSource.Unknown,
+                };
             }
             catch (Exception ex)
             {

@@ -394,7 +394,7 @@ namespace apod_wallpaper
         {
             var pageUrl = ApodPageUrl.GetUrl(date);
             AppLogger.Web("source=apod_html scope=page_only date=" + date.ToString("yyyy-MM-dd") + " url=" + pageUrl);
-            var pageHtml = Network.DownloadString(pageUrl);
+            var pageHtml = DownloadApodPageOrThrowUnavailable(date, pageUrl);
             return CreateEntryFromResolvedMedia(date, pageUrl, pageHtml, "page_only");
         }
 
@@ -402,8 +402,32 @@ namespace apod_wallpaper
         {
             var pageUrl = ApodPageUrl.GetUrl(date);
             AppLogger.Web("source=apod_html scope=page_only_async date=" + date.ToString("yyyy-MM-dd") + " url=" + pageUrl);
-            var pageHtml = await Network.DownloadStringAsync(pageUrl).ConfigureAwait(false);
+            var pageHtml = await DownloadApodPageOrThrowUnavailableAsync(date, pageUrl).ConfigureAwait(false);
             return CreateEntryFromResolvedMedia(date, pageUrl, pageHtml, "page_only_async");
+        }
+
+        private static string DownloadApodPageOrThrowUnavailable(DateTime date, string pageUrl)
+        {
+            try
+            {
+                return Network.DownloadString(pageUrl);
+            }
+            catch (Exception ex) when (IsUnavailableApodPage(ex))
+            {
+                throw CreateUnavailableException(date, ex);
+            }
+        }
+
+        private static async Task<string> DownloadApodPageOrThrowUnavailableAsync(DateTime date, string pageUrl)
+        {
+            try
+            {
+                return await Network.DownloadStringAsync(pageUrl).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsUnavailableApodPage(ex))
+            {
+                throw CreateUnavailableException(date, ex);
+            }
         }
 
         private static ApodEntry CreateVideoEntry(DateTime date, string videoUrl)
@@ -566,6 +590,21 @@ namespace apod_wallpaper
                     requestUrl.IndexOf("&end_date=", StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
+        private static bool IsUnavailableApodPage(Exception exception)
+        {
+            int statusCode;
+            return Network.TryGetHttpStatusCode(exception, out statusCode) && statusCode == 404;
+        }
+
+        private static ApodEntryUnavailableException CreateUnavailableException(DateTime date, Exception exception)
+        {
+            var message = date.Date >= DateTime.Now.Date
+                ? "NASA has not published APOD for this date yet."
+                : "The selected APOD page is currently unavailable.";
+
+            return new ApodEntryUnavailableException(date, message);
+        }
+
         private IReadOnlyList<ApodEntry> GetEntriesOneByOne(DateTime startDate, DateTime endDate)
         {
             var entries = new List<ApodEntry>();
@@ -574,6 +613,10 @@ namespace apod_wallpaper
                 try
                 {
                     entries.Add(GetEntry(date));
+                }
+                catch (ApodEntryUnavailableException ex)
+                {
+                    AppLogger.Web("source=apod_html scope=page_only result=unavailable date=" + date.ToString("yyyy-MM-dd") + " message=" + ex.Message);
                 }
                 catch (Exception ex)
                 {
@@ -592,6 +635,10 @@ namespace apod_wallpaper
                 try
                 {
                     entries.Add(await GetEntryAsync(date).ConfigureAwait(false));
+                }
+                catch (ApodEntryUnavailableException ex)
+                {
+                    AppLogger.Web("source=apod_html scope=page_only_async result=unavailable date=" + date.ToString("yyyy-MM-dd") + " message=" + ex.Message);
                 }
                 catch (Exception ex)
                 {
