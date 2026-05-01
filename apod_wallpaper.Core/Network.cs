@@ -103,11 +103,17 @@ namespace apod_wallpaper
             try
             {
                 AppLogger.Web("transport=webrequest kind=" + kind + " stage=start url=" + url);
-                return fallbackAction(url);
+                var fallbackResult = fallbackAction(url);
+                if (IsExpectedMissingFallbackResult(fallbackResult))
+                    throw lastException ?? new InvalidOperationException("Network fallback returned no data for " + url + ".");
+
+                return fallbackResult;
             }
             catch (Exception ex)
             {
-                AppLogger.Error("Network fallback failed for kind=" + kind + " url=" + url + ".", ex);
+                if (!ReferenceEquals(ex, lastException))
+                    AppLogger.Error("Network fallback failed for kind=" + kind + " url=" + url + ".", ex);
+
                 throw lastException ?? ex;
             }
         }
@@ -140,11 +146,17 @@ namespace apod_wallpaper
             try
             {
                 AppLogger.Web("transport=webrequest kind=" + kind + " stage=start url=" + url);
-                return await fallbackAction(url).ConfigureAwait(false);
+                var fallbackResult = await fallbackAction(url).ConfigureAwait(false);
+                if (IsExpectedMissingFallbackResult(fallbackResult))
+                    throw lastException ?? new InvalidOperationException("Network fallback returned no data for " + url + ".");
+
+                return fallbackResult;
             }
             catch (Exception ex)
             {
-                AppLogger.Error("Network fallback failed for kind=" + kind + " url=" + url + ".", ex);
+                if (!ReferenceEquals(ex, lastException))
+                    AppLogger.Error("Network fallback failed for kind=" + kind + " url=" + url + ".", ex);
+
                 throw lastException ?? ex;
             }
         }
@@ -259,7 +271,7 @@ namespace apod_wallpaper
             catch (WebException ex) when (ex.Response is HttpWebResponse response)
             {
                 AppLogger.Warn("HttpWebRequest fallback returned HTTP " + (int)response.StatusCode + " for text url=" + url + ".", ex);
-                throw new NetworkHttpStatusException((int)response.StatusCode, url);
+                return null;
             }
         }
 
@@ -387,8 +399,16 @@ namespace apod_wallpaper
             catch (WebException ex) when (ex.Response is HttpWebResponse response)
             {
                 AppLogger.Warn("HttpWebRequest fallback returned HTTP " + (int)response.StatusCode + " for bitmap url=" + url + ".", ex);
-                throw new NetworkHttpStatusException((int)response.StatusCode, url);
+                return null;
             }
+        }
+
+        private static bool IsExpectedMissingFallbackResult<T>(T fallbackResult)
+        {
+            if (typeof(T).IsValueType)
+                return false;
+
+            return ReferenceEquals(fallbackResult, null);
         }
 
         [Serializable]
