@@ -65,7 +65,9 @@ public sealed partial class MainPage : Page
     private string? _pendingPreviewLocation;
     private long _monthCacheAccessStamp;
     private const int WarmupVisualStepDelayMs = 16;
-    private const int HotMonthCacheLimit = 6;
+    private const int PinnedMonthWindowRadius = 1;
+    private const int RecentMonthHistoryLimit = 3;
+    private const int HotMonthCacheLimit = (PinnedMonthWindowRadius * 2) + 1 + RecentMonthHistoryLimit;
 
     public MainPage()
     {
@@ -212,6 +214,7 @@ public sealed partial class MainPage : Page
         VisibleMonthText.Text = month.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
         EnsureCalendarMonthBuilt(month);
         SetCalendarToLoadingState(month);
+        TouchVisibleMonthWindow(month);
 
         _ = PrewarmWindowAsync(month, requestVersion);
 
@@ -627,20 +630,15 @@ public sealed partial class MainPage : Page
             LastAccessStamp = NextMonthCacheAccessStamp(),
         };
 
-        TrimHotMonthCache(normalizedMonth);
+        TrimHotMonthCache();
     }
 
-    private void TrimHotMonthCache(DateTime pinnedMonth)
+    private void TrimHotMonthCache()
     {
         if (_hotMonthCache.Count <= HotMonthCacheLimit)
             return;
 
-        var pinnedWindow = new HashSet<DateTime>
-        {
-            new DateTime(pinnedMonth.Year, pinnedMonth.Month, 1),
-            new DateTime(pinnedMonth.AddMonths(-1).Year, pinnedMonth.AddMonths(-1).Month, 1),
-            new DateTime(pinnedMonth.AddMonths(1).Year, pinnedMonth.AddMonths(1).Month, 1),
-        };
+        var pinnedWindow = BuildPinnedWindow(_visibleMonth);
 
         while (_hotMonthCache.Count > HotMonthCacheLimit)
         {
@@ -670,6 +668,28 @@ public sealed partial class MainPage : Page
     private long NextMonthCacheAccessStamp()
     {
         return Interlocked.Increment(ref _monthCacheAccessStamp);
+    }
+
+    private void TouchVisibleMonthWindow(DateTime visibleMonth)
+    {
+        foreach (var month in BuildPinnedWindow(visibleMonth))
+        {
+            if (_hotMonthCache.TryGetValue(month, out var entry))
+                entry.LastAccessStamp = NextMonthCacheAccessStamp();
+        }
+    }
+
+    private static HashSet<DateTime> BuildPinnedWindow(DateTime centerMonth)
+    {
+        var normalizedCenter = new DateTime(centerMonth.Year, centerMonth.Month, 1);
+        var pinnedWindow = new HashSet<DateTime>();
+        for (var offset = -PinnedMonthWindowRadius; offset <= PinnedMonthWindowRadius; offset++)
+        {
+            var month = normalizedCenter.AddMonths(offset);
+            pinnedWindow.Add(new DateTime(month.Year, month.Month, 1));
+        }
+
+        return pinnedWindow;
     }
 
     private void SetPreviewLoadingState(DateTime selectedDate)
