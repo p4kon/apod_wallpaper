@@ -530,7 +530,11 @@ public sealed partial class MainPage : Page
             return;
 
         var month = new DateTime(_visibleMonth.Year, _visibleMonth.Month, 1);
-        var refreshedResult = await GetOrLoadMonthStateAsync(month, refreshMissingDates: false, apod_wallpaper.MonthRefreshMode.Balanced);
+        var refreshedResult = await GetOrLoadMonthStateAsync(
+            month,
+            refreshMissingDates: false,
+            apod_wallpaper.MonthRefreshMode.Balanced,
+            preferHotCache: false);
         if (!refreshedResult.Succeeded || refreshedResult.Value == null)
             return;
 
@@ -585,7 +589,8 @@ public sealed partial class MainPage : Page
     private async Task<apod_wallpaper.OperationResult<apod_wallpaper.ApodCalendarMonthState>> GetOrLoadMonthStateAsync(
         DateTime month,
         bool refreshMissingDates,
-        apod_wallpaper.MonthRefreshMode refreshMode)
+        apod_wallpaper.MonthRefreshMode refreshMode,
+        bool preferHotCache = true)
     {
         if (_backendHost == null)
             return apod_wallpaper.OperationResult<apod_wallpaper.ApodCalendarMonthState>.Failure(
@@ -595,7 +600,7 @@ public sealed partial class MainPage : Page
                     false));
 
         var normalizedMonth = new DateTime(month.Year, month.Month, 1);
-        if (!refreshMissingDates && TryGetHotMonthState(normalizedMonth, out var hotState))
+        if (preferHotCache && !refreshMissingDates && TryGetHotMonthState(normalizedMonth, out var hotState))
         {
             return apod_wallpaper.OperationResult<apod_wallpaper.ApodCalendarMonthState>.Success(hotState);
         }
