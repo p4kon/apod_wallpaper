@@ -22,6 +22,10 @@ namespace apod_wallpaper
                 effectiveStyle = composition.Style;
                 AppLogger.Info("Applied smart wallpaper strategy=" + composition.Strategy + " source=" + imagePath + " target=" + effectiveImagePath + " style=" + effectiveStyle + ".");
             }
+            else
+            {
+                AppLogger.Info("Applying wallpaper source=" + imagePath + " style=" + effectiveStyle + ".");
+            }
 
             WallpaperNative.SilentSet(effectiveImagePath, effectiveStyle);
         }

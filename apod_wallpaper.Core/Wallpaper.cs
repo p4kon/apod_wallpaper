@@ -17,6 +17,55 @@ namespace apod_wallpaper
 
     internal static class WallpaperNative
     {
+        [ComImport]
+        [Guid("B92B56A9-8B55-4E14-9A89-0199BBB6F93B")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IDesktopWallpaper
+        {
+            void SetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorID, [MarshalAs(UnmanagedType.LPWStr)] string wallpaper);
+            [return: MarshalAs(UnmanagedType.LPWStr)]
+            string GetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorID);
+            void GetMonitorDevicePathAt(uint monitorIndex, [MarshalAs(UnmanagedType.LPWStr)] out string monitorID);
+            uint GetMonitorDevicePathCount();
+            void GetMonitorRECT([MarshalAs(UnmanagedType.LPWStr)] string monitorID, out RECT displayRect);
+            void SetBackgroundColor(uint color);
+            uint GetBackgroundColor();
+            void SetPosition(DesktopWallpaperPosition position);
+            DesktopWallpaperPosition GetPosition();
+            void SetSlideshow(IntPtr items);
+            IntPtr GetSlideshow();
+            void SetSlideshowOptions(uint options, uint slideshowTick);
+            void GetSlideshowOptions(out uint options, out uint slideshowTick);
+            void AdvanceSlideshow([MarshalAs(UnmanagedType.LPWStr)] string monitorID, uint direction);
+            uint GetStatus();
+            bool Enable();
+        }
+
+        [ComImport]
+        [Guid("C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD")]
+        private class DesktopWallpaperComObject
+        {
+        }
+
+        private enum DesktopWallpaperPosition
+        {
+            Center = 0,
+            Tile = 1,
+            Stretch = 2,
+            Fit = 3,
+            Fill = 4,
+            Span = 5,
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
         private const string DesktopRegistryPath = @"Control Panel\Desktop";
         private const string HistoryRegistryPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers";
         private const string WallpaperStyleRegistryPath = "WallpaperStyle";
@@ -84,6 +133,29 @@ namespace apod_wallpaper
             SetRegistryValue(key, TileWallpaperRegistryPath, value.IsTile);
         }
 
+        private static DesktopWallpaperPosition ToDesktopWallpaperPosition(WallpaperStyle style)
+        {
+            switch (style)
+            {
+                case WallpaperStyle.Fill:
+                    return DesktopWallpaperPosition.Fill;
+                case WallpaperStyle.Fit:
+                    return DesktopWallpaperPosition.Fit;
+                case WallpaperStyle.Stretch:
+                    return DesktopWallpaperPosition.Stretch;
+                case WallpaperStyle.Tile:
+                    return DesktopWallpaperPosition.Tile;
+                case WallpaperStyle.Center:
+                    return DesktopWallpaperPosition.Center;
+                case WallpaperStyle.Span:
+                    return DesktopWallpaperPosition.Span;
+                case WallpaperStyle.Smart:
+                    return DesktopWallpaperPosition.Fit;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(style));
+            }
+        }
+
         private static void SetStyle(WallpaperStyle style)
         {
             switch (style)
@@ -111,6 +183,27 @@ namespace apod_wallpaper
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(style));
+            }
+        }
+
+        private static bool TrySetWithDesktopWallpaperApi(string filename, WallpaperStyle style)
+        {
+            IDesktopWallpaper desktopWallpaper = null;
+            try
+            {
+                desktopWallpaper = (IDesktopWallpaper)new DesktopWallpaperComObject();
+                desktopWallpaper.SetPosition(ToDesktopWallpaperPosition(style));
+                desktopWallpaper.SetWallpaper(null, filename);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (desktopWallpaper != null && Marshal.IsComObject(desktopWallpaper))
+                    Marshal.ReleaseComObject(desktopWallpaper);
             }
         }
 
@@ -164,8 +257,11 @@ namespace apod_wallpaper
         private static void Set(string filename, WallpaperStyle style)
         {
             BackupState();
-            SetStyle(style);
-            ChangeWallpaper(filename);
+            if (!TrySetWithDesktopWallpaperApi(filename, style))
+            {
+                SetStyle(style);
+                ChangeWallpaper(filename);
+            }
         }
 
         public static void SilentSet(string filename, WallpaperStyle style)
