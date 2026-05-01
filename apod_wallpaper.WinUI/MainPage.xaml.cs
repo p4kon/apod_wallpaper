@@ -1,9 +1,14 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.UI;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.System;
@@ -12,18 +17,30 @@ namespace apod_wallpaper.WinUI;
 
 public sealed partial class MainPage : Page
 {
+    private static readonly SolidColorBrush CalendarGreenBrush = new(ColorHelper.FromArgb(0xFF, 0x3D, 0x8C, 0x63));
+    private static readonly SolidColorBrush CalendarBlueBrush = new(ColorHelper.FromArgb(0xFF, 0x2F, 0x79, 0xD9));
+    private static readonly SolidColorBrush CalendarRedBrush = new(ColorHelper.FromArgb(0xFF, 0xC4, 0x5A, 0x5A));
+    private static readonly SolidColorBrush CalendarUnknownBrush = new(ColorHelper.FromArgb(0xFF, 0x5F, 0x5F, 0x5F));
+    private static readonly SolidColorBrush CalendarFutureBrush = new(ColorHelper.FromArgb(0xFF, 0x31, 0x31, 0x31));
+    private static readonly SolidColorBrush CalendarSelectedBorderBrush = new(ColorHelper.FromArgb(0xFF, 0xF1, 0xF5, 0xF9));
+    private static readonly SolidColorBrush CalendarDefaultForegroundBrush = new(Colors.White);
+    private static readonly SolidColorBrush CalendarFutureForegroundBrush = new(ColorHelper.FromArgb(0xFF, 0xAA, 0xAA, 0xAA));
+
     private BackendHost? _backendHost;
     private apod_wallpaper.OperationResult<apod_wallpaper.ApplicationSettingsSnapshot>? _initialization;
     private TraySpikeStatus? _trayStatus;
-    private Action? _hideWindowToTray;
-    private Func<Task>? _exitApplicationAsync;
     private apod_wallpaper.ApplicationInitialStateSnapshot? _initialStateSnapshot;
+    private apod_wallpaper.ApodCalendarMonthState? _currentMonthState;
     private int _previewRequestVersion;
-    private bool _suppressDateChanged;
+    private int _monthRequestVersion;
+    private readonly HashSet<DateTime> _warmedMonths = new();
+    private DateTime _selectedDate = DateTime.Today;
+    private DateTime _visibleMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
 
     public MainPage()
     {
         InitializeComponent();
+        EnsureCalendarGridDefinitions();
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -40,8 +57,6 @@ public sealed partial class MainPage : Page
         _backendHost = arguments.BackendHost;
         _initialization = arguments.Initialization;
         _trayStatus = arguments.TrayStatus;
-        _hideWindowToTray = arguments.HideWindowToTray;
-        _exitApplicationAsync = arguments.ExitApplicationAsync;
         _trayStatus.Changed += TrayStatus_Changed;
         RefreshTrayStatus();
 
@@ -51,12 +66,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        await RefreshStateAndPreviewAsync();
-    }
-
-    private async void RefreshButton_Click(object sender, RoutedEventArgs e)
-    {
-        await RefreshStateAndPreviewAsync();
+        await RefreshStateAsync();
     }
 
     private async void ReloadPreviewButton_Click(object sender, RoutedEventArgs e)
@@ -69,8 +79,7 @@ public sealed partial class MainPage : Page
         if (_backendHost == null)
             return;
 
-        var selectedDate = PreviewDatePicker.Date.Date;
-        var postUrlResult = await _backendHost.Backend.GetPostUrlAsync(selectedDate);
+        var postUrlResult = await _backendHost.Backend.GetPostUrlAsync(_selectedDate);
         if (!postUrlResult.Succeeded || string.IsNullOrWhiteSpace(postUrlResult.Value))
         {
             PreviewStatusBar.Severity = InfoBarSeverity.Error;
@@ -82,26 +91,19 @@ public sealed partial class MainPage : Page
         await Launcher.LaunchUriAsync(new Uri(postUrlResult.Value));
     }
 
-    private async void PreviewDatePicker_DateChanged(object sender, DatePickerValueChangedEventArgs args)
+    private async void PreviousMonthButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_suppressDateChanged)
-            return;
-
-        await LoadPreviewForSelectedDateAsync();
+        _visibleMonth = _visibleMonth.AddMonths(-1);
+        await LoadVisibleMonthAsync();
     }
 
-    private void HideToTrayButton_Click(object sender, RoutedEventArgs e)
+    private async void NextMonthButton_Click(object sender, RoutedEventArgs e)
     {
-        _hideWindowToTray?.Invoke();
+        _visibleMonth = _visibleMonth.AddMonths(1);
+        await LoadVisibleMonthAsync();
     }
 
-    private async void ExitButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_exitApplicationAsync != null)
-            await _exitApplicationAsync();
-    }
-
-    private async Task RefreshStateAndPreviewAsync()
+    private async Task RefreshStateAsync()
     {
         if (_backendHost == null)
         {
@@ -128,7 +130,9 @@ public sealed partial class MainPage : Page
         StatusBar.Title = "Backend initialized";
         StatusBar.Message = "The WinUI host created ApplicationController and loaded the initial snapshot in one backend call.";
 
-        await LoadPreviewForSelectedDateAsync();
+        await Task.WhenAll(
+            LoadVisibleMonthAsync(),
+            LoadPreviewForSelectedDateAsync());
     }
 
     private void ApplyInitialState(apod_wallpaper.ApplicationInitialStateSnapshot snapshot)
@@ -147,17 +151,219 @@ public sealed partial class MainPage : Page
             ? "Apply latest APOD"
             : "Default window action";
 
-        _suppressDateChanged = true;
-        PreviewDatePicker.Date = new DateTimeOffset(snapshot.PreferredDisplayDate);
-        _suppressDateChanged = false;
+        _selectedDate = snapshot.PreferredDisplayDate.Date;
+        _visibleMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
+        RefreshSelectedDateText();
+        VisibleMonthText.Text = _visibleMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
 
         SnapshotSummaryText.Text = string.Join(Environment.NewLine, new[]
         {
-            "One backend call returned both current state and persisted settings.",
-            "This screen is intentionally readonly for now.",
-            "Preview requests use stale-result protection so quick date changes do not overwrite newer UI state.",
-            "Settings file: " + snapshot.StoragePaths.SettingsFilePath,
+            "The calendar is the primary date selector now.",
+            "Green is always resolved from the local images folder, so deleted files do not lie to the user.",
+            "Red and blue states come from backend month knowledge persisted in metadata cache.",
+            UsesPersonalApiKey(snapshot)
+                ? "Personal API key detected. Month warmup will refresh missing dates in the background."
+                : "DEMO_KEY mode detected. Automatic month warmup is limited to avoid burning the shared rate limit.",
         });
+    }
+
+    private async Task LoadVisibleMonthAsync()
+    {
+        if (_backendHost == null)
+            return;
+
+        var month = new DateTime(_visibleMonth.Year, _visibleMonth.Month, 1);
+        var requestVersion = Interlocked.Increment(ref _monthRequestVersion);
+        VisibleMonthText.Text = month.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+
+        MonthStatusBar.Severity = InfoBarSeverity.Informational;
+        MonthStatusBar.Title = "Loading cached month state";
+        MonthStatusBar.Message = "Rendering cached knowledge first so the calendar appears immediately.";
+
+        var cachedResult = await _backendHost.Backend.GetCalendarMonthStateAsync(month, false, apod_wallpaper.MonthRefreshMode.Balanced);
+        if (requestVersion != _monthRequestVersion)
+            return;
+
+        if (!cachedResult.Succeeded || cachedResult.Value == null)
+        {
+            SetMonthErrorState(month, cachedResult.Error?.Message ?? "Unable to load calendar month state.");
+            return;
+        }
+
+        _currentMonthState = cachedResult.Value;
+        RenderCalendarMonth(_currentMonthState);
+        SetMonthReadyState(_currentMonthState, warmed: false);
+
+        if (!ShouldWarmMonth(month))
+            return;
+
+        MonthStatusBar.Severity = InfoBarSeverity.Informational;
+        MonthStatusBar.Title = "Refreshing month in background";
+        MonthStatusBar.Message = BuildMonthWarmupMessage(month);
+
+        _ = WarmMonthAsync(month, requestVersion);
+    }
+
+    private async Task WarmMonthAsync(DateTime month, int requestVersion)
+    {
+        if (_backendHost == null)
+            return;
+
+        var refreshedResult = await _backendHost.Backend.GetCalendarMonthStateAsync(month, true, apod_wallpaper.MonthRefreshMode.Aggressive);
+        if (requestVersion != _monthRequestVersion)
+            return;
+
+        if (!refreshedResult.Succeeded || refreshedResult.Value == null)
+        {
+            MonthStatusBar.Severity = InfoBarSeverity.Warning;
+            MonthStatusBar.Title = "Month refresh partially unavailable";
+            MonthStatusBar.Message = refreshedResult.Error?.Message ?? "The calendar kept its cached state because background refresh did not finish cleanly.";
+            return;
+        }
+
+        _currentMonthState = refreshedResult.Value;
+        RenderCalendarMonth(_currentMonthState);
+        if (!IsCurrentMonth(month))
+            _warmedMonths.Add(month.Date);
+
+        SetMonthReadyState(_currentMonthState, warmed: true);
+    }
+
+    private void SetMonthReadyState(apod_wallpaper.ApodCalendarMonthState monthState, bool warmed)
+    {
+        var counts = CountMonthStates(monthState);
+        MonthStatusBar.Severity = warmed ? InfoBarSeverity.Success : InfoBarSeverity.Informational;
+        MonthStatusBar.Title = warmed ? "Month refreshed" : "Month loaded";
+        MonthStatusBar.Message = string.Format(
+            CultureInfo.InvariantCulture,
+            "Local: {0}  Remote image: {1}  Unsupported: {2}  Unknown: {3}",
+            counts.Local,
+            counts.RemoteImage,
+            counts.Unsupported,
+            counts.Unknown);
+    }
+
+    private void SetMonthErrorState(DateTime month, string message)
+    {
+        VisibleMonthText.Text = month.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        MonthStatusBar.Severity = InfoBarSeverity.Error;
+        MonthStatusBar.Title = "Calendar month failed";
+        MonthStatusBar.Message = message;
+        CalendarDaysGrid.Children.Clear();
+        SelectedDateText.Text = "Calendar unavailable";
+    }
+
+    private void RenderCalendarMonth(apod_wallpaper.ApodCalendarMonthState monthState)
+    {
+        EnsureCalendarGridDefinitions();
+        CalendarDaysGrid.Children.Clear();
+
+        VisibleMonthText.Text = monthState.Month.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        RefreshSelectedDateText();
+
+        var monthStart = monthState.Month;
+        var daysInMonth = DateTime.DaysInMonth(monthStart.Year, monthStart.Month);
+        var startOffset = GetMondayFirstOffset(monthStart.DayOfWeek);
+
+        for (var day = 1; day <= daysInMonth; day++)
+        {
+            var date = new DateTime(monthStart.Year, monthStart.Month, day);
+            monthState.TryGetDay(date, out var dayState);
+
+            var cellIndex = startOffset + (day - 1);
+            var row = cellIndex / 7;
+            var column = cellIndex % 7;
+
+            var button = CreateCalendarDayButton(date, dayState, monthState.LatestPublishedDate);
+            Grid.SetRow(button, row);
+            Grid.SetColumn(button, column);
+            CalendarDaysGrid.Children.Add(button);
+        }
+    }
+
+    private Button CreateCalendarDayButton(DateTime date, apod_wallpaper.ApodCalendarDayState? dayState, DateTime latestPublishedDate)
+    {
+        var isFuture = date.Date > latestPublishedDate.Date;
+        var hasLocalImage = dayState?.IsLocalImageAvailable == true;
+        var hasRemoteImage = dayState?.IsKnown == true && dayState.HasImage && !hasLocalImage;
+        var isUnsupported = dayState?.IsKnown == true && !dayState.HasImage;
+        var isUnknown = !hasLocalImage && !hasRemoteImage && !isUnsupported;
+        var isSelected = _selectedDate.Date == date.Date;
+
+        var background = CalendarUnknownBrush;
+        var foreground = CalendarDefaultForegroundBrush;
+        if (isFuture)
+        {
+            background = CalendarFutureBrush;
+            foreground = CalendarFutureForegroundBrush;
+        }
+        else if (hasLocalImage)
+        {
+            background = CalendarGreenBrush;
+        }
+        else if (hasRemoteImage)
+        {
+            background = CalendarBlueBrush;
+        }
+        else if (isUnsupported)
+        {
+            background = CalendarRedBrush;
+        }
+
+        var content = new StackPanel
+        {
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        content.Children.Add(new TextBlock
+        {
+            Text = date.Day.ToString(CultureInfo.InvariantCulture),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal,
+        });
+
+        content.Children.Add(new TextBlock
+        {
+            Text = BuildMiniStatusLabel(isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            FontSize = 10,
+            Opacity = 0.92,
+        });
+
+        var button = new Button
+        {
+            Content = content,
+            Padding = new Thickness(6),
+            MinHeight = 58,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Background = background,
+            Foreground = foreground,
+            BorderBrush = isSelected ? CalendarSelectedBorderBrush : background,
+            BorderThickness = isSelected ? new Thickness(2) : new Thickness(1),
+            CornerRadius = new CornerRadius(12),
+            Tag = date,
+            IsEnabled = !isFuture,
+        };
+
+        button.Click += CalendarDayButton_Click;
+        ToolTipService.SetToolTip(button, BuildDayTooltip(date, isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown));
+        return button;
+    }
+
+    private async void CalendarDayButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not DateTime date)
+            return;
+
+        _selectedDate = date.Date;
+        RefreshSelectedDateText();
+
+        if (_currentMonthState != null)
+            RenderCalendarMonth(_currentMonthState);
+
+        await LoadPreviewForSelectedDateAsync();
     }
 
     private async Task LoadPreviewForSelectedDateAsync()
@@ -165,7 +371,7 @@ public sealed partial class MainPage : Page
         if (_backendHost == null)
             return;
 
-        var selectedDate = PreviewDatePicker.Date.DateTime.Date;
+        var selectedDate = _selectedDate.Date;
         var requestVersion = Interlocked.Increment(ref _previewRequestVersion);
         SetPreviewLoadingState(selectedDate);
 
@@ -194,6 +400,9 @@ public sealed partial class MainPage : Page
                 SetPreviewOperationError(selectedDate, workflow.Message ?? "Unexpected preview workflow state.");
                 break;
         }
+
+        if (_currentMonthState != null && _selectedDate.Month == _currentMonthState.Month.Month && _selectedDate.Year == _currentMonthState.Month.Year)
+            await LoadVisibleMonthAsync();
     }
 
     private void SetPreviewLoadingState(DateTime selectedDate)
@@ -320,6 +529,11 @@ public sealed partial class MainPage : Page
         }
     }
 
+    private void RefreshSelectedDateText()
+    {
+        SelectedDateText.Text = "Selected date: " + _selectedDate.ToString("dddd, dd MMMM yyyy", CultureInfo.CurrentCulture);
+    }
+
     private static Uri BuildPreviewUri(string previewLocation)
     {
         if (previewLocation.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
@@ -369,6 +583,9 @@ public sealed partial class MainPage : Page
         StatusBar.Severity = InfoBarSeverity.Error;
         StatusBar.Title = "Backend startup failed";
         StatusBar.Message = message;
+        MonthStatusBar.Severity = InfoBarSeverity.Error;
+        MonthStatusBar.Title = "Calendar unavailable";
+        MonthStatusBar.Message = message;
         SnapshotSummaryText.Text = message;
         PreferredDateText.Text = "Unavailable";
         WallpaperStyleText.Text = "Unavailable";
@@ -391,6 +608,9 @@ public sealed partial class MainPage : Page
         PreviewImage.Visibility = Visibility.Collapsed;
         PreviewProgressRing.IsActive = false;
         PreviewProgressRing.Visibility = Visibility.Collapsed;
+        VisibleMonthText.Text = "Unavailable";
+        SelectedDateText.Text = "Unavailable";
+        CalendarDaysGrid.Children.Clear();
     }
 
     private static string FormatApiKeyState(apod_wallpaper.ApplicationInitialStateSnapshot snapshot)
@@ -406,6 +626,130 @@ public sealed partial class MainPage : Page
             return "Invalid key, using DEMO_KEY";
 
         return "DEMO_KEY / no personal key";
+    }
+
+    private bool UsesPersonalApiKey(apod_wallpaper.ApplicationInitialStateSnapshot snapshot)
+    {
+        var rawKey = snapshot.Settings?.NasaApiKey;
+        if (string.IsNullOrWhiteSpace(rawKey))
+            return false;
+
+        if (string.Equals(rawKey, "DEMO_KEY", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return snapshot.ApiKeyValidationState != apod_wallpaper.ApiKeyValidationState.Invalid;
+    }
+
+    private bool ShouldWarmMonth(DateTime month)
+    {
+        if (_initialStateSnapshot == null || !UsesPersonalApiKey(_initialStateSnapshot))
+            return false;
+
+        if (IsCurrentMonth(month))
+            return true;
+
+        return !_warmedMonths.Contains(month.Date);
+    }
+
+    private static bool IsCurrentMonth(DateTime month)
+    {
+        var currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        return month.Date == currentMonth;
+    }
+
+    private string BuildMonthWarmupMessage(DateTime month)
+    {
+        if (IsCurrentMonth(month))
+            return "Current month is refreshed in the background because APOD can still grow tomorrow or later today.";
+
+        return "Background warmup is filling unknown dates and unsupported-media knowledge for this month.";
+    }
+
+    private static (int Local, int RemoteImage, int Unsupported, int Unknown) CountMonthStates(apod_wallpaper.ApodCalendarMonthState monthState)
+    {
+        var local = 0;
+        var remoteImage = 0;
+        var unsupported = 0;
+        var unknown = 0;
+
+        foreach (var day in monthState.Days)
+        {
+            if (day.IsFuture)
+                continue;
+
+            if (day.IsLocalImageAvailable)
+                local++;
+            else if (day.IsKnown && day.HasImage)
+                remoteImage++;
+            else if (day.IsKnown && !day.HasImage)
+                unsupported++;
+            else
+                unknown++;
+        }
+
+        return (local, remoteImage, unsupported, unknown);
+    }
+
+    private static int GetMondayFirstOffset(DayOfWeek dayOfWeek)
+    {
+        return ((int)dayOfWeek + 6) % 7;
+    }
+
+    private static string BuildMiniStatusLabel(bool isFuture, bool hasLocalImage, bool hasRemoteImage, bool isUnsupported, bool isUnknown)
+    {
+        if (isFuture)
+            return "future";
+        if (hasLocalImage)
+            return "local";
+        if (hasRemoteImage)
+            return "ready";
+        if (isUnsupported)
+            return "video";
+        if (isUnknown)
+            return "unknown";
+        return string.Empty;
+    }
+
+    private string BuildDayTooltip(DateTime date, bool isFuture, bool hasLocalImage, bool hasRemoteImage, bool isUnsupported, bool isUnknown)
+    {
+        var status = isFuture
+            ? "Future date"
+            : hasLocalImage
+                ? "Downloaded locally"
+                : hasRemoteImage
+                    ? "NASA image available"
+                    : isUnsupported
+                        ? "Video or unsupported content"
+                        : "Unknown / not checked";
+
+        var detail = isFuture
+            ? "NASA has not published this date yet."
+            : hasLocalImage
+                ? "A usable local wallpaper file exists on disk."
+                : hasRemoteImage
+                    ? "This day resolves to image content, but the local file is not present."
+                    : isUnsupported
+                        ? "The date was checked and does not contain a downloadable image."
+                        : UsesPersonalApiKey(_initialStateSnapshot!)
+                            ? "The day is not verified yet or background month warmup has not reached it."
+                            : "Automatic month warmup is limited with DEMO_KEY to avoid spending the shared hourly quota.";
+
+        return date.ToString("dddd, dd MMMM yyyy", CultureInfo.CurrentCulture) + Environment.NewLine + status + Environment.NewLine + detail;
+    }
+
+    private void EnsureCalendarGridDefinitions()
+    {
+        if (CalendarDaysGrid.ColumnDefinitions.Count == 7 && CalendarDaysGrid.RowDefinitions.Count == 6)
+            return;
+
+        CalendarDaysGrid.ColumnDefinitions.Clear();
+        CalendarDaysGrid.RowDefinitions.Clear();
+
+        for (var i = 0; i < 7; i++)
+            CalendarDaysGrid.ColumnDefinitions.Add(new ColumnDefinition());
+
+        for (var row = 0; row < 6; row++)
+            CalendarDaysGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)

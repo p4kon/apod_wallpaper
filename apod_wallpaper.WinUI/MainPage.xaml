@@ -8,9 +8,8 @@
     mc:Ignorable="d">
 
     <ScrollViewer>
-        <Grid MaxWidth="1040" Padding="28" HorizontalAlignment="Center" RowSpacing="16">
+        <Grid MaxWidth="1180" Padding="28" HorizontalAlignment="Center" RowSpacing="16">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -19,10 +18,10 @@
             </Grid.RowDefinitions>
 
             <StackPanel Spacing="6">
-                <TextBlock FontSize="28" FontWeight="SemiBold" Text="Preview Workspace" />
+                <TextBlock FontSize="28" FontWeight="SemiBold" Text="APOD Calendar Workspace" />
                 <TextBlock
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="The main wallpaper flow now lives here: choose a date, load preview, open the NASA page, and track Success / Unavailable / Error predictably."
+                    Text="The calendar is now the main control surface: browse months, read date status at a glance, and load preview from a single click."
                     TextWrapping="Wrap" />
             </StackPanel>
 
@@ -34,160 +33,271 @@
                 Severity="Informational"
                 Title="Starting backend" />
 
-            <Border
-                Grid.Row="2"
-                Padding="20"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="16">
-                <Grid RowSpacing="16">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
+            <Grid Grid.Row="2" ColumnSpacing="16" RowSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="0.98*" />
+                    <ColumnDefinition Width="1.02*" />
+                </Grid.ColumnDefinitions>
 
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                <Border
+                    Grid.Column="0"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16">
+                    <Grid RowSpacing="16">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                        <StackPanel Spacing="4">
-                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Preview and date" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="This is the main user flow. Rapid date changes should not freeze the UI or leave stale preview state behind."
-                                TextWrapping="Wrap" />
-                        </StackPanel>
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-                        <DatePicker
-                            x:Name="PreviewDatePicker"
-                            Grid.Column="1"
-                            DateChanged="PreviewDatePicker_DateChanged"
-                            DayVisible="False"
-                            HorizontalAlignment="Left" />
+                            <Button Grid.Column="0" Click="PreviousMonthButton_Click" Content="←" />
 
-                        <Button
-                            x:Name="ReloadPreviewButton"
-                            Grid.Column="2"
-                            Click="ReloadPreviewButton_Click"
-                            Content="Reload preview" />
-
-                        <Button
-                            x:Name="OpenNasaPageButton"
-                            Grid.Column="3"
-                            Click="OpenNasaPageButton_Click"
-                            Content="Open NASA page" />
-                    </Grid>
-
-                    <InfoBar
-                        x:Name="PreviewStatusBar"
-                        Grid.Row="1"
-                        IsClosable="False"
-                        IsOpen="True"
-                        Severity="Informational"
-                        Title="Preview idle" />
-
-                    <Grid Grid.Row="2" ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.1*" />
-                            <ColumnDefinition Width="0.9*" />
-                        </Grid.ColumnDefinitions>
-
-                        <Border
-                            Grid.Column="0"
-                            MinHeight="360"
-                            Padding="16"
-                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="16">
-                            <Grid>
-                                <Image
-                                    x:Name="PreviewImage"
-                                    Stretch="Uniform"
-                                    Visibility="Collapsed" />
-
-                                <ProgressRing
-                                    x:Name="PreviewProgressRing"
-                                    Width="56"
-                                    Height="56"
-                                    IsActive="False"
-                                    Visibility="Collapsed" />
-
-                                <StackPanel
-                                    x:Name="PreviewPlaceholderPanel"
+                            <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
+                                <TextBlock
+                                    x:Name="VisibleMonthText"
+                                    FontSize="20"
+                                    FontWeight="SemiBold"
                                     HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Spacing="8">
-                                    <TextBlock
-                                        x:Name="PreviewPlaceholderTitleText"
-                                        FontSize="18"
-                                        FontWeight="SemiBold"
-                                        HorizontalAlignment="Center"
-                                        Text="Preview not loaded yet" />
-                                    <TextBlock
-                                        x:Name="PreviewPlaceholderText"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        HorizontalAlignment="Center"
-                                        Text="Choose a date to load APOD preview."
-                                        TextAlignment="Center"
-                                        TextWrapping="Wrap" />
+                                    Text="Loading month..." />
+                                <TextBlock
+                                    x:Name="SelectedDateText"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    HorizontalAlignment="Center"
+                                    Text="No date selected yet"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <Button Grid.Column="2" Click="NextMonthButton_Click" Content="→" />
+                        </Grid>
+
+                        <InfoBar
+                            x:Name="MonthStatusBar"
+                            Grid.Row="1"
+                            IsClosable="False"
+                            IsOpen="True"
+                            Severity="Informational"
+                            Title="Month status idle" />
+
+                        <StackPanel Grid.Row="2" Spacing="8">
+                            <TextBlock FontWeight="SemiBold" Text="Legend" />
+                            <Grid ColumnSpacing="14" RowSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                    <Border Width="14" Height="14" CornerRadius="7" Background="#3D8C63" />
+                                    <TextBlock Text="Downloaded locally" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <Border Width="14" Height="14" CornerRadius="7" Background="#2F79D9" />
+                                    <TextBlock Text="NASA image available" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                    <Border Width="14" Height="14" CornerRadius="7" Background="#C45A5A" />
+                                    <TextBlock Text="Video or unsupported" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <Border Width="14" Height="14" CornerRadius="7" Background="#5F5F5F" />
+                                    <TextBlock Text="Unknown / not checked" />
                                 </StackPanel>
                             </Grid>
-                        </Border>
+                        </StackPanel>
 
-                        <Border
-                            Grid.Column="1"
-                            Padding="16"
-                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="16">
-                            <StackPanel Spacing="12">
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Preview result" />
+                        <Grid Grid.Row="3" RowSpacing="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
-                                <Grid ColumnSpacing="12" RowSpacing="10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
+                            <Grid x:Name="WeekdayHeaderGrid" ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Row="0" Text="Requested date" />
-                                    <TextBlock x:Name="RequestedDateText" Grid.Row="0" Grid.Column="1" FontWeight="SemiBold" Text="Not loaded" />
+                                <TextBlock Grid.Column="0" HorizontalAlignment="Center" Text="Mon" />
+                                <TextBlock Grid.Column="1" HorizontalAlignment="Center" Text="Tue" />
+                                <TextBlock Grid.Column="2" HorizontalAlignment="Center" Text="Wed" />
+                                <TextBlock Grid.Column="3" HorizontalAlignment="Center" Text="Thu" />
+                                <TextBlock Grid.Column="4" HorizontalAlignment="Center" Text="Fri" />
+                                <TextBlock Grid.Column="5" HorizontalAlignment="Center" Text="Sat" />
+                                <TextBlock Grid.Column="6" HorizontalAlignment="Center" Text="Sun" />
+                            </Grid>
 
-                                    <TextBlock Grid.Row="1" Text="Resolved date" />
-                                    <TextBlock x:Name="ResolvedDateText" Grid.Row="1" Grid.Column="1" FontWeight="SemiBold" Text="Not loaded" />
-
-                                    <TextBlock Grid.Row="2" Text="Status" />
-                                    <TextBlock x:Name="PreviewWorkflowStatusText" Grid.Row="2" Grid.Column="1" FontWeight="SemiBold" Text="Idle" />
-
-                                    <TextBlock Grid.Row="3" Text="Source" />
-                                    <TextBlock x:Name="PreviewSourceText" Grid.Row="3" Grid.Column="1" FontWeight="SemiBold" Text="Unknown" />
-
-                                    <TextBlock Grid.Row="4" Text="Preview file" />
-                                    <TextBlock x:Name="PreviewLocationText" Grid.Row="4" Grid.Column="1" FontWeight="SemiBold" Text="Not loaded" TextWrapping="WrapWholeWords" />
-
-                                    <TextBlock Grid.Row="5" Text="Message" />
-                                    <TextBlock x:Name="PreviewMessageText" Grid.Row="5" Grid.Column="1" FontWeight="SemiBold" Text="Waiting for request." TextWrapping="WrapWholeWords" />
-                                </Grid>
-                            </StackPanel>
-                        </Border>
+                            <Grid x:Name="CalendarDaysGrid" Grid.Row="1" ColumnSpacing="8" RowSpacing="8" />
+                        </Grid>
                     </Grid>
-                </Grid>
-            </Border>
+                </Border>
+
+                <Border
+                    Grid.Column="1"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16">
+                    <Grid RowSpacing="16">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Spacing="4">
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Preview and actions" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="Select a day in the calendar to load preview. Rapid clicks should not leave stale state behind."
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <Button
+                                x:Name="ReloadPreviewButton"
+                                Grid.Column="1"
+                                Click="ReloadPreviewButton_Click"
+                                Content="Reload preview" />
+
+                            <Button
+                                x:Name="OpenNasaPageButton"
+                                Grid.Column="2"
+                                Click="OpenNasaPageButton_Click"
+                                Content="Open NASA page" />
+                        </Grid>
+
+                        <InfoBar
+                            x:Name="PreviewStatusBar"
+                            Grid.Row="1"
+                            IsClosable="False"
+                            IsOpen="True"
+                            Severity="Informational"
+                            Title="Preview idle" />
+
+                        <Grid Grid.Row="2" ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.05*" />
+                                <ColumnDefinition Width="0.95*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border
+                                Grid.Column="0"
+                                MinHeight="360"
+                                Padding="16"
+                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="16">
+                                <Grid>
+                                    <Image
+                                        x:Name="PreviewImage"
+                                        Stretch="Uniform"
+                                        Visibility="Collapsed" />
+
+                                    <ProgressRing
+                                        x:Name="PreviewProgressRing"
+                                        Width="56"
+                                        Height="56"
+                                        IsActive="False"
+                                        Visibility="Collapsed" />
+
+                                    <StackPanel
+                                        x:Name="PreviewPlaceholderPanel"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Spacing="8">
+                                        <TextBlock
+                                            x:Name="PreviewPlaceholderTitleText"
+                                            FontSize="18"
+                                            FontWeight="SemiBold"
+                                            HorizontalAlignment="Center"
+                                            Text="Preview not loaded yet" />
+                                        <TextBlock
+                                            x:Name="PreviewPlaceholderText"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            HorizontalAlignment="Center"
+                                            Text="Pick a date from the calendar to load APOD preview."
+                                            TextAlignment="Center"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <Border
+                                Grid.Column="1"
+                                Padding="16"
+                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="16">
+                                <StackPanel Spacing="12">
+                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Preview result" />
+
+                                    <Grid ColumnSpacing="12" RowSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Text="Requested date" />
+                                        <TextBlock x:Name="RequestedDateText" Grid.Row="0" Grid.Column="1" FontWeight="SemiBold" Text="Not loaded" />
+
+                                        <TextBlock Grid.Row="1" Text="Resolved date" />
+                                        <TextBlock x:Name="ResolvedDateText" Grid.Row="1" Grid.Column="1" FontWeight="SemiBold" Text="Not loaded" />
+
+                                        <TextBlock Grid.Row="2" Text="Status" />
+                                        <TextBlock x:Name="PreviewWorkflowStatusText" Grid.Row="2" Grid.Column="1" FontWeight="SemiBold" Text="Idle" />
+
+                                        <TextBlock Grid.Row="3" Text="Source" />
+                                        <TextBlock x:Name="PreviewSourceText" Grid.Row="3" Grid.Column="1" FontWeight="SemiBold" Text="Unknown" />
+
+                                        <TextBlock Grid.Row="4" Text="Preview file" />
+                                        <TextBlock x:Name="PreviewLocationText" Grid.Row="4" Grid.Column="1" FontWeight="SemiBold" Text="Not loaded" TextWrapping="WrapWholeWords" />
+
+                                        <TextBlock Grid.Row="5" Text="Message" />
+                                        <TextBlock x:Name="PreviewMessageText" Grid.Row="5" Grid.Column="1" FontWeight="SemiBold" Text="Waiting for request." TextWrapping="WrapWholeWords" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
 
             <Grid Grid.Row="3" ColumnSpacing="16" RowSpacing="16">
                 <Grid.ColumnDefinitions>
@@ -250,7 +360,7 @@
                             <TextBlock FontSize="18" FontWeight="SemiBold" Text="Backend-backed settings" />
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="These values will become live controls in the next settings task."
+                                Text="The calendar warmup policy depends on storage mode and API key state."
                                 TextWrapping="Wrap" />
                         </StackPanel>
 
@@ -321,12 +431,6 @@
                     </StackPanel>
                 </Border>
             </Grid>
-
-            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Left" Spacing="12">
-                <Button Click="HideToTrayButton_Click" Content="Hide to tray" />
-                <Button Click="RefreshButton_Click" Content="Refresh startup state" />
-                <Button Click="ExitButton_Click" Content="Exit application" />
-            </StackPanel>
         </Grid>
     </ScrollViewer>
 </Page>
