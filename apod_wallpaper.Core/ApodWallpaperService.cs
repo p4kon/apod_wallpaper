@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace apod_wallpaper
@@ -16,6 +17,7 @@ namespace apod_wallpaper
         private readonly IApodClient _client;
         private readonly IApodMetadataCache _cache;
         private readonly IWallpaperApplier _wallpaperService;
+        private readonly SemaphoreSlim _latestEntrySemaphore = new SemaphoreSlim(1, 1);
         private ApodEntry _latestEntry;
         private DateTime _latestEntryFetchedAtUtc;
 
@@ -96,72 +98,88 @@ namespace apod_wallpaper
 
         public ApodEntry GetLatestPublishedEntry(bool forceRefresh = false)
         {
-            if (!forceRefresh &&
-                _latestEntry != null &&
-                DateTime.UtcNow - _latestEntryFetchedAtUtc < LatestEntryCacheDuration)
+            _latestEntrySemaphore.Wait();
+            try
             {
-                return _latestEntry;
-            }
-
-            var latestEntry = _client.GetLatestEntry();
-            var entryDate = DateTime.Parse(latestEntry.Date).Date;
-
-            if (!forceRefresh)
-            {
-                var cached = _cache.Get(entryDate);
-                if (cached != null)
+                if (!forceRefresh &&
+                    _latestEntry != null &&
+                    DateTime.UtcNow - _latestEntryFetchedAtUtc < LatestEntryCacheDuration)
                 {
-                    var cachedEntry = cached.ToEntry();
-                    if (cachedEntry.HasImage || !ShouldRefreshCachedEntry(cached, entryDate))
+                    return _latestEntry;
+                }
+
+                var latestEntry = _client.GetLatestEntry();
+                var entryDate = DateTime.Parse(latestEntry.Date).Date;
+
+                if (!forceRefresh)
+                {
+                    var cached = _cache.Get(entryDate);
+                    if (cached != null)
                     {
-                        cachedEntry.ResolvedFromSource = cachedEntry.HasImage ? "cache" : cachedEntry.ResolvedFromSource;
-                        _latestEntry = cachedEntry;
-                        _latestEntryFetchedAtUtc = DateTime.UtcNow;
-                        return cachedEntry;
+                        var cachedEntry = cached.ToEntry();
+                        if (cachedEntry.HasImage || !ShouldRefreshCachedEntry(cached, entryDate))
+                        {
+                            cachedEntry.ResolvedFromSource = cachedEntry.HasImage ? "cache" : cachedEntry.ResolvedFromSource;
+                            _latestEntry = cachedEntry;
+                            _latestEntryFetchedAtUtc = DateTime.UtcNow;
+                            return cachedEntry;
+                        }
                     }
                 }
-            }
 
-            _cache.Upsert(latestEntry);
-            _latestEntry = latestEntry;
-            _latestEntryFetchedAtUtc = DateTime.UtcNow;
-            AppLogger.Info("Resolved latest APOD " + latestEntry.Date + " from " + (latestEntry.ResolvedFromSource ?? "unknown") + ".");
-            return latestEntry;
+                _cache.Upsert(latestEntry);
+                _latestEntry = latestEntry;
+                _latestEntryFetchedAtUtc = DateTime.UtcNow;
+                AppLogger.Info("Resolved latest APOD " + latestEntry.Date + " from " + (latestEntry.ResolvedFromSource ?? "unknown") + ".");
+                return latestEntry;
+            }
+            finally
+            {
+                _latestEntrySemaphore.Release();
+            }
         }
 
         public async Task<ApodEntry> GetLatestPublishedEntryAsync(bool forceRefresh = false)
         {
-            if (!forceRefresh &&
-                _latestEntry != null &&
-                DateTime.UtcNow - _latestEntryFetchedAtUtc < LatestEntryCacheDuration)
+            await _latestEntrySemaphore.WaitAsync().ConfigureAwait(false);
+            try
             {
-                return _latestEntry;
-            }
-
-            var latestEntry = await _client.GetLatestEntryAsync().ConfigureAwait(false);
-            var entryDate = DateTime.Parse(latestEntry.Date).Date;
-
-            if (!forceRefresh)
-            {
-                var cached = _cache.Get(entryDate);
-                if (cached != null)
+                if (!forceRefresh &&
+                    _latestEntry != null &&
+                    DateTime.UtcNow - _latestEntryFetchedAtUtc < LatestEntryCacheDuration)
                 {
-                    var cachedEntry = cached.ToEntry();
-                    if (cachedEntry.HasImage || !ShouldRefreshCachedEntry(cached, entryDate))
+                    return _latestEntry;
+                }
+
+                var latestEntry = await _client.GetLatestEntryAsync().ConfigureAwait(false);
+                var entryDate = DateTime.Parse(latestEntry.Date).Date;
+
+                if (!forceRefresh)
+                {
+                    var cached = _cache.Get(entryDate);
+                    if (cached != null)
                     {
-                        cachedEntry.ResolvedFromSource = cachedEntry.HasImage ? "cache" : cachedEntry.ResolvedFromSource;
-                        _latestEntry = cachedEntry;
-                        _latestEntryFetchedAtUtc = DateTime.UtcNow;
-                        return cachedEntry;
+                        var cachedEntry = cached.ToEntry();
+                        if (cachedEntry.HasImage || !ShouldRefreshCachedEntry(cached, entryDate))
+                        {
+                            cachedEntry.ResolvedFromSource = cachedEntry.HasImage ? "cache" : cachedEntry.ResolvedFromSource;
+                            _latestEntry = cachedEntry;
+                            _latestEntryFetchedAtUtc = DateTime.UtcNow;
+                            return cachedEntry;
+                        }
                     }
                 }
-            }
 
-            _cache.Upsert(latestEntry);
-            _latestEntry = latestEntry;
-            _latestEntryFetchedAtUtc = DateTime.UtcNow;
-            AppLogger.Info("Resolved latest APOD " + latestEntry.Date + " from " + (latestEntry.ResolvedFromSource ?? "unknown") + ".");
-            return latestEntry;
+                _cache.Upsert(latestEntry);
+                _latestEntry = latestEntry;
+                _latestEntryFetchedAtUtc = DateTime.UtcNow;
+                AppLogger.Info("Resolved latest APOD " + latestEntry.Date + " from " + (latestEntry.ResolvedFromSource ?? "unknown") + ".");
+                return latestEntry;
+            }
+            finally
+            {
+                _latestEntrySemaphore.Release();
+            }
         }
 
         public IReadOnlyList<ApodDayAvailability> GetMonthAvailability(DateTime month, bool refreshMissingDates)

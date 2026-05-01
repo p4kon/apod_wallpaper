@@ -530,7 +530,7 @@ public sealed partial class MainPage : Page
             return;
 
         var month = new DateTime(_visibleMonth.Year, _visibleMonth.Month, 1);
-        var refreshedResult = await _backendHost.Backend.GetCalendarMonthStateAsync(month, true, apod_wallpaper.MonthRefreshMode.Balanced);
+        var refreshedResult = await GetOrLoadMonthStateAsync(month, refreshMissingDates: false, apod_wallpaper.MonthRefreshMode.Balanced);
         if (!refreshedResult.Succeeded || refreshedResult.Value == null)
             return;
 
