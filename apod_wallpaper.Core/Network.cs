@@ -316,10 +316,10 @@ namespace apod_wallpaper
             if (attempt >= maxAttempts)
                 return false;
 
-            var statusException = exception as NetworkHttpStatusException;
-            if (statusException != null)
+            int statusCode;
+            if (TryGetHttpStatusCode(exception, out statusCode))
             {
-                switch (statusException.StatusCode)
+                switch (statusCode)
                 {
                     case 408:
                     case 425:
@@ -338,6 +338,29 @@ namespace apod_wallpaper
                    exception is WebException ||
                    exception is IOException ||
                    exception is TaskCanceledException;
+        }
+
+        internal static bool TryGetHttpStatusCode(Exception exception, out int statusCode)
+        {
+            statusCode = 0;
+            if (exception == null)
+                return false;
+
+            var statusException = exception as NetworkHttpStatusException;
+            if (statusException != null)
+            {
+                statusCode = statusException.StatusCode;
+                return true;
+            }
+
+            var webException = exception as WebException;
+            if (webException != null && webException.Response is HttpWebResponse response)
+            {
+                statusCode = (int)response.StatusCode;
+                return true;
+            }
+
+            return false;
         }
 
         private static Bitmap DownloadBitmapWithWebRequest(string url)

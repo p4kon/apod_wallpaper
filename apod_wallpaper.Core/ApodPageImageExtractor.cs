@@ -7,6 +7,21 @@ namespace apod_wallpaper
 {
     internal static class ApodPageImageExtractor
     {
+        internal enum ApodPageMediaKind
+        {
+            Unknown = 0,
+            Image = 1,
+            Unsupported = 2,
+        }
+
+        internal sealed class ApodPageMediaResolution
+        {
+            public ApodPageMediaKind Kind { get; set; }
+            public string PreviewUrl { get; set; }
+            public string ImageUrl { get; set; }
+            public string MediaUrl { get; set; }
+        }
+
         private static readonly Regex AnchorHrefRegex = new Regex(
             "<a\\b[^>]*href\\s*=\\s*[\"'](?<href>[^\"']+)[\"'][^>]*>",
             RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
@@ -48,58 +63,12 @@ namespace apod_wallpaper
             previewUrl = null;
             imageUrl = null;
 
-            if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(pageUrl))
+            ApodPageMediaResolution resolution;
+            if (!TryResolveMedia(html, pageUrl, out resolution) || resolution.Kind != ApodPageMediaKind.Image)
                 return false;
 
-            var baseUri = new Uri(pageUrl, UriKind.Absolute);
-            var relevantHtml = ExtractRelevantHtml(html);
-            if (string.IsNullOrWhiteSpace(relevantHtml))
-                return false;
-
-            if (relevantHtml.IndexOf("<video", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                relevantHtml.IndexOf("type=\"video/", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                relevantHtml.IndexOf("type='video/", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return false;
-            }
-
-            var candidates = new List<Candidate>();
-
-            foreach (Match match in AnchorImageRegex.Matches(relevantHtml))
-            {
-                var href = ToAbsoluteUrl(baseUri, match.Groups["href"].Value);
-                var src = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
-                candidates.Add(new Candidate(src, href));
-            }
-
-            foreach (Match match in AnchorHrefRegex.Matches(relevantHtml))
-            {
-                var href = ToAbsoluteUrl(baseUri, match.Groups["href"].Value);
-                candidates.Add(new Candidate(null, href));
-            }
-
-            foreach (Match match in ImageRegex.Matches(relevantHtml))
-            {
-                var src = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
-                candidates.Add(new Candidate(src, src));
-            }
-
-            foreach (Match match in ImagePathRegex.Matches(relevantHtml))
-            {
-                var imagePath = ToAbsoluteUrl(baseUri, match.Groups["url"].Value);
-                candidates.Add(new Candidate(imagePath, imagePath));
-            }
-
-            var bestCandidate = candidates
-                .Where(candidate => candidate.HasAnyImage)
-                .OrderByDescending(candidate => candidate.Score)
-                .FirstOrDefault();
-
-            if (bestCandidate == null)
-                return false;
-
-            previewUrl = bestCandidate.PreviewUrl ?? bestCandidate.ImageUrl;
-            imageUrl = bestCandidate.ImageUrl ?? bestCandidate.PreviewUrl;
+            previewUrl = resolution.PreviewUrl;
+            imageUrl = resolution.ImageUrl;
             return !string.IsNullOrWhiteSpace(previewUrl) || !string.IsNullOrWhiteSpace(imageUrl);
         }
 
@@ -107,6 +76,18 @@ namespace apod_wallpaper
         {
             videoUrl = null;
 
+            ApodPageMediaResolution resolution;
+            if (!TryResolveMedia(html, pageUrl, out resolution) || resolution.Kind != ApodPageMediaKind.Unsupported)
+                return false;
+
+            videoUrl = resolution.MediaUrl;
+            return !string.IsNullOrWhiteSpace(videoUrl);
+        }
+
+        internal static bool TryResolveMedia(string html, string pageUrl, out ApodPageMediaResolution resolution)
+        {
+            resolution = null;
+
             if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(pageUrl))
                 return false;
 
@@ -115,39 +96,27 @@ namespace apod_wallpaper
             if (string.IsNullOrWhiteSpace(relevantHtml))
                 return false;
 
-            foreach (Match match in VideoTagSourceRegex.Matches(relevantHtml))
+            Candidate imageCandidate;
+            if (TryResolveImageCandidate(baseUri, relevantHtml, out imageCandidate))
             {
-                var sourceUrl = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
-                if (LooksLikeVideoUrl(sourceUrl))
+                resolution = new ApodPageMediaResolution
                 {
-                    videoUrl = sourceUrl;
-                    return true;
-                }
+                    Kind = ApodPageMediaKind.Image,
+                    PreviewUrl = imageCandidate.PreviewUrl ?? imageCandidate.ImageUrl,
+                    ImageUrl = imageCandidate.ImageUrl ?? imageCandidate.PreviewUrl,
+                    MediaUrl = imageCandidate.ImageUrl ?? imageCandidate.PreviewUrl,
+                };
+                return true;
             }
 
-            foreach (Match match in IframeRegex.Matches(relevantHtml))
+            string mediaUrl;
+            if (TryResolveUnsupportedMedia(baseUri, relevantHtml, pageUrl, out mediaUrl))
             {
-                var sourceUrl = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
-                if (LooksLikeVideoUrl(sourceUrl))
+                resolution = new ApodPageMediaResolution
                 {
-                    videoUrl = sourceUrl;
-                    return true;
-                }
-            }
-
-            foreach (Match match in VideoPathRegex.Matches(relevantHtml))
-            {
-                var sourceUrl = ToAbsoluteUrl(baseUri, match.Groups["url"].Value);
-                if (LooksLikeVideoUrl(sourceUrl))
-                {
-                    videoUrl = sourceUrl;
-                    return true;
-                }
-            }
-
-            if (VideoTagRegex.IsMatch(relevantHtml))
-            {
-                videoUrl = pageUrl;
+                    Kind = ApodPageMediaKind.Unsupported,
+                    MediaUrl = mediaUrl,
+                };
                 return true;
             }
 
@@ -193,6 +162,86 @@ namespace apod_wallpaper
                 return centerIndex;
 
             return dateHeadingIndex;
+        }
+
+        private static bool TryResolveImageCandidate(Uri baseUri, string relevantHtml, out Candidate bestCandidate)
+        {
+            var candidates = new List<Candidate>();
+
+            foreach (Match match in AnchorImageRegex.Matches(relevantHtml))
+            {
+                var href = ToAbsoluteUrl(baseUri, match.Groups["href"].Value);
+                var src = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
+                candidates.Add(new Candidate(src, href));
+            }
+
+            foreach (Match match in AnchorHrefRegex.Matches(relevantHtml))
+            {
+                var href = ToAbsoluteUrl(baseUri, match.Groups["href"].Value);
+                candidates.Add(new Candidate(null, href));
+            }
+
+            foreach (Match match in ImageRegex.Matches(relevantHtml))
+            {
+                var src = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
+                candidates.Add(new Candidate(src, src));
+            }
+
+            foreach (Match match in ImagePathRegex.Matches(relevantHtml))
+            {
+                var imagePath = ToAbsoluteUrl(baseUri, match.Groups["url"].Value);
+                candidates.Add(new Candidate(imagePath, imagePath));
+            }
+
+            bestCandidate = candidates
+                .Where(candidate => candidate.HasAnyImage)
+                .OrderByDescending(candidate => candidate.Score)
+                .FirstOrDefault();
+
+            return bestCandidate != null;
+        }
+
+        private static bool TryResolveUnsupportedMedia(Uri baseUri, string relevantHtml, string pageUrl, out string mediaUrl)
+        {
+            mediaUrl = null;
+
+            foreach (Match match in VideoTagSourceRegex.Matches(relevantHtml))
+            {
+                var sourceUrl = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
+                if (LooksLikeVideoUrl(sourceUrl))
+                {
+                    mediaUrl = sourceUrl;
+                    return true;
+                }
+            }
+
+            foreach (Match match in IframeRegex.Matches(relevantHtml))
+            {
+                var sourceUrl = ToAbsoluteUrl(baseUri, match.Groups["src"].Value);
+                if (LooksLikeVideoUrl(sourceUrl))
+                {
+                    mediaUrl = sourceUrl;
+                    return true;
+                }
+            }
+
+            foreach (Match match in VideoPathRegex.Matches(relevantHtml))
+            {
+                var sourceUrl = ToAbsoluteUrl(baseUri, match.Groups["url"].Value);
+                if (LooksLikeVideoUrl(sourceUrl))
+                {
+                    mediaUrl = sourceUrl;
+                    return true;
+                }
+            }
+
+            if (VideoTagRegex.IsMatch(relevantHtml))
+            {
+                mediaUrl = pageUrl;
+                return true;
+            }
+
+            return false;
         }
 
         public static bool LooksLikeImageUrl(string url)
@@ -306,7 +355,8 @@ namespace apod_wallpaper
                 return !string.IsNullOrWhiteSpace(url) &&
                     (url.IndexOf("original", StringComparison.OrdinalIgnoreCase) >= 0 ||
                      url.IndexOf("_full", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                     url.IndexOf("_large", StringComparison.OrdinalIgnoreCase) >= 0);
+                     url.IndexOf("_large", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     url.IndexOf("_2560", StringComparison.OrdinalIgnoreCase) >= 0);
             }
         }
     }

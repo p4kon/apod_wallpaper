@@ -15,20 +15,33 @@ namespace apod_wallpaper
         private const string DemoApiKey = "DEMO_KEY";
         private const string Endpoint = "https://api.nasa.gov/planetary/apod";
         private static readonly TimeSpan LatestFallbackLookback = TimeSpan.FromDays(3);
+        private static readonly TimeSpan DemoDatedApiBlockDuration = TimeSpan.FromMinutes(15);
+        private const int DemoDatedApi403Threshold = 2;
+        private static readonly object DemoDatedApiSyncRoot = new object();
+        private static int _demoDatedApi403Count;
+        private static DateTime _demoDatedApiBlockedUntilUtc;
 
         public ApodEntry GetEntry(DateTime date)
         {
             var requestUrl = BuildSingleRequestUrl(date);
+            if (ShouldShortCircuitDemoDatedApi(requestUrl))
+            {
+                AppLogger.Web("source=nasa_api scope=single result=short_circuit_demo date=" + date.ToString("yyyy-MM-dd"));
+                return CreateEntryFromApodPage(date);
+            }
+
             var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=single date=" + date.ToString("yyyy-MM-dd") + " url=" + requestUrl);
             try
             {
                 var entry = Deserialize<ApodEntry>(Network.DownloadString(requestUrl, retryProfile), "NASA APOD API response could not be parsed.");
                 entry.ResolvedFromSource = "api";
+                RecordApiSuccess(requestUrl);
                 return NormalizeEntry(entry, date);
             }
             catch (Exception ex)
             {
+                RecordApiFailure(requestUrl, ex);
                 AppLogger.Warn("NASA APOD API single request failed for " + date.ToString("yyyy-MM-dd") + ".", ex);
                 return CreateEntryFromApodPage(date);
             }
@@ -37,16 +50,24 @@ namespace apod_wallpaper
         public async Task<ApodEntry> GetEntryAsync(DateTime date)
         {
             var requestUrl = BuildSingleRequestUrl(date);
+            if (ShouldShortCircuitDemoDatedApi(requestUrl))
+            {
+                AppLogger.Web("source=nasa_api scope=single_async result=short_circuit_demo date=" + date.ToString("yyyy-MM-dd"));
+                return await CreateEntryFromApodPageAsync(date).ConfigureAwait(false);
+            }
+
             var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=single_async date=" + date.ToString("yyyy-MM-dd") + " url=" + requestUrl);
             try
             {
                 var entry = Deserialize<ApodEntry>(await Network.DownloadStringAsync(requestUrl, retryProfile).ConfigureAwait(false), "NASA APOD API response could not be parsed.");
                 entry.ResolvedFromSource = "api";
+                RecordApiSuccess(requestUrl);
                 return await NormalizeEntryAsync(entry, date).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
+                RecordApiFailure(requestUrl, ex);
                 AppLogger.Warn("NASA APOD API single async request failed for " + date.ToString("yyyy-MM-dd") + ".", ex);
                 return await CreateEntryFromApodPageAsync(date).ConfigureAwait(false);
             }
@@ -91,15 +112,23 @@ namespace apod_wallpaper
         public IReadOnlyList<ApodEntry> GetEntries(DateTime startDate, DateTime endDate)
         {
             var requestUrl = BuildRangeRequestUrl(startDate, endDate);
+            if (ShouldShortCircuitDemoDatedApi(requestUrl))
+            {
+                AppLogger.Web("source=nasa_api scope=range result=short_circuit_demo start=" + startDate.ToString("yyyy-MM-dd") + " end=" + endDate.ToString("yyyy-MM-dd"));
+                return GetEntriesOneByOne(startDate, endDate);
+            }
+
             var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=range start=" + startDate.ToString("yyyy-MM-dd") + " end=" + endDate.ToString("yyyy-MM-dd") + " url=" + requestUrl);
             try
             {
                 var entries = Deserialize<List<ApodEntry>>(Network.DownloadString(requestUrl, retryProfile), "NASA APOD API range response could not be parsed.");
+                RecordApiSuccess(requestUrl);
                 return entries.Select(entry => NormalizeEntry(entry, null)).ToList();
             }
             catch (Exception ex)
             {
+                RecordApiFailure(requestUrl, ex);
                 AppLogger.Warn("NASA APOD range request failed for " + startDate.ToString("yyyy-MM-dd") + " - " + endDate.ToString("yyyy-MM-dd") + ".", ex);
                 return GetEntriesOneByOne(startDate, endDate);
             }
@@ -108,11 +137,18 @@ namespace apod_wallpaper
         public async Task<IReadOnlyList<ApodEntry>> GetEntriesAsync(DateTime startDate, DateTime endDate)
         {
             var requestUrl = BuildRangeRequestUrl(startDate, endDate);
+            if (ShouldShortCircuitDemoDatedApi(requestUrl))
+            {
+                AppLogger.Web("source=nasa_api scope=range_async result=short_circuit_demo start=" + startDate.ToString("yyyy-MM-dd") + " end=" + endDate.ToString("yyyy-MM-dd"));
+                return await GetEntriesOneByOneAsync(startDate, endDate).ConfigureAwait(false);
+            }
+
             var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=range_async start=" + startDate.ToString("yyyy-MM-dd") + " end=" + endDate.ToString("yyyy-MM-dd") + " url=" + requestUrl);
             try
             {
                 var entries = Deserialize<List<ApodEntry>>(await Network.DownloadStringAsync(requestUrl, retryProfile).ConfigureAwait(false), "NASA APOD API range response could not be parsed.");
+                RecordApiSuccess(requestUrl);
                 var normalizedEntries = new List<ApodEntry>(entries.Count);
                 foreach (var entry in entries)
                     normalizedEntries.Add(await NormalizeEntryAsync(entry, null).ConfigureAwait(false));
@@ -121,6 +157,7 @@ namespace apod_wallpaper
             }
             catch (Exception ex)
             {
+                RecordApiFailure(requestUrl, ex);
                 AppLogger.Warn("NASA APOD async range request failed for " + startDate.ToString("yyyy-MM-dd") + " - " + endDate.ToString("yyyy-MM-dd") + ".", ex);
                 return await GetEntriesOneByOneAsync(startDate, endDate).ConfigureAwait(false);
             }
@@ -297,28 +334,7 @@ namespace apod_wallpaper
                 var pageUrl = ApodPageUrl.GetUrl(date);
                 AppLogger.Web("source=apod_html scope=enrich date=" + date.ToString("yyyy-MM-dd") + " url=" + pageUrl);
                 var pageHtml = Network.DownloadString(pageUrl);
-
-                string previewUrl;
-                string imageUrl;
-                if (!ApodPageImageExtractor.TryExtract(pageHtml, pageUrl, out previewUrl, out imageUrl))
-                {
-                    AppLogger.Web("source=apod_html scope=enrich result=no_image date=" + date.ToString("yyyy-MM-dd"));
-                    return;
-                }
-
-                if (!string.IsNullOrWhiteSpace(previewUrl))
-                    entry.Url = previewUrl;
-
-                if (!string.IsNullOrWhiteSpace(imageUrl))
-                    entry.HdUrl = imageUrl;
-
-                if (entry.HasImage)
-                {
-                    entry.MediaType = "image";
-                    entry.ResolvedFromSource = "html_fallback";
-                    entry.IsFallbackImage = true;
-                    AppLogger.Web("source=apod_html scope=enrich result=image date=" + date.ToString("yyyy-MM-dd") + " preview=" + (previewUrl ?? "<null>") + " image=" + (imageUrl ?? "<null>"));
-                }
+                ApplyHtmlResolutionToEntry(entry, date, pageUrl, pageHtml, "enrich");
             }
             catch (Exception ex)
             {
@@ -333,28 +349,7 @@ namespace apod_wallpaper
                 var pageUrl = ApodPageUrl.GetUrl(date);
                 AppLogger.Web("source=apod_html scope=enrich_async date=" + date.ToString("yyyy-MM-dd") + " url=" + pageUrl);
                 var pageHtml = await Network.DownloadStringAsync(pageUrl).ConfigureAwait(false);
-
-                string previewUrl;
-                string imageUrl;
-                if (!ApodPageImageExtractor.TryExtract(pageHtml, pageUrl, out previewUrl, out imageUrl))
-                {
-                    AppLogger.Web("source=apod_html scope=enrich_async result=no_image date=" + date.ToString("yyyy-MM-dd"));
-                    return;
-                }
-
-                if (!string.IsNullOrWhiteSpace(previewUrl))
-                    entry.Url = previewUrl;
-
-                if (!string.IsNullOrWhiteSpace(imageUrl))
-                    entry.HdUrl = imageUrl;
-
-                if (entry.HasImage)
-                {
-                    entry.MediaType = "image";
-                    entry.ResolvedFromSource = "html_fallback";
-                    entry.IsFallbackImage = true;
-                    AppLogger.Web("source=apod_html scope=enrich_async result=image date=" + date.ToString("yyyy-MM-dd") + " preview=" + (previewUrl ?? "<null>") + " image=" + (imageUrl ?? "<null>"));
-                }
+                ApplyHtmlResolutionToEntry(entry, date, pageUrl, pageHtml, "enrich_async");
             }
             catch (Exception ex)
             {
@@ -400,33 +395,7 @@ namespace apod_wallpaper
             var pageUrl = ApodPageUrl.GetUrl(date);
             AppLogger.Web("source=apod_html scope=page_only date=" + date.ToString("yyyy-MM-dd") + " url=" + pageUrl);
             var pageHtml = Network.DownloadString(pageUrl);
-
-            string previewUrl;
-            string imageUrl;
-            if (!ApodPageImageExtractor.TryExtract(pageHtml, pageUrl, out previewUrl, out imageUrl))
-            {
-                string videoUrl;
-                if (ApodPageImageExtractor.TryExtractVideo(pageHtml, pageUrl, out videoUrl))
-                {
-                    AppLogger.Web("source=apod_html scope=page_only result=video date=" + date.ToString("yyyy-MM-dd") + " url=" + (videoUrl ?? "<null>"));
-                    return CreateVideoEntry(date, videoUrl);
-                }
-
-                AppLogger.Web("source=apod_html scope=page_only result=no_image date=" + date.ToString("yyyy-MM-dd"));
-                throw new InvalidOperationException("Unable to extract APOD image or known video from the page for " + date.ToString("yyyy-MM-dd") + ".");
-            }
-
-            AppLogger.Web("source=apod_html scope=page_only result=image date=" + date.ToString("yyyy-MM-dd") + " preview=" + (previewUrl ?? "<null>") + " image=" + (imageUrl ?? "<null>"));
-
-            return new ApodEntry
-            {
-                Date = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                Url = previewUrl,
-                HdUrl = imageUrl,
-                MediaType = "image",
-                ResolvedFromSource = "html_fallback",
-                IsFallbackImage = true,
-            };
+            return CreateEntryFromResolvedMedia(date, pageUrl, pageHtml, "page_only");
         }
 
         private static async Task<ApodEntry> CreateEntryFromApodPageAsync(DateTime date)
@@ -434,33 +403,7 @@ namespace apod_wallpaper
             var pageUrl = ApodPageUrl.GetUrl(date);
             AppLogger.Web("source=apod_html scope=page_only_async date=" + date.ToString("yyyy-MM-dd") + " url=" + pageUrl);
             var pageHtml = await Network.DownloadStringAsync(pageUrl).ConfigureAwait(false);
-
-            string previewUrl;
-            string imageUrl;
-            if (!ApodPageImageExtractor.TryExtract(pageHtml, pageUrl, out previewUrl, out imageUrl))
-            {
-                string videoUrl;
-                if (ApodPageImageExtractor.TryExtractVideo(pageHtml, pageUrl, out videoUrl))
-                {
-                    AppLogger.Web("source=apod_html scope=page_only_async result=video date=" + date.ToString("yyyy-MM-dd") + " url=" + (videoUrl ?? "<null>"));
-                    return CreateVideoEntry(date, videoUrl);
-                }
-
-                AppLogger.Web("source=apod_html scope=page_only_async result=no_image date=" + date.ToString("yyyy-MM-dd"));
-                throw new InvalidOperationException("Unable to extract APOD image or known video from the page for " + date.ToString("yyyy-MM-dd") + ".");
-            }
-
-            AppLogger.Web("source=apod_html scope=page_only_async result=image date=" + date.ToString("yyyy-MM-dd") + " preview=" + (previewUrl ?? "<null>") + " image=" + (imageUrl ?? "<null>"));
-
-            return new ApodEntry
-            {
-                Date = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                Url = previewUrl,
-                HdUrl = imageUrl,
-                MediaType = "image",
-                ResolvedFromSource = "html_fallback",
-                IsFallbackImage = true,
-            };
+            return CreateEntryFromResolvedMedia(date, pageUrl, pageHtml, "page_only_async");
         }
 
         private static ApodEntry CreateVideoEntry(DateTime date, string videoUrl)
@@ -474,6 +417,147 @@ namespace apod_wallpaper
                 ResolvedFromSource = "html_fallback",
                 IsFallbackImage = false,
             };
+        }
+
+        private static void ApplyHtmlResolutionToEntry(ApodEntry entry, DateTime date, string pageUrl, string pageHtml, string scope)
+        {
+            ApodPageImageExtractor.ApodPageMediaResolution resolution;
+            if (!ApodPageImageExtractor.TryResolveMedia(pageHtml, pageUrl, out resolution))
+            {
+                AppLogger.Web("source=apod_html scope=" + scope + " result=unknown date=" + date.ToString("yyyy-MM-dd"));
+                return;
+            }
+
+            if (resolution.Kind == ApodPageImageExtractor.ApodPageMediaKind.Image)
+            {
+                if (!string.IsNullOrWhiteSpace(resolution.PreviewUrl))
+                    entry.Url = resolution.PreviewUrl;
+
+                if (!string.IsNullOrWhiteSpace(resolution.ImageUrl))
+                    entry.HdUrl = resolution.ImageUrl;
+
+                if (entry.HasImage)
+                {
+                    entry.MediaType = "image";
+                    entry.ResolvedFromSource = "html_fallback";
+                    entry.IsFallbackImage = true;
+                    AppLogger.Web("source=apod_html scope=" + scope + " result=image date=" + date.ToString("yyyy-MM-dd") + " preview=" + (resolution.PreviewUrl ?? "<null>") + " image=" + (resolution.ImageUrl ?? "<null>"));
+                }
+
+                return;
+            }
+
+            if (resolution.Kind == ApodPageImageExtractor.ApodPageMediaKind.Unsupported)
+            {
+                entry.Url = resolution.MediaUrl;
+                entry.HdUrl = null;
+                entry.MediaType = "video";
+                entry.ResolvedFromSource = "html_fallback";
+                entry.IsFallbackImage = false;
+                AppLogger.Web("source=apod_html scope=" + scope + " result=unsupported date=" + date.ToString("yyyy-MM-dd") + " url=" + (resolution.MediaUrl ?? "<null>"));
+            }
+        }
+
+        private static ApodEntry CreateEntryFromResolvedMedia(DateTime date, string pageUrl, string pageHtml, string scope)
+        {
+            ApodPageImageExtractor.ApodPageMediaResolution resolution;
+            if (!ApodPageImageExtractor.TryResolveMedia(pageHtml, pageUrl, out resolution))
+            {
+                AppLogger.Web("source=apod_html scope=" + scope + " result=unknown date=" + date.ToString("yyyy-MM-dd"));
+                throw new InvalidOperationException("Unable to classify APOD page media for " + date.ToString("yyyy-MM-dd") + ".");
+            }
+
+            if (resolution.Kind == ApodPageImageExtractor.ApodPageMediaKind.Image)
+            {
+                AppLogger.Web("source=apod_html scope=" + scope + " result=image date=" + date.ToString("yyyy-MM-dd") + " preview=" + (resolution.PreviewUrl ?? "<null>") + " image=" + (resolution.ImageUrl ?? "<null>"));
+                return new ApodEntry
+                {
+                    Date = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    Url = resolution.PreviewUrl,
+                    HdUrl = resolution.ImageUrl,
+                    MediaType = "image",
+                    ResolvedFromSource = "html_fallback",
+                    IsFallbackImage = true,
+                };
+            }
+
+            if (resolution.Kind == ApodPageImageExtractor.ApodPageMediaKind.Unsupported)
+            {
+                AppLogger.Web("source=apod_html scope=" + scope + " result=unsupported date=" + date.ToString("yyyy-MM-dd") + " url=" + (resolution.MediaUrl ?? "<null>"));
+                return CreateVideoEntry(date, resolution.MediaUrl);
+            }
+
+            AppLogger.Web("source=apod_html scope=" + scope + " result=unknown date=" + date.ToString("yyyy-MM-dd"));
+            throw new InvalidOperationException("Unable to classify APOD page media for " + date.ToString("yyyy-MM-dd") + ".");
+        }
+
+        private static bool ShouldShortCircuitDemoDatedApi(string requestUrl)
+        {
+            if (!IsDemoDatedApiRequest(requestUrl))
+                return false;
+
+            lock (DemoDatedApiSyncRoot)
+            {
+                if (_demoDatedApiBlockedUntilUtc <= DateTime.UtcNow)
+                    return false;
+
+                AppLogger.Web("source=nasa_api scope=demo_guard result=blocked until=" + _demoDatedApiBlockedUntilUtc.ToString("o"));
+                return true;
+            }
+        }
+
+        private static void RecordApiSuccess(string requestUrl)
+        {
+            if (!IsDemoDatedApiRequest(requestUrl))
+                return;
+
+            lock (DemoDatedApiSyncRoot)
+            {
+                _demoDatedApi403Count = 0;
+                _demoDatedApiBlockedUntilUtc = DateTime.MinValue;
+            }
+        }
+
+        private static void RecordApiFailure(string requestUrl, Exception exception)
+        {
+            if (!IsDemoDatedApiRequest(requestUrl))
+                return;
+
+            int statusCode;
+            if (!Network.TryGetHttpStatusCode(exception, out statusCode))
+                return;
+
+            lock (DemoDatedApiSyncRoot)
+            {
+                if (statusCode == 403)
+                {
+                    _demoDatedApi403Count++;
+                    if (_demoDatedApi403Count >= DemoDatedApi403Threshold)
+                    {
+                        _demoDatedApiBlockedUntilUtc = DateTime.UtcNow.Add(DemoDatedApiBlockDuration);
+                        AppLogger.Warn("DEMO_KEY dated NASA API temporarily blocked after repeated HTTP 403 responses. Falling back to APOD HTML pages until " + _demoDatedApiBlockedUntilUtc.ToString("o") + ".", exception);
+                    }
+
+                    return;
+                }
+
+                if (statusCode < 500)
+                    _demoDatedApi403Count = 0;
+            }
+        }
+
+        private static bool IsDemoDatedApiRequest(string requestUrl)
+        {
+            if (!string.Equals(ResolveApiKey(), DemoApiKey, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (string.IsNullOrWhiteSpace(requestUrl))
+                return false;
+
+            return requestUrl.IndexOf("?api_key=", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                   (requestUrl.IndexOf("&date=", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    requestUrl.IndexOf("&start_date=", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    requestUrl.IndexOf("&end_date=", StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
         private IReadOnlyList<ApodEntry> GetEntriesOneByOne(DateTime startDate, DateTime endDate)
