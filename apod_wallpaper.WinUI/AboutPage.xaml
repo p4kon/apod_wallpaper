@@ -7,20 +7,147 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Border
-        Margin="0"
-        Padding="24"
-        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-        BorderThickness="1"
-        CornerRadius="16">
-        <StackPanel Spacing="10">
-            <TextBlock FontSize="24" FontWeight="SemiBold" Text="About" />
-            <TextBlock Text="APOD Wallpaper" />
+    <ScrollViewer>
+        <Grid MaxWidth="980" Padding="24" HorizontalAlignment="Center" RowSpacing="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Spacing="6">
+                <TextBlock FontSize="28" FontWeight="SemiBold" Text="About APOD Wallpaper" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="A compact desktop host for previewing, downloading, and applying NASA Astronomy Picture of the Day wallpapers."
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <InfoBar
+                x:Name="AboutStatusBar"
+                Grid.Row="1"
+                IsClosable="False"
+                IsOpen="True"
+                Severity="Informational"
+                Title="Product info" />
+
+            <Grid Grid.Row="2" ColumnSpacing="16" RowSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border
+                    Grid.Column="0"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16">
+                    <StackPanel Spacing="16">
+                        <TextBlock FontSize="20" FontWeight="SemiBold" Text="Application" />
+
+                        <Grid ColumnSpacing="12" RowSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" FontWeight="SemiBold" Text="Name" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="APOD Wallpaper" TextWrapping="Wrap" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" FontWeight="SemiBold" Text="Version" />
+                            <TextBlock x:Name="VersionTextBlock" Grid.Row="1" Grid.Column="1" Text="Loading..." TextWrapping="Wrap" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" FontWeight="SemiBold" Text="Package" />
+                            <TextBlock x:Name="PackageTextBlock" Grid.Row="2" Grid.Column="1" Text="Loading..." TextWrapping="Wrap" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" FontWeight="SemiBold" Text="Description" />
+                            <TextBlock
+                                Grid.Row="3"
+                                Grid.Column="1"
+                                Text="Minimal desktop app for APOD wallpaper preview, download, and apply."
+                                TextWrapping="Wrap" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    Grid.Column="1"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16">
+                    <StackPanel Spacing="16">
+                        <TextBlock FontSize="20" FontWeight="SemiBold" Text="Links" />
+
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="These are the current working product links. The public website can replace the provisional endpoints later without changing this screen structure."
+                            TextWrapping="Wrap" />
+
+                        <Button Click="ProjectRepositoryButton_Click" Content="Open project repository" />
+                        <Button Click="SupportButton_Click" Content="Open support / issues" />
+                        <Button Click="PrivacyButton_Click" Content="Open privacy policy placeholder" />
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    Grid.Row="1"
+                    Grid.Column="0"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16">
+                    <StackPanel Spacing="16">
+                        <TextBlock FontSize="20" FontWeight="SemiBold" Text="License and notices" />
+
+                        <TextBlock
+                            Text="This project is distributed under the MIT License. Third-party audit notes currently show no external NuGet package dependencies in the solution."
+                            TextWrapping="Wrap" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button Click="LicenseButton_Click" Content="Open LICENSE" />
+                            <Button Click="ThirdPartyNoticesButton_Click" Content="Open third-party notices" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Padding="20"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16">
+                    <StackPanel Spacing="16">
+                        <TextBlock FontSize="20" FontWeight="SemiBold" Text="Credits" />
+
+                        <TextBlock
+                            Text="Runtime content comes from NASA Astronomy Picture of the Day. The app uses NASA APOD services at runtime, but does not bundle NASA content in the repository."
+                            TextWrapping="Wrap" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button Click="NasaApodButton_Click" Content="Open NASA APOD" />
+                            <Button Click="NasaApiButton_Click" Content="Open NASA API" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
             <TextBlock
+                Grid.Row="3"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="This page is the lightweight placeholder for app info, support links, and product metadata."
+                Text="Store-facing privacy and support URLs can be replaced later with the final public website without changing the page layout or navigation."
                 TextWrapping="Wrap" />
-        </StackPanel>
-    </Border>
+        </Grid>
+    </ScrollViewer>
 </Page>
