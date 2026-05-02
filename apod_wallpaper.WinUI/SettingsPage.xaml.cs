@@ -100,7 +100,6 @@ public sealed partial class SettingsPage : Page
             ApiKeyTextBox.Text = settings.NasaApiKey ?? string.Empty;
             AutoCheckToggle.IsOn = settings.AutoRefreshEnabled;
             StartWithWindowsToggle.IsOn = settings.StartWithWindows;
-            TrayDoubleClickToggle.IsOn = settings.TrayDoubleClickAction;
             CloseToTrayToggle.IsOn = settings.MinimizeToTrayOnClose;
             ImagesDirectoryTextBox.Text = settings.ImagesDirectoryPath ?? string.Empty;
             WallpaperStyleComboBox.SelectedItem = ResolveWallpaperStyleFromSettings(settings);
@@ -132,11 +131,6 @@ public sealed partial class SettingsPage : Page
     private async void StartWithWindowsToggle_Toggled(object sender, RoutedEventArgs e)
     {
         await SaveSettingsAsync(snapshot => snapshot.StartWithWindows = StartWithWindowsToggle.IsOn, "Start-with-Windows preference saved.");
-    }
-
-    private async void TrayDoubleClickToggle_Toggled(object sender, RoutedEventArgs e)
-    {
-        await SaveSettingsAsync(snapshot => snapshot.TrayDoubleClickAction = TrayDoubleClickToggle.IsOn, "Tray double-click behavior saved.");
     }
 
     private async void CloseToTrayToggle_Toggled(object sender, RoutedEventArgs e)
@@ -333,7 +327,6 @@ public sealed partial class SettingsPage : Page
         ApiKeyTextBox.IsEnabled = false;
         AutoCheckToggle.IsEnabled = false;
         StartWithWindowsToggle.IsEnabled = false;
-        TrayDoubleClickToggle.IsEnabled = false;
         CloseToTrayToggle.IsEnabled = false;
         ImagesDirectoryTextBox.IsEnabled = false;
         BrowseImagesFolderButton.IsEnabled = false;

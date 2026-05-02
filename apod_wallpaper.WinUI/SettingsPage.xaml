@@ -135,11 +135,6 @@
                             TextWrapping="Wrap" />
 
                         <ToggleSwitch
-                            x:Name="TrayDoubleClickToggle"
-                            Header="Double-click tray icon applies latest APOD"
-                            Toggled="TrayDoubleClickToggle_Toggled" />
-
-                        <ToggleSwitch
                             x:Name="CloseToTrayToggle"
                             Header="Clicking X hides to tray instead of exiting"
                             Toggled="CloseToTrayToggle_Toggled" />

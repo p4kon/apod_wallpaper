@@ -39,6 +39,15 @@ The `X` button should be user-configurable:
 
 This should be exposed as a regular setting in the new frontend.
 
+### Tray Double-Click
+
+In the new WinUI frontend, tray double-click should have one predictable meaning:
+
+- restore the main window
+
+The old WinForms-specific behavior "apply latest APOD on tray double-click" should not be exposed in the new host UX.
+That legacy setting may remain in backend compatibility code temporarily, but it should not shape the new tray model.
+
 ## Calendar UX
 
 The calendar should support visual date-state highlighting.
@@ -162,6 +171,27 @@ Until preview/apply/settings flows are proven in the real host:
 ## Known Follow-Ups
 
 - Startup still appears to trigger two overlapping paths for the first "today" preview in some sessions: the preview workflow and month-state initialization can both probe the same date at nearly the same time. This should be reduced carefully later without regressing month coloring or startup responsiveness.
+
+## WinForms Retirement Gate
+
+The legacy WinForms host should not remain in the solution indefinitely.
+
+Target date:
+
+- `2026-05-16`
+
+Removal rule:
+
+- if the WinUI host has had 14 days of stable daily use by `2026-05-16`
+- and the final acceptance checklist is complete
+- remove `apod_wallpaper` (WinForms host) from the solution in the next cleanup pass
+
+Stability means at minimum:
+
+- tray scenario works reliably
+- preview/apply/settings work end-to-end
+- calendar coloring works for image and video days
+- no blocking startup/runtime regressions remain open
 
 ## State Screen vs Settings Screen
 
