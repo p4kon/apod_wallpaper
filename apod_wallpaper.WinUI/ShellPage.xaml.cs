@@ -83,8 +83,11 @@ public sealed partial class ShellPage : Page
 
     private void NavigateToSettings()
     {
-        HostBadgeText.Text = "Settings placeholder";
-        ContentFrame.Navigate(typeof(SettingsPage));
+        if (_arguments == null)
+            return;
+
+        HostBadgeText.Text = "Backend-backed settings";
+        ContentFrame.Navigate(typeof(SettingsPage), _arguments.CreateSettingsPageArguments());
     }
 
     private void NavigateToAbout()

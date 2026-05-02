@@ -7,6 +7,7 @@ public sealed partial class MainWindow : Window
     private readonly BackendHost _backendHost;
     private readonly TraySpikeStatus _trayStatus;
     private readonly TrayIconController _trayIconController;
+    private bool _minimizeToTrayOnClose = true;
 
     internal MainWindow(
         BackendHost backendHost,
@@ -21,6 +22,8 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
 
         AppWindow.SetIcon("Assets/AppIcon.ico");
+        if (initialization.Succeeded && initialization.Value != null)
+            SetCloseBehavior(initialization.Value.MinimizeToTrayOnClose);
         _trayIconController.Initialize();
         Closed += MainWindow_Closed;
 
@@ -29,7 +32,8 @@ public sealed partial class MainWindow : Window
             initialization,
             _trayStatus,
             HideToTray,
-            ExitApplicationAsync));
+            ExitApplicationAsync,
+            SetCloseBehavior));
     }
 
     internal void HideToTray()
@@ -45,6 +49,12 @@ public sealed partial class MainWindow : Window
 
         _trayIconController.AllowClose();
         Close();
+    }
+
+    internal void SetCloseBehavior(bool minimizeToTrayOnClose)
+    {
+        _minimizeToTrayOnClose = minimizeToTrayOnClose;
+        _trayIconController.SetCloseBehavior(minimizeToTrayOnClose);
     }
 
     private void MainWindow_Closed(object sender, WindowEventArgs args)

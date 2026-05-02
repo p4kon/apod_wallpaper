@@ -8,6 +8,8 @@ public partial class App : Application
 
     internal BackendHost? Host { get; private set; }
 
+    internal MainWindow? MainWindow => _window;
+
     public App()
     {
         InitializeComponent();

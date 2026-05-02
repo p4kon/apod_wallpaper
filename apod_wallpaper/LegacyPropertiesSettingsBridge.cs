@@ -12,6 +12,7 @@ namespace apod_wallpaper
                 WallpaperStyleIndex = Properties.Settings.Default.StyleComboBox,
                 AutoRefreshEnabled = Properties.Settings.Default.AutoRefreshEnabled,
                 StartWithWindows = Properties.Settings.Default.StartWithWindows,
+                MinimizeToTrayOnClose = true,
                 NasaApiKeyValidationState = Normalize(Properties.Settings.Default.NasaApiKeyValidationState, ApiKeyValidationState.Unknown.ToString()),
                 ImagesDirectoryPath = Normalize(Properties.Settings.Default.ImagesDirectoryPath, string.Empty),
                 LastAutoRefreshRunDate = Normalize(Properties.Settings.Default.LastAutoRefreshRunDate, string.Empty),

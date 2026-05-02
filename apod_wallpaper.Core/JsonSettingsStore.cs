@@ -32,11 +32,18 @@ namespace apod_wallpaper
 
             try
             {
+                var json = File.ReadAllText(path);
                 using (var stream = File.OpenRead(path))
                 {
                     var serializer = new DataContractJsonSerializer(typeof(ApplicationSettingsSnapshot));
                     var snapshot = serializer.ReadObject(stream) as ApplicationSettingsSnapshot;
-                    return snapshot ?? CreateDefaultSnapshot();
+                    if (snapshot == null)
+                        return CreateDefaultSnapshot();
+
+                    if (json.IndexOf("MinimizeToTrayOnClose", StringComparison.OrdinalIgnoreCase) < 0)
+                        snapshot.MinimizeToTrayOnClose = true;
+
+                    return snapshot;
                 }
             }
             catch (Exception ex)
@@ -75,6 +82,7 @@ namespace apod_wallpaper
                 WallpaperStyleIndex = (int)WallpaperStyle.Smart,
                 AutoRefreshEnabled = false,
                 StartWithWindows = true,
+                MinimizeToTrayOnClose = true,
                 NasaApiKeyValidationState = ApiKeyValidationState.Unknown.ToString(),
                 ImagesDirectoryPath = string.Empty,
                 LastAutoRefreshRunDate = string.Empty,

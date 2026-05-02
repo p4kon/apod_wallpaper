@@ -47,6 +47,7 @@ internal sealed class TrayIconController : IDisposable
     private IntPtr _originalWndProc;
     private IntPtr _iconHandle;
     private bool _allowWindowClose;
+    private bool _minimizeToTrayOnClose = true;
     private bool _disposed;
 
     public TrayIconController(MainWindow owner, TraySpikeStatus status)
@@ -87,6 +88,11 @@ internal sealed class TrayIconController : IDisposable
     {
         _allowWindowClose = true;
         _status.MarkExitRequested();
+    }
+
+    public void SetCloseBehavior(bool minimizeToTrayOnClose)
+    {
+        _minimizeToTrayOnClose = minimizeToTrayOnClose;
     }
 
     public void Dispose()
@@ -146,7 +152,14 @@ internal sealed class TrayIconController : IDisposable
     {
         if (msg == WmClose && !_allowWindowClose)
         {
-            HideToTray();
+            if (_minimizeToTrayOnClose)
+            {
+                HideToTray();
+            }
+            else
+            {
+                _ = _owner.ExitApplicationAsync();
+            }
             return IntPtr.Zero;
         }
 

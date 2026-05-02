@@ -10,13 +10,15 @@ internal sealed class ShellPageArguments
         apod_wallpaper.OperationResult<apod_wallpaper.ApplicationSettingsSnapshot> initialization,
         TraySpikeStatus trayStatus,
         Action hideWindowToTray,
-        Func<Task> exitApplicationAsync)
+        Func<Task> exitApplicationAsync,
+        Action<bool> updateCloseBehavior)
     {
         BackendHost = backendHost;
         Initialization = initialization;
         TrayStatus = trayStatus;
         HideWindowToTray = hideWindowToTray;
         ExitApplicationAsync = exitApplicationAsync;
+        UpdateCloseBehavior = updateCloseBehavior;
     }
 
     public BackendHost BackendHost { get; }
@@ -29,6 +31,8 @@ internal sealed class ShellPageArguments
 
     public Func<Task> ExitApplicationAsync { get; }
 
+    public Action<bool> UpdateCloseBehavior { get; }
+
     public MainPageArguments CreateMainPageArguments()
     {
         return new MainPageArguments(
@@ -37,5 +41,13 @@ internal sealed class ShellPageArguments
             TrayStatus,
             HideWindowToTray,
             ExitApplicationAsync);
+    }
+
+    public SettingsPageArguments CreateSettingsPageArguments()
+    {
+        return new SettingsPageArguments(
+            BackendHost,
+            Initialization,
+            UpdateCloseBehavior);
     }
 }

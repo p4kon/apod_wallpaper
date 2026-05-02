@@ -6,6 +6,7 @@ namespace apod_wallpaper
         public int WallpaperStyleIndex { get; set; }
         public bool AutoRefreshEnabled { get; set; }
         public bool StartWithWindows { get; set; }
+        public bool MinimizeToTrayOnClose { get; set; }
         public string NasaApiKey { get; set; }
         public string NasaApiKeyValidationState { get; set; }
         public string ImagesDirectoryPath { get; set; }
@@ -20,6 +21,7 @@ namespace apod_wallpaper
                 WallpaperStyleIndex = WallpaperStyleIndex,
                 AutoRefreshEnabled = AutoRefreshEnabled,
                 StartWithWindows = StartWithWindows,
+                MinimizeToTrayOnClose = MinimizeToTrayOnClose,
                 NasaApiKey = NasaApiKey,
                 NasaApiKeyValidationState = NasaApiKeyValidationState,
                 ImagesDirectoryPath = ImagesDirectoryPath,

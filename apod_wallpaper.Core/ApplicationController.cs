@@ -388,6 +388,7 @@ namespace apod_wallpaper
                 WallpaperStyleIndex = settings.WallpaperStyleIndex,
                 AutoRefreshEnabled = settings.AutoRefreshEnabled,
                 StartWithWindows = settings.StartWithWindows,
+                MinimizeToTrayOnClose = settings.MinimizeToTrayOnClose,
                 NasaApiKeyValidationState = effectiveValidationState,
                 ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath),
                 LastAutoRefreshRunDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
