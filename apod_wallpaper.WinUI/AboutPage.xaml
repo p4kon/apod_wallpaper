@@ -57,6 +57,12 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" FontWeight="SemiBold" Text="Name" />
                             <TextBlock Grid.Row="0" Grid.Column="1" Text="APOD Wallpaper" TextWrapping="Wrap" />
@@ -113,7 +119,7 @@
                             Text="This project is distributed under the MIT License. Third-party audit notes currently show no external NuGet package dependencies in the solution."
                             TextWrapping="Wrap" />
 
-                        <StackPanel Orientation="Horizontal" Spacing="12">
+                        <StackPanel Spacing="12">
                             <Button Click="LicenseButton_Click" Content="Open LICENSE" />
                             <Button Click="ThirdPartyNoticesButton_Click" Content="Open third-party notices" />
                         </StackPanel>
@@ -135,7 +141,7 @@
                             Text="Runtime content comes from NASA Astronomy Picture of the Day. The app uses NASA APOD services at runtime, but does not bundle NASA content in the repository."
                             TextWrapping="Wrap" />
 
-                        <StackPanel Orientation="Horizontal" Spacing="12">
+                        <StackPanel Spacing="12">
                             <Button Click="NasaApodButton_Click" Content="Open NASA APOD" />
                             <Button Click="NasaApiButton_Click" Content="Open NASA API" />
                         </StackPanel>
