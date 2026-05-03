@@ -44,11 +44,11 @@
             <Border Width="48" Height="1" HorizontalAlignment="Center" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
             <StackPanel Spacing="10">
-                <Button Click="ProjectRepositoryButton_Click" HorizontalContentAlignment="Left" Content="GitHub Repository" />
-                <Button Click="SupportButton_Click" HorizontalContentAlignment="Left" Content="Official Website" />
-                <Button Click="PrivacyButton_Click" HorizontalContentAlignment="Left" Content="Contact Support" />
-                <Button Click="LicenseButton_Click" HorizontalContentAlignment="Left" Content="License Agreement" />
-                <Button Click="ThirdPartyNoticesButton_Click" HorizontalContentAlignment="Left" Content="Third-party Notices" />
+                <Button Click="ProjectRepositoryButton_Click" HorizontalContentAlignment="Center" Content="GitHub Repository" />
+                <Button Click="SupportButton_Click" HorizontalContentAlignment="Center" Content="Official Website" />
+                <Button Click="PrivacyButton_Click" HorizontalContentAlignment="Center" Content="Contact Support" />
+                <Button Click="LicenseButton_Click" HorizontalContentAlignment="Center" Content="License Agreement" />
+                <Button Click="ThirdPartyNoticesButton_Click" HorizontalContentAlignment="Center" Content="Third-party Notices" />
             </StackPanel>
         </StackPanel>
 

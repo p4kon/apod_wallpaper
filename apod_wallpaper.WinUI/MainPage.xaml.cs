@@ -431,13 +431,13 @@ public sealed partial class MainPage : Page
         var statusText = new TextBlock
         {
             HorizontalAlignment = HorizontalAlignment.Center,
-            FontSize = 10,
+            FontSize = 9,
             Opacity = 0.92,
         };
 
         var content = new StackPanel
         {
-            Spacing = 2,
+            Spacing = 1,
             VerticalAlignment = VerticalAlignment.Center,
         };
 
@@ -447,11 +447,11 @@ public sealed partial class MainPage : Page
         var button = new Button
         {
             Content = content,
-            Padding = new Thickness(6),
-            MinHeight = 58,
+            Padding = new Thickness(4),
+            MinHeight = 44,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
-            CornerRadius = new CornerRadius(12),
+            CornerRadius = new CornerRadius(10),
             Tag = date,
         };
 
