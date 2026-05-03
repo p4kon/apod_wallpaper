@@ -103,6 +103,7 @@ public sealed partial class SettingsPage : Page
             CloseToTrayToggle.IsOn = settings.MinimizeToTrayOnClose;
             ImagesDirectoryTextBox.Text = settings.ImagesDirectoryPath ?? string.Empty;
             WallpaperStyleComboBox.SelectedItem = ResolveWallpaperStyleFromSettings(settings);
+            CloseBehaviorComboBox.SelectedIndex = settings.MinimizeToTrayOnClose ? 0 : 1;
         }
         finally
         {
@@ -138,6 +139,23 @@ public sealed partial class SettingsPage : Page
         await SaveSettingsAsync(
             snapshot => snapshot.MinimizeToTrayOnClose = CloseToTrayToggle.IsOn,
             CloseToTrayToggle.IsOn ? "Clicking X now hides the app to tray." : "Clicking X now exits the app.",
+            afterSave: saved =>
+            {
+                _arguments?.UpdateCloseBehavior(saved.MinimizeToTrayOnClose);
+                return Task.CompletedTask;
+            });
+    }
+
+    private async void CloseBehaviorComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isHydratingControls || CloseBehaviorComboBox.SelectedIndex < 0)
+            return;
+
+        var minimizeToTrayOnClose = CloseBehaviorComboBox.SelectedIndex == 0;
+        CloseToTrayToggle.IsOn = minimizeToTrayOnClose;
+        await SaveSettingsAsync(
+            snapshot => snapshot.MinimizeToTrayOnClose = minimizeToTrayOnClose,
+            minimizeToTrayOnClose ? "Clicking X now hides the app to tray." : "Clicking X now exits the app.",
             afterSave: saved =>
             {
                 _arguments?.UpdateCloseBehavior(saved.MinimizeToTrayOnClose);
@@ -257,6 +275,62 @@ public sealed partial class SettingsPage : Page
         await Launcher.LaunchUriAsync(new Uri(NasaApiKeyUrl));
     }
 
+    private async void ConfigureApiKeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ShowApiKeyDialogAsync();
+    }
+
+    private async Task ShowApiKeyDialogAsync()
+    {
+        if (_backendHost == null)
+            return;
+
+        var textBox = new TextBox
+        {
+            PlaceholderText = "Paste NASA API key",
+            Text = ApiKeyTextBox.Text,
+        };
+
+        var linkButton = new Button
+        {
+            Content = "Get NASA API key",
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        linkButton.Click += async (_, _) => await Launcher.LaunchUriAsync(new Uri(NasaApiKeyUrl));
+
+        var stack = new StackPanel { Spacing = 12 };
+        stack.Children.Add(new TextBlock
+        {
+            Text = "A personal NASA API key unlocks richer calendar warmup and avoids DEMO_KEY rate limits.",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        stack.Children.Add(linkButton);
+        stack.Children.Add(textBox);
+        stack.Children.Add(new TextBlock
+        {
+            Text = "If the NASA page does not open in your region, VPN may be required.",
+            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            TextWrapping = TextWrapping.Wrap,
+        });
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "NASA API Key",
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            Content = stack,
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+            return;
+
+        ApiKeyTextBox.Text = textBox.Text.Trim();
+        await CommitApiKeyAsync();
+    }
+
     private async Task SaveSettingsAsync(
         Action<apod_wallpaper.ApplicationSettingsSnapshot> update,
         string successMessage,
@@ -305,6 +379,7 @@ public sealed partial class SettingsPage : Page
         {
             ApiKeyStateBadge.Background = ApiKeyValidBrush;
             ApiKeyStateText.Text = "Valid personal key";
+            ApiKeySummaryText.Text = "Personal NASA API key is active.";
             return;
         }
 
@@ -312,11 +387,13 @@ public sealed partial class SettingsPage : Page
         {
             ApiKeyStateBadge.Background = ApiKeyInvalidBrush;
             ApiKeyStateText.Text = "Invalid key, DEMO_KEY fallback active";
+            ApiKeySummaryText.Text = "The saved key looks invalid, so DEMO_KEY fallback is being used.";
             return;
         }
 
         ApiKeyStateBadge.Background = ApiKeyDemoBrush;
         ApiKeyStateText.Text = "DEMO_KEY / no personal key";
+        ApiKeySummaryText.Text = "Configure a personal key to avoid rate limiting issues.";
     }
 
     private void SetErrorState(string message)

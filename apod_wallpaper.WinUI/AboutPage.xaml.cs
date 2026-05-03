@@ -29,8 +29,8 @@ public sealed partial class AboutPage : Page
         {
             var package = Package.Current;
             var version = package.Id.Version;
-            VersionTextBlock.Text = $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
-            PackageTextBlock.Text = package.Id.FullName;
+            VersionTextBlock.Text = $"Version {version.Major}.{version.Minor}.{version.Build} ({(Environment.Is64BitProcess ? "64-bit" : "32-bit")})";
+            PackageTextBlock.Text = $"Build {version.Build}.{version.Revision}";
 
             AboutStatusBar.Severity = InfoBarSeverity.Informational;
             AboutStatusBar.Title = "Product info ready";
@@ -40,7 +40,7 @@ public sealed partial class AboutPage : Page
         {
             var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
             VersionTextBlock.Text = assemblyVersion != null
-                ? assemblyVersion.ToString()
+                ? "Version " + assemblyVersion
                 : "Unknown";
             PackageTextBlock.Text = "Package identity unavailable in this launch context.";
 
@@ -76,15 +76,5 @@ public sealed partial class AboutPage : Page
     private async void ThirdPartyNoticesButton_Click(object sender, RoutedEventArgs e)
     {
         await Launcher.LaunchUriAsync(ThirdPartyNoticesUri);
-    }
-
-    private async void NasaApodButton_Click(object sender, RoutedEventArgs e)
-    {
-        await Launcher.LaunchUriAsync(NasaApodUri);
-    }
-
-    private async void NasaApiButton_Click(object sender, RoutedEventArgs e)
-    {
-        await Launcher.LaunchUriAsync(NasaApiUri);
     }
 }

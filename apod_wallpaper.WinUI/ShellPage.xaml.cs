@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace apod_wallpaper.WinUI;
@@ -7,6 +8,8 @@ namespace apod_wallpaper.WinUI;
 public sealed partial class ShellPage : Page
 {
     private ShellPageArguments? _arguments;
+    private static readonly SolidColorBrush ActiveNavBrush = new(Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x00, 0x78, 0xD4));
+    private static readonly SolidColorBrush InactiveNavBrush = new(Microsoft.UI.Colors.Transparent);
 
     public ShellPage()
     {
@@ -21,33 +24,21 @@ public sealed partial class ShellPage : Page
         if (_arguments == null)
             return;
 
-        AppNavigationView.SelectedItem = PreviewNavItem;
         NavigateToPreview();
-    }
-
-    private void AppNavigationView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
-    {
-        if (args.SelectedItemContainer is not NavigationViewItem selectedItem)
-            return;
-
-        NavigateByTag(selectedItem.Tag as string);
     }
 
     private void PreviewButton_Click(object sender, RoutedEventArgs e)
     {
-        AppNavigationView.SelectedItem = PreviewNavItem;
         NavigateToPreview();
     }
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        AppNavigationView.SelectedItem = SettingsNavItem;
         NavigateToSettings();
     }
 
     private void AboutButton_Click(object sender, RoutedEventArgs e)
     {
-        AppNavigationView.SelectedItem = AboutNavItem;
         NavigateToAbout();
     }
 
@@ -56,28 +47,12 @@ public sealed partial class ShellPage : Page
         _arguments?.HideWindowToTray();
     }
 
-    private void NavigateByTag(string? tag)
-    {
-        switch (tag)
-        {
-            case "settings":
-                NavigateToSettings();
-                break;
-            case "about":
-                NavigateToAbout();
-                break;
-            default:
-                NavigateToPreview();
-                break;
-        }
-    }
-
     private void NavigateToPreview()
     {
         if (_arguments == null)
             return;
 
-        HostBadgeText.Text = "Preview workspace";
+        SetActiveButton(PreviewButton);
         ContentFrame.Navigate(typeof(MainPage), _arguments.CreateMainPageArguments());
     }
 
@@ -86,13 +61,28 @@ public sealed partial class ShellPage : Page
         if (_arguments == null)
             return;
 
-        HostBadgeText.Text = "Backend-backed settings";
+        SetActiveButton(SettingsButton);
         ContentFrame.Navigate(typeof(SettingsPage), _arguments.CreateSettingsPageArguments());
     }
 
     private void NavigateToAbout()
     {
-        HostBadgeText.Text = "About this host";
+        SetActiveButton(AboutButton);
         ContentFrame.Navigate(typeof(AboutPage));
+    }
+
+    private void SetActiveButton(Button activeButton)
+    {
+        SetButtonState(PreviewButton, activeButton == PreviewButton);
+        SetButtonState(SettingsButton, activeButton == SettingsButton);
+        SetButtonState(AboutButton, activeButton == AboutButton);
+    }
+
+    private static void SetButtonState(Button button, bool isActive)
+    {
+        button.Background = isActive ? ActiveNavBrush : InactiveNavBrush;
+        button.Foreground = isActive
+            ? new SolidColorBrush(Microsoft.UI.Colors.White)
+            : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
     }
 }

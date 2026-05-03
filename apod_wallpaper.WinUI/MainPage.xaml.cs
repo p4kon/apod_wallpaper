@@ -778,6 +778,8 @@ public sealed partial class MainPage : Page
         PreviewPlaceholderPanel.Visibility = Visibility.Collapsed;
         PreviewProgressRing.IsActive = true;
         PreviewProgressRing.Visibility = Visibility.Visible;
+        PreviewTitleText.Text = selectedDate.ToString("MMMM dd, yyyy", CultureInfo.CurrentCulture);
+        PreviewBodyText.Text = "Loading APOD preview...";
     }
 
     private async Task SetPreviewSuccessAsync(apod_wallpaper.ApodWorkflowResult workflow)
@@ -800,6 +802,8 @@ public sealed partial class MainPage : Page
         PreviewMessageText.Text = string.IsNullOrWhiteSpace(workflow.Message)
             ? "Success"
             : workflow.Message;
+        PreviewTitleText.Text = ResolvePreviewTitle(workflow);
+        PreviewBodyText.Text = ResolvePreviewBody(workflow);
         UpdateActionAvailability();
 
         var imageLoaded = await TryShowPreviewImageAsync(workflow.PreviewLocation);
@@ -810,6 +814,7 @@ public sealed partial class MainPage : Page
         {
             PreviewPlaceholderTitleText.Text = "Preview image unavailable";
             PreviewPlaceholderText.Text = "The backend returned a successful workflow, but the preview image could not be opened by the host.";
+            PreviewPlaceholderIcon.Glyph = "\uE171";
             PreviewPlaceholderPanel.Visibility = Visibility.Visible;
             PreviewStatusBar.Severity = InfoBarSeverity.Warning;
             PreviewStatusBar.Title = "Preview metadata loaded";
@@ -837,10 +842,13 @@ public sealed partial class MainPage : Page
         PreviewSourceText.Text = workflow.Source.ToString();
         PreviewLocationText.Text = "No preview image";
         PreviewMessageText.Text = workflow.Message ?? "Unavailable";
+        PreviewTitleText.Text = workflow.RequestedDate.ToString("MMMM dd, yyyy", CultureInfo.CurrentCulture);
+        PreviewBodyText.Text = ResolveUnavailablePreviewBody(workflow);
         UpdateActionAvailability();
 
         PreviewPlaceholderTitleText.Text = "No image preview";
         PreviewPlaceholderText.Text = workflow.Message ?? "The selected date does not currently resolve to previewable image content.";
+        PreviewPlaceholderIcon.Glyph = ResolvePlaceholderGlyph(workflow.Message);
     }
 
     private void SetPreviewOperationError(DateTime selectedDate, string message)
@@ -861,10 +869,13 @@ public sealed partial class MainPage : Page
         PreviewSourceText.Text = "Unknown";
         PreviewLocationText.Text = "No preview image";
         PreviewMessageText.Text = message;
+        PreviewTitleText.Text = selectedDate.ToString("MMMM dd, yyyy", CultureInfo.CurrentCulture);
+        PreviewBodyText.Text = "We couldn't load this preview right now.";
         UpdateActionAvailability();
 
         PreviewPlaceholderTitleText.Text = "Preview failed";
         PreviewPlaceholderText.Text = message;
+        PreviewPlaceholderIcon.Glyph = "\uE783";
     }
 
     private async void WallpaperStyleComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1142,6 +1153,7 @@ public sealed partial class MainPage : Page
 
         PreviewPlaceholderTitleText.Text = "Preview image unavailable";
         PreviewPlaceholderText.Text = "The backend resolved preview metadata, but WinUI could not render the image from " + (_pendingPreviewLocation ?? "the resolved source") + ".";
+        PreviewPlaceholderIcon.Glyph = "\uE171";
         PreviewPlaceholderPanel.Visibility = Visibility.Visible;
         PreviewImage.Visibility = Visibility.Collapsed;
     }
@@ -1330,6 +1342,7 @@ public sealed partial class MainPage : Page
         PreviewMessageText.Text = message;
         PreviewPlaceholderTitleText.Text = "Preview unavailable";
         PreviewPlaceholderText.Text = message;
+        PreviewPlaceholderIcon.Glyph = "\uE783";
         PreviewPlaceholderPanel.Visibility = Visibility.Visible;
         PreviewImage.Visibility = Visibility.Collapsed;
         PreviewProgressRing.IsActive = false;
@@ -1460,6 +1473,57 @@ public sealed partial class MainPage : Page
                             : "Automatic month warmup is limited with DEMO_KEY to avoid spending the shared hourly quota.";
 
         return date.ToString("dddd, dd MMMM yyyy", CultureInfo.CurrentCulture) + Environment.NewLine + status + Environment.NewLine + detail;
+    }
+
+    private static string ResolvePreviewTitle(apod_wallpaper.ApodWorkflowResult workflow)
+    {
+        if (workflow.Entry != null && !string.IsNullOrWhiteSpace(workflow.Entry.Title))
+            return workflow.Entry.Title.Trim();
+
+        return workflow.RequestedDate.ToString("MMMM dd, yyyy", CultureInfo.CurrentCulture);
+    }
+
+    private static string ResolvePreviewBody(apod_wallpaper.ApodWorkflowResult workflow)
+    {
+        if (workflow.Entry != null && !string.IsNullOrWhiteSpace(workflow.Entry.Explanation))
+        {
+            var explanation = workflow.Entry.Explanation.Trim();
+            if (explanation.Length <= 180)
+                return explanation;
+
+            return explanation.Substring(0, 177) + "...";
+        }
+
+        return "Preview ready.";
+    }
+
+    private static string ResolveUnavailablePreviewBody(apod_wallpaper.ApodWorkflowResult workflow)
+    {
+        var message = workflow.Message ?? string.Empty;
+        if (message.IndexOf("not published", StringComparison.OrdinalIgnoreCase) >= 0)
+            return "NASA has not published APOD for this date yet.";
+
+        if (message.IndexOf("video", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("downloadable image", StringComparison.OrdinalIgnoreCase) >= 0)
+            return "This date resolves to video or unsupported media, so no wallpaper preview is available.";
+
+        return string.IsNullOrWhiteSpace(message)
+            ? "This date does not currently resolve to a previewable image."
+            : message;
+    }
+
+    private static string ResolvePlaceholderGlyph(string? message)
+    {
+        if (!string.IsNullOrWhiteSpace(message) &&
+            message.IndexOf("not published", StringComparison.OrdinalIgnoreCase) >= 0)
+            return "\uE823";
+
+        if (!string.IsNullOrWhiteSpace(message) &&
+            (message.IndexOf("video", StringComparison.OrdinalIgnoreCase) >= 0 ||
+             message.IndexOf("downloadable image", StringComparison.OrdinalIgnoreCase) >= 0))
+            return "\uE714";
+
+        return "\uE783";
     }
 
     private void EnsureCalendarGridDefinitions()

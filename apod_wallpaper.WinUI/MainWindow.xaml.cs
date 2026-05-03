@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Windows.Graphics;
 
 namespace apod_wallpaper.WinUI;
 
@@ -22,6 +23,7 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
 
         AppWindow.SetIcon("Assets/AppIcon.ico");
+        AppWindow.Resize(new SizeInt32(860, 820));
         if (initialization.Succeeded && initialization.Value != null)
             SetCloseBehavior(initialization.Value.MinimizeToTrayOnClose);
         _trayIconController.Initialize();

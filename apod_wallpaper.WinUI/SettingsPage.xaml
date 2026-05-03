@@ -7,140 +7,89 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer>
-        <Grid MaxWidth="980" Padding="24" HorizontalAlignment="Center" RowSpacing="16">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+    <Grid Padding="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-            <StackPanel Spacing="6">
-                <TextBlock FontSize="28" FontWeight="SemiBold" Text="Settings" />
-                <TextBlock
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="These controls save through the shared backend. The UI edits settings, but it does not know where they are stored."
-                    TextWrapping="Wrap" />
-            </StackPanel>
+        <StackPanel Grid.Row="0" Margin="0,0,0,20" Spacing="6">
+            <TextBlock FontSize="30" FontWeight="SemiBold" Text="Settings" />
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="Manage application behavior and wallpaper preferences."
+                TextWrapping="Wrap" />
+        </StackPanel>
 
-            <InfoBar
-                x:Name="SettingsStatusBar"
-                Grid.Row="1"
-                IsClosable="False"
-                IsOpen="True"
-                Severity="Informational"
-                Title="Loading settings" />
-
-            <Grid Grid.Row="2" ColumnSpacing="16" RowSpacing="16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="760" Spacing="18">
                 <Border
-                    Grid.Column="0"
-                    Padding="20"
+                    Padding="18"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
-                    CornerRadius="16">
-                    <StackPanel Spacing="18">
-                        <StackPanel Spacing="4">
-                            <TextBlock FontSize="20" FontWeight="SemiBold" Text="NASA API key" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="A personal key enables richer calendar warmup and avoids the shared DEMO_KEY limits."
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-
-                        <Grid ColumnSpacing="12" RowSpacing="10">
+                    CornerRadius="18">
+                    <StackPanel Spacing="16">
+                        <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
+                            <StackPanel>
+                                <TextBlock FontSize="20" FontWeight="SemiBold" Text="Start with Windows" />
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Automatically launch APOD Wallpaper in the background." TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="StartWithWindowsToggle" Grid.Column="1" VerticalAlignment="Center" Toggled="StartWithWindowsToggle_Toggled" />
+                        </Grid>
 
-                            <TextBox
-                                x:Name="ApiKeyTextBox"
-                                Grid.Row="0"
-                                PlaceholderText="Paste NASA API key"
-                                LostFocus="ApiKeyTextBox_LostFocus"
-                                KeyDown="ApiKeyTextBox_KeyDown" />
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                            <Button
-                                x:Name="GetApiKeyButton"
-                                Grid.Row="0"
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="180" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Close behavior" />
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Choose what happens when you click the window close button." TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ComboBox
+                                x:Name="CloseBehaviorComboBox"
                                 Grid.Column="1"
-                                Click="GetApiKeyButton_Click"
-                                Content="Get API key" />
-
-                            <Border
-                                x:Name="ApiKeyStateBadge"
-                                Grid.Row="1"
-                                Grid.ColumnSpan="2"
-                                Padding="12,8"
-                                CornerRadius="12">
-                                <TextBlock x:Name="ApiKeyStateText" FontWeight="SemiBold" Text="Checking..." />
-                            </Border>
-
-                            <TextBlock
-                                x:Name="ApiKeyHelpText"
-                                Grid.Row="2"
-                                Grid.ColumnSpan="2"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="If the NASA site does not open in your region, VPN may be required."
-                                TextWrapping="Wrap" />
+                                VerticalAlignment="Center"
+                                SelectionChanged="CloseBehaviorComboBox_SelectionChanged">
+                                <ComboBoxItem Content="Hide to tray" Tag="hide" />
+                                <ComboBoxItem Content="Exit application" Tag="exit" />
+                            </ComboBox>
                         </Grid>
                     </StackPanel>
                 </Border>
 
                 <Border
-                    Grid.Column="1"
-                    Padding="20"
+                    Padding="18"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
-                    CornerRadius="16">
-                    <StackPanel Spacing="18">
-                        <StackPanel Spacing="4">
-                            <TextBlock FontSize="20" FontWeight="SemiBold" Text="Behavior" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Host-level behavior stays simple: tray, startup, and automatic checks."
-                                TextWrapping="Wrap" />
-                        </StackPanel>
+                    CornerRadius="18">
+                    <StackPanel Spacing="16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock FontSize="20" FontWeight="SemiBold" Text="Auto-check today's APOD" />
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Periodically check NASA for new images and apply them automatically." TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="AutoCheckToggle" Grid.Column="1" VerticalAlignment="Center" Toggled="AutoCheckToggle_Toggled" />
+                        </Grid>
 
-                        <ToggleSwitch
-                            x:Name="AutoCheckToggle"
-                            Header="Auto-check for latest APOD"
-                            Toggled="AutoCheckToggle_Toggled" />
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                        <ToggleSwitch
-                            x:Name="StartWithWindowsToggle"
-                            Header="Start with Windows"
-                            Toggled="StartWithWindowsToggle_Toggled" />
-
-                        <TextBlock
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Margin="0,-10,0,0"
-                            Text="The packaged host already stores this through the backend. Full StartupTask integration is still being finalized."
-                            TextWrapping="Wrap" />
-
-                        <ToggleSwitch
-                            x:Name="CloseToTrayToggle"
-                            Header="Clicking X hides to tray instead of exiting"
-                            Toggled="CloseToTrayToggle_Toggled" />
-
-                        <StackPanel Spacing="4">
-                            <TextBlock FontWeight="SemiBold" Text="Wallpaper mode" />
+                        <StackPanel Spacing="10">
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Wallpaper style" />
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Choose how the selected image should fit your screen." TextWrapping="Wrap" />
                             <ComboBox
                                 x:Name="WallpaperStyleComboBox"
                                 SelectionChanged="WallpaperStyleComboBox_SelectionChanged" />
@@ -149,65 +98,103 @@
                 </Border>
 
                 <Border
-                    Grid.ColumnSpan="2"
-                    Grid.Row="1"
-                    Padding="20"
+                    Padding="18"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
-                    CornerRadius="16">
-                    <StackPanel Spacing="18">
-                        <StackPanel Spacing="4">
-                            <TextBlock FontSize="20" FontWeight="SemiBold" Text="Images folder" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="The backend remains the source of truth for the active images directory and storage layout."
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-
-                        <Grid ColumnSpacing="12" RowSpacing="10">
+                    CornerRadius="18">
+                    <StackPanel Spacing="14">
+                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="Download folder" />
+                        <Grid ColumnSpacing="10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-
                             <TextBox
                                 x:Name="ImagesDirectoryTextBox"
-                                Grid.Row="0"
+                                Grid.Column="0"
                                 PlaceholderText="Folder for downloaded APOD images"
                                 LostFocus="ImagesDirectoryTextBox_LostFocus"
                                 KeyDown="ImagesDirectoryTextBox_KeyDown" />
-
                             <Button
                                 x:Name="BrowseImagesFolderButton"
-                                Grid.Row="0"
                                 Grid.Column="1"
                                 Click="BrowseImagesFolderButton_Click"
                                 Content="Browse" />
-
                             <Button
                                 x:Name="OpenImagesFolderButton"
-                                Grid.Row="0"
                                 Grid.Column="2"
                                 Click="OpenImagesFolderButton_Click"
                                 Content="Open" />
-
-                            <TextBlock
-                                x:Name="ImagesDirectoryHintText"
-                                Grid.Row="1"
-                                Grid.ColumnSpan="3"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Changes are saved through the backend as soon as the field is committed."
-                                TextWrapping="Wrap" />
                         </Grid>
+                        <TextBlock
+                            x:Name="ImagesDirectoryHintText"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Changes are saved through the backend as soon as the field is committed."
+                            TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
-            </Grid>
-        </Grid>
-    </ScrollViewer>
+
+                <Border
+                    Padding="18"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="18">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="8">
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="NASA API Key" />
+                            <TextBlock
+                                x:Name="ApiKeySummaryText"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Configure a personal key to avoid rate limiting issues."
+                                TextWrapping="Wrap" />
+                            <Border
+                                x:Name="ApiKeyStateBadge"
+                                HorizontalAlignment="Left"
+                                Padding="10,6"
+                                CornerRadius="999">
+                                <TextBlock x:Name="ApiKeyStateText" FontWeight="SemiBold" Text="Checking..." />
+                            </Border>
+                        </StackPanel>
+
+                        <Button
+                            x:Name="ConfigureApiKeyButton"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Click="ConfigureApiKeyButton_Click"
+                            Content="Configure"
+                            Style="{StaticResource AccentButtonStyle}" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Visibility="Collapsed">
+            <InfoBar
+                x:Name="SettingsStatusBar"
+                IsClosable="False"
+                IsOpen="True"
+                Severity="Informational"
+                Title="Loading settings" />
+            <TextBox
+                x:Name="ApiKeyTextBox"
+                PlaceholderText="Paste NASA API key"
+                LostFocus="ApiKeyTextBox_LostFocus"
+                KeyDown="ApiKeyTextBox_KeyDown" />
+            <Button
+                x:Name="GetApiKeyButton"
+                Click="GetApiKeyButton_Click"
+                Content="Get API key" />
+            <ToggleSwitch
+                x:Name="CloseToTrayToggle"
+                Header="Clicking X hides to tray instead of exiting"
+                Toggled="CloseToTrayToggle_Toggled" />
+        </StackPanel>
+    </Grid>
 </Page>
