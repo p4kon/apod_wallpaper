@@ -24,43 +24,48 @@
             Visibility="Collapsed"
             Title="Starting backend" />
 
-        <Grid Grid.Row="1" Margin="4,0,4,12" ColumnSpacing="12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-
-            <Button
-                Grid.Column="0"
-                Width="36"
-                Height="36"
-                Padding="0"
-                Click="PreviousMonthButton_Click"
-                Background="Transparent"
-                BorderBrush="Transparent">
-                <SymbolIcon Symbol="Back" />
-            </Button>
-
-            <TextBlock
-                x:Name="VisibleMonthText"
-                Grid.Column="1"
+        <Grid Grid.Row="1" Margin="4,0,4,12">
+            <Grid
+                Width="280"
                 HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                FontSize="24"
-                FontWeight="SemiBold"
-                Text="Loading month..." />
+                ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <Button
-                Grid.Column="2"
-                Width="36"
-                Height="36"
-                Padding="0"
-                Click="NextMonthButton_Click"
-                Background="Transparent"
-                BorderBrush="Transparent">
-                <SymbolIcon Symbol="Forward" />
-            </Button>
+                <Button
+                    Grid.Column="0"
+                    Width="36"
+                    Height="36"
+                    Padding="0"
+                    Click="PreviousMonthButton_Click"
+                    Background="Transparent"
+                    BorderBrush="Transparent">
+                    <SymbolIcon Symbol="Back" />
+                </Button>
+
+                <TextBlock
+                    x:Name="VisibleMonthText"
+                    Grid.Column="1"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    FontSize="24"
+                    FontWeight="SemiBold"
+                    Text="Loading month..." />
+
+                <Button
+                    Grid.Column="2"
+                    Width="36"
+                    Height="36"
+                    Padding="0"
+                    Click="NextMonthButton_Click"
+                    Background="Transparent"
+                    BorderBrush="Transparent">
+                    <SymbolIcon Symbol="Forward" />
+                </Button>
+            </Grid>
         </Grid>
 
         <Grid Grid.Row="2" RowSpacing="10">
@@ -136,8 +141,8 @@
 
             <Grid Grid.Row="2" ColumnSpacing="0" Height="188">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="1.05*" />
-                    <ColumnDefinition Width="0.95*" />
+                    <ColumnDefinition Width="0.92*" />
+                    <ColumnDefinition Width="1.08*" />
                 </Grid.ColumnDefinitions>
 
                 <Border
@@ -147,13 +152,60 @@
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <Grid>
-                        <Image
-                            x:Name="PreviewImage"
-                            ImageFailed="PreviewImage_ImageFailed"
-                            ImageOpened="PreviewImage_ImageOpened"
-                            Stretch="UniformToFill"
-                            Visibility="Collapsed" />
+                    <Grid x:Name="PreviewImageHost" SizeChanged="PreviewImageHost_SizeChanged">
+                        <Grid
+                            x:Name="PreviewImageFrame"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Visibility="Collapsed">
+                            <Rectangle
+                                x:Name="PreviewImageSurface"
+                                RadiusX="20"
+                                RadiusY="20">
+                                <Rectangle.Fill>
+                                    <ImageBrush
+                                        x:Name="PreviewImageBrush"
+                                        AlignmentX="Center"
+                                        AlignmentY="Center"
+                                        Stretch="Fill" />
+                                </Rectangle.Fill>
+                            </Rectangle>
+
+                            <Grid IsHitTestVisible="False">
+                                <Rectangle HorizontalAlignment="Left" Width="14" RadiusX="20" RadiusY="20">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Color="#20FFFFFF" Offset="0" />
+                                            <GradientStop Color="#00FFFFFF" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+                                <Rectangle HorizontalAlignment="Right" Width="14" RadiusX="20" RadiusY="20">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="1,0" EndPoint="0,0">
+                                            <GradientStop Color="#20FFFFFF" Offset="0" />
+                                            <GradientStop Color="#00FFFFFF" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+                                <Rectangle VerticalAlignment="Top" Height="14" RadiusX="20" RadiusY="20">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#18FFFFFF" Offset="0" />
+                                            <GradientStop Color="#00FFFFFF" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+                                <Rectangle VerticalAlignment="Bottom" Height="14" RadiusX="20" RadiusY="20">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                            <GradientStop Color="#18FFFFFF" Offset="0" />
+                                            <GradientStop Color="#00FFFFFF" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+                            </Grid>
+                        </Grid>
 
                         <ProgressRing
                             x:Name="PreviewProgressRing"
@@ -193,7 +245,7 @@
 
                 <Border
                     Grid.Column="1"
-                    Padding="18"
+                    Padding="18,14,18,18"
                     CornerRadius="0,20,20,0"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1,1,1,1"
@@ -201,48 +253,60 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
-                        <Border
-                            Padding="8,4"
-                            HorizontalAlignment="Left"
-                            Background="{ThemeResource AccentFillColorSecondaryBrush}"
-                            CornerRadius="8">
-                            <TextBlock
-                                x:Name="RequestedDateText"
-                                FontSize="12"
-                                FontWeight="SemiBold"
-                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                Text="Not loaded" />
-                        </Border>
-
                         <TextBlock
                             x:Name="PreviewTitleText"
-                            Grid.Row="1"
-                            Margin="0,12,0,0"
-                            FontSize="22"
+                            Text="Explanation"
+                            FontSize="12"
                             FontWeight="SemiBold"
-                            Text="Select a date" />
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
                         <ScrollViewer
-                            Grid.Row="2"
-                            Margin="0,12,0,0"
+                            x:Name="PreviewBodyScrollViewer"
+                            Grid.Row="1"
+                            Margin="0,6,0,0"
+                            HorizontalScrollBarVisibility="Disabled"
+                            VerticalScrollMode="Enabled"
                             VerticalScrollBarVisibility="Auto">
                             <TextBlock
                                 x:Name="PreviewBodyText"
+                                Width="{Binding ElementName=PreviewBodyScrollViewer, Path=ActualWidth}"
+                                FontSize="14"
+                                LineHeight="21"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Text="The preview area will show the selected APOD image. Unsupported dates and not-yet-published days will use placeholders instead of noisy text."
-                                TextWrapping="WrapWholeWords" />
+                                TextWrapping="Wrap" />
                         </ScrollViewer>
                     </Grid>
                 </Border>
             </Grid>
 
-            <StackPanel Grid.Row="3" Margin="0,6,0,0" HorizontalAlignment="Center" Orientation="Horizontal" Spacing="12">
+            <Grid
+                Grid.Row="3"
+                Margin="0,6,0,0"
+                HorizontalAlignment="Center"
+                ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="88" />
+                    <ColumnDefinition Width="206" />
+                    <ColumnDefinition Width="206" />
+                    <ColumnDefinition Width="88" />
+                    <ColumnDefinition Width="22" />
+                </Grid.ColumnDefinitions>
+
+                <Button
+                    x:Name="NasaPageButton"
+                    Grid.Column="0"
+                    Width="88"
+                    Height="42"
+                    Click="OpenNasaPageButton_Click"
+                    Content="NASA" />
+
                 <Button
                     x:Name="DownloadOnlyButton"
+                    Grid.Column="1"
                     Width="206"
                     Height="42"
                     Click="DownloadOnlyButton_Click"
@@ -250,20 +314,32 @@
 
                 <Button
                     x:Name="DownloadAndApplyButton"
+                    Grid.Column="2"
                     Width="206"
                     Height="42"
                     Click="DownloadAndApplyButton_Click"
                     Content="Apply"
                     Style="{StaticResource AccentButtonStyle}" />
 
+                <ToggleButton
+                    x:Name="AutoRefreshToggleButton"
+                    Grid.Column="3"
+                    Width="88"
+                    Height="42"
+                    Checked="AutoRefreshToggleButton_Checked"
+                    Unchecked="AutoRefreshToggleButton_Unchecked"
+                    Content="Auto" />
+
                 <ProgressRing
                     x:Name="ActionProgressRing"
+                    Grid.Column="4"
                     Width="22"
                     Height="22"
+                    HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     IsActive="False"
-                    Visibility="Collapsed" />
-            </StackPanel>
+                    Opacity="0" />
+            </Grid>
         </Grid>
 
         <StackPanel Grid.Row="3" Visibility="Collapsed">
@@ -310,5 +386,6 @@
             <TextBlock x:Name="SnapshotSummaryText" Text="Loading backend state..." />
             <TextBlock x:Name="TrayStatusText" Text="Tray spike not initialized yet." />
         </StackPanel>
+
     </Grid>
 </Page>

@@ -269,5 +269,32 @@ namespace apod_wallpaper
             Set(filename, style);
             RestoreHistory();
         }
+
+        public static string GetCurrentWallpaperPath()
+        {
+            IDesktopWallpaper desktopWallpaper = null;
+            try
+            {
+                desktopWallpaper = (IDesktopWallpaper)new DesktopWallpaperComObject();
+                return desktopWallpaper.GetWallpaper(null);
+            }
+            catch
+            {
+                if (_backupState.HasValue && !string.IsNullOrWhiteSpace(_backupState.Value.Wallpaper))
+                    return _backupState.Value.Wallpaper;
+
+                using (var key = Registry.CurrentUser.OpenSubKey(HistoryRegistryPath, false))
+                {
+                    return key != null
+                        ? (string)key.GetValue("BackgroundHistoryPath0")
+                        : null;
+                }
+            }
+            finally
+            {
+                if (desktopWallpaper != null && Marshal.IsComObject(desktopWallpaper))
+                    Marshal.ReleaseComObject(desktopWallpaper);
+            }
+        }
     }
 }

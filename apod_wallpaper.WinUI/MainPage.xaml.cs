@@ -12,9 +12,11 @@ using Microsoft.UI;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.Foundation;
 using Windows.Storage;
 using Windows.Storage.Streams;
 using Windows.System;
@@ -91,10 +93,19 @@ public sealed partial class MainPage : Page
     private readonly object _previewAssetSyncRoot = new();
     private bool _isApplyingWallpaperAction;
     private bool _suppressWallpaperStyleSelectionChanged;
+    private bool _suppressAutoRefreshToggleChanged;
+    private apod_wallpaper.IEventSubscription? _wallpaperAppliedSubscription;
+    private bool _wallpaperAppliedSubscriptionRequested;
+    private int _previewPixelWidth;
+    private int _previewPixelHeight;
+    private static readonly SolidColorBrush AutoRefreshEnabledBrush = new(ColorHelper.FromArgb(0xFF, 0x1F, 0xB5, 0x7A));
+    private static readonly SolidColorBrush AutoRefreshDisabledBrush = new(ColorHelper.FromArgb(0xFF, 0xC4, 0x5A, 0x5A));
+    private static readonly SolidColorBrush AutoRefreshForegroundBrush = new(Colors.White);
 
     public MainPage()
     {
         InitializeComponent();
+        NavigationCacheMode = NavigationCacheMode.Required;
         WallpaperStyleComboBox.ItemsSource = WallpaperStyleDisplayOrder;
         EnsureCalendarGridDefinitions();
         VisibleMonthText.Text = _visibleMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
@@ -120,12 +131,19 @@ public sealed partial class MainPage : Page
         _trayStatus.Changed += TrayStatus_Changed;
         RefreshTrayStatus();
 
+        if (_initialStateSnapshot != null)
+        {
+            await RefreshSettingsSnapshotPreservingCalendarAsync();
+            return;
+        }
+
         if (_initialization == null || !_initialization.Succeeded)
         {
             SetErrorState(_initialization?.Error?.Message ?? "Backend initialization failed before the main page loaded.");
             return;
         }
 
+        await EnsureWallpaperAppliedSubscriptionAsync();
         await RefreshStateAsync();
     }
 
@@ -147,7 +165,18 @@ public sealed partial class MainPage : Page
         await ExecuteWallpaperActionAsync(
             "Applying wallpaper",
             "Downloading and applying APOD for " + _selectedDate.ToString("yyyy-MM-dd") + ".",
-            () => _backendHost!.Backend.ApplyDayAsync(_selectedDate, GetSelectedWallpaperStyle()));
+            () => _backendHost!.Backend.ApplyDayAsync(_selectedDate, GetSelectedWallpaperStyle()),
+            disableAutoRefreshOnSuccess: true);
+    }
+
+    private async void AutoRefreshToggleButton_Checked(object sender, RoutedEventArgs e)
+    {
+        await SaveAutoRefreshFromMainAsync(true);
+    }
+
+    private async void AutoRefreshToggleButton_Unchecked(object sender, RoutedEventArgs e)
+    {
+        await SaveAutoRefreshFromMainAsync(false);
     }
 
     private async void ApplyLatestButton_Click(object sender, RoutedEventArgs e)
@@ -247,6 +276,7 @@ public sealed partial class MainPage : Page
         EnsureCalendarMonthBuilt(_visibleMonth);
         UpdateCalendarSelectionOnly();
         SetWallpaperStyleSelection(snapshot.SelectedWallpaperStyle);
+        SetAutoRefreshToggleState(settings.AutoRefreshEnabled);
         UpdateActionAvailability();
         ActionStatusBar.Severity = InfoBarSeverity.Informational;
         ActionStatusBar.Title = "Actions ready";
@@ -766,23 +796,28 @@ public sealed partial class MainPage : Page
         PreviewStatusBar.Title = "Loading preview";
         PreviewStatusBar.Message = "Loading APOD preview for " + selectedDate.ToString("yyyy-MM-dd") + ".";
 
-        RequestedDateText.Text = selectedDate.ToString("yyyy-MM-dd");
         ResolvedDateText.Text = "Loading...";
         PreviewWorkflowStatusText.Text = "Loading";
         PreviewSourceText.Text = "Resolving...";
         PreviewLocationText.Text = "Resolving preview location...";
         PreviewMessageText.Text = "The UI will ignore stale results if another date is requested before this one finishes.";
 
-        PreviewImage.Source = null;
-        PreviewImage.Visibility = Visibility.Collapsed;
+        PreviewImageBrush.ImageSource = null;
+        PreviewImageFrame.Visibility = Visibility.Collapsed;
         PreviewPlaceholderPanel.Visibility = Visibility.Collapsed;
         PreviewProgressRing.IsActive = true;
         PreviewProgressRing.Visibility = Visibility.Visible;
-        PreviewTitleText.Text = selectedDate.ToString("MMMM dd, yyyy", CultureInfo.CurrentCulture);
+        PreviewTitleText.Text = "Explanation";
         PreviewBodyText.Text = "Loading APOD preview...";
+        ResetPreviewFrame();
     }
 
     private async Task SetPreviewSuccessAsync(apod_wallpaper.ApodWorkflowResult workflow)
+    {
+        await SetPreviewSuccessAsync(workflow, preserveRenderedPreview: false);
+    }
+
+    private async Task SetPreviewSuccessAsync(apod_wallpaper.ApodWorkflowResult workflow, bool preserveRenderedPreview)
     {
         PreviewStatusBar.Severity = InfoBarSeverity.Success;
         PreviewStatusBar.Title = "Preview loaded";
@@ -792,7 +827,6 @@ public sealed partial class MainPage : Page
             workflow.Message ?? "Preview metadata loaded successfully.",
             _lastPreviewBackendElapsedMs);
 
-        RequestedDateText.Text = workflow.RequestedDate.ToString("yyyy-MM-dd");
         ResolvedDateText.Text = workflow.ResolvedDate.HasValue
             ? workflow.ResolvedDate.Value.ToString("yyyy-MM-dd")
             : workflow.RequestedDate.ToString("yyyy-MM-dd");
@@ -802,9 +836,22 @@ public sealed partial class MainPage : Page
         PreviewMessageText.Text = string.IsNullOrWhiteSpace(workflow.Message)
             ? "Success"
             : workflow.Message;
-        PreviewTitleText.Text = ResolvePreviewTitle(workflow);
+        PreviewTitleText.Text = "Explanation";
         PreviewBodyText.Text = ResolvePreviewBody(workflow);
         UpdateActionAvailability();
+
+        if (preserveRenderedPreview)
+        {
+            PreviewProgressRing.IsActive = false;
+            PreviewProgressRing.Visibility = Visibility.Collapsed;
+            PreviewStatusBar.Title = "Preview preserved";
+            PreviewStatusBar.Message = string.Format(
+                CultureInfo.InvariantCulture,
+                "{0} Backend: {1} ms. Existing preview reused without rerender.",
+                workflow.Message ?? "Preview metadata loaded successfully.",
+                _lastPreviewBackendElapsedMs);
+            return;
+        }
 
         var imageLoaded = await TryShowPreviewImageAsync(workflow.PreviewLocation);
         PreviewProgressRing.IsActive = false;
@@ -826,15 +873,15 @@ public sealed partial class MainPage : Page
     {
         PreviewProgressRing.IsActive = false;
         PreviewProgressRing.Visibility = Visibility.Collapsed;
-        PreviewImage.Source = null;
-        PreviewImage.Visibility = Visibility.Collapsed;
+        PreviewImageBrush.ImageSource = null;
+        PreviewImageFrame.Visibility = Visibility.Collapsed;
         PreviewPlaceholderPanel.Visibility = Visibility.Visible;
+        ResetPreviewFrame();
 
         PreviewStatusBar.Severity = InfoBarSeverity.Warning;
         PreviewStatusBar.Title = "Preview unavailable";
         PreviewStatusBar.Message = workflow.Message ?? "The selected APOD date is currently unavailable.";
 
-        RequestedDateText.Text = workflow.RequestedDate.ToString("yyyy-MM-dd");
         ResolvedDateText.Text = workflow.ResolvedDate.HasValue
             ? workflow.ResolvedDate.Value.ToString("yyyy-MM-dd")
             : "Unavailable";
@@ -842,7 +889,7 @@ public sealed partial class MainPage : Page
         PreviewSourceText.Text = workflow.Source.ToString();
         PreviewLocationText.Text = "No preview image";
         PreviewMessageText.Text = workflow.Message ?? "Unavailable";
-        PreviewTitleText.Text = workflow.RequestedDate.ToString("MMMM dd, yyyy", CultureInfo.CurrentCulture);
+        PreviewTitleText.Text = "Explanation";
         PreviewBodyText.Text = ResolveUnavailablePreviewBody(workflow);
         UpdateActionAvailability();
 
@@ -855,21 +902,21 @@ public sealed partial class MainPage : Page
     {
         PreviewProgressRing.IsActive = false;
         PreviewProgressRing.Visibility = Visibility.Collapsed;
-        PreviewImage.Source = null;
-        PreviewImage.Visibility = Visibility.Collapsed;
+        PreviewImageBrush.ImageSource = null;
+        PreviewImageFrame.Visibility = Visibility.Collapsed;
         PreviewPlaceholderPanel.Visibility = Visibility.Visible;
+        ResetPreviewFrame();
 
         PreviewStatusBar.Severity = InfoBarSeverity.Error;
         PreviewStatusBar.Title = "Preview failed";
         PreviewStatusBar.Message = message;
 
-        RequestedDateText.Text = selectedDate.ToString("yyyy-MM-dd");
         ResolvedDateText.Text = "Error";
         PreviewWorkflowStatusText.Text = "Error";
         PreviewSourceText.Text = "Unknown";
         PreviewLocationText.Text = "No preview image";
         PreviewMessageText.Text = message;
-        PreviewTitleText.Text = selectedDate.ToString("MMMM dd, yyyy", CultureInfo.CurrentCulture);
+        PreviewTitleText.Text = "Explanation";
         PreviewBodyText.Text = "We couldn't load this preview right now.";
         UpdateActionAvailability();
 
@@ -887,7 +934,7 @@ public sealed partial class MainPage : Page
         if (_currentSettingsSnapshot.WallpaperStyleIndex == (int)selectedStyle)
             return;
 
-        var updatedSettings = _currentSettingsSnapshot.Clone();
+        var updatedSettings = await GetFreshSettingsSnapshotAsync();
         updatedSettings.WallpaperStyleIndex = (int)selectedStyle;
 
         ActionStatusBar.Severity = InfoBarSeverity.Informational;
@@ -928,11 +975,12 @@ public sealed partial class MainPage : Page
 
     private async Task<bool> TryShowPreviewImageAsync(string? previewLocation)
     {
-        PreviewImage.Source = null;
-        PreviewImage.Visibility = Visibility.Collapsed;
+        PreviewImageBrush.ImageSource = null;
+        PreviewImageFrame.Visibility = Visibility.Collapsed;
         PreviewPlaceholderPanel.Visibility = Visibility.Collapsed;
         _pendingPreviewLocation = null;
         _previewImageStopwatch.Reset();
+        ResetPreviewFrame();
 
         if (string.IsNullOrWhiteSpace(previewLocation))
             return false;
@@ -942,6 +990,8 @@ public sealed partial class MainPage : Page
             var resolvedPreviewLocation = await ResolvePreviewAssetLocationAsync(previewLocation);
             var bitmap = new BitmapImage();
             bitmap.DecodePixelWidth = ResolvePreviewDecodeWidth();
+            bitmap.ImageOpened += PreviewBitmap_ImageOpened;
+            bitmap.ImageFailed += PreviewBitmap_ImageFailed;
             _pendingPreviewLocation = resolvedPreviewLocation;
             _previewImageStopwatch.Restart();
             var previewUri = BuildPreviewUri(resolvedPreviewLocation);
@@ -951,16 +1001,17 @@ public sealed partial class MainPage : Page
                 var previewFile = await StorageFile.GetFileFromPathAsync(previewUri.LocalPath);
                 using IRandomAccessStream stream = await previewFile.OpenReadAsync();
                 await bitmap.SetSourceAsync(stream);
-                PreviewImage.Source = bitmap;
+                UpdatePreviewFrameMetrics(bitmap);
+                PreviewImageBrush.ImageSource = bitmap;
                 CompletePreviewImageRender();
             }
             else
             {
                 bitmap.UriSource = previewUri;
-                PreviewImage.Source = bitmap;
+                PreviewImageBrush.ImageSource = bitmap;
             }
 
-            PreviewImage.Visibility = Visibility.Visible;
+            PreviewImageFrame.Visibility = Visibility.Visible;
             return true;
         }
         catch
@@ -1005,6 +1056,30 @@ public sealed partial class MainPage : Page
         }
     }
 
+    private void SetAutoRefreshToggleState(bool isEnabled)
+    {
+        _suppressAutoRefreshToggleChanged = true;
+        try
+        {
+            AutoRefreshToggleButton.IsChecked = isEnabled;
+        }
+        finally
+        {
+            _suppressAutoRefreshToggleChanged = false;
+        }
+
+        UpdateAutoRefreshToggleVisual();
+    }
+
+    private void UpdateAutoRefreshToggleVisual()
+    {
+        var isEnabled = AutoRefreshToggleButton.IsChecked == true;
+        AutoRefreshToggleButton.Background = isEnabled ? AutoRefreshEnabledBrush : AutoRefreshDisabledBrush;
+        AutoRefreshToggleButton.BorderBrush = isEnabled ? AutoRefreshEnabledBrush : AutoRefreshDisabledBrush;
+        AutoRefreshToggleButton.Foreground = AutoRefreshForegroundBrush;
+        AutoRefreshToggleButton.Content = isEnabled ? "Auto On" : "Auto Off";
+    }
+
     private void UpdateActionAvailability()
     {
         var hasBackend = _backendHost != null;
@@ -1012,9 +1087,11 @@ public sealed partial class MainPage : Page
 
         ReloadPreviewButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
         OpenNasaPageButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
+        NasaPageButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
         WallpaperStyleComboBox.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
         DownloadOnlyButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
         DownloadAndApplyButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
+        AutoRefreshToggleButton.IsEnabled = hasBackend && _currentSettingsSnapshot != null && !_isApplyingWallpaperAction;
         ApplyLatestButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
 
         if (!hasSuccessfulPreview && !_isApplyingWallpaperAction)
@@ -1025,7 +1102,8 @@ public sealed partial class MainPage : Page
         string title,
         string message,
         Func<Task<apod_wallpaper.OperationResult<apod_wallpaper.ApodWorkflowResult>>> action,
-        bool updateSelectionFromWorkflow = true)
+        bool updateSelectionFromWorkflow = true,
+        bool disableAutoRefreshOnSuccess = false)
     {
         if (_backendHost == null || _isApplyingWallpaperAction)
             return;
@@ -1033,13 +1111,14 @@ public sealed partial class MainPage : Page
         _isApplyingWallpaperAction = true;
         UpdateActionAvailability();
         ActionProgressRing.IsActive = true;
-        ActionProgressRing.Visibility = Visibility.Visible;
+        ActionProgressRing.Opacity = 1;
         ActionStatusBar.Severity = InfoBarSeverity.Informational;
         ActionStatusBar.Title = title;
         ActionStatusBar.Message = message;
 
         try
         {
+            var previousWorkflow = _lastPreviewWorkflow;
             var operationResult = await action();
             if (!operationResult.Succeeded || operationResult.Value == null)
             {
@@ -1068,7 +1147,10 @@ public sealed partial class MainPage : Page
                 UpdateCalendarSelectionOnly();
             }
 
-            await SetPreviewSuccessAsync(workflow);
+            var preserveRenderedPreview = CanReuseRenderedPreview(previousWorkflow, workflow);
+            await SetPreviewSuccessAsync(workflow, preserveRenderedPreview);
+            if (disableAutoRefreshOnSuccess)
+                await DisableAutoRefreshAfterManualApplyAsync(workflow);
             await RefreshMonthStateAfterWorkflowAsync(workflow);
 
             ActionStatusBar.Severity = InfoBarSeverity.Success;
@@ -1078,14 +1160,108 @@ public sealed partial class MainPage : Page
         finally
         {
             ActionProgressRing.IsActive = false;
-            ActionProgressRing.Visibility = Visibility.Collapsed;
+            ActionProgressRing.Opacity = 0;
             _isApplyingWallpaperAction = false;
             UpdateActionAvailability();
         }
     }
 
+    private async Task SaveAutoRefreshFromMainAsync(bool isEnabled)
+    {
+        if (_suppressAutoRefreshToggleChanged || _backendHost == null || _currentSettingsSnapshot == null)
+            return;
+
+        if (_currentSettingsSnapshot.AutoRefreshEnabled == isEnabled)
+        {
+            UpdateAutoRefreshToggleVisual();
+            return;
+        }
+
+        var updatedSnapshot = await GetFreshSettingsSnapshotAsync();
+        updatedSnapshot.AutoRefreshEnabled = isEnabled;
+
+        ActionStatusBar.Severity = InfoBarSeverity.Informational;
+        ActionStatusBar.Title = isEnabled ? "Enabling auto-check" : "Disabling auto-check";
+        ActionStatusBar.Message = "Persisting automatic daily check through the backend facade.";
+
+        var saveResult = await _backendHost.Backend.SaveSettingsAsync(updatedSnapshot);
+        if (!saveResult.Succeeded || saveResult.Value == null)
+        {
+            ActionStatusBar.Severity = InfoBarSeverity.Error;
+            ActionStatusBar.Title = "Auto-check was not updated";
+            ActionStatusBar.Message = saveResult.Error?.Message ?? "Unable to save the auto-check preference.";
+            SetAutoRefreshToggleState(_currentSettingsSnapshot.AutoRefreshEnabled);
+            return;
+        }
+
+        ApplySavedSettingsSnapshot(saveResult.Value);
+        ActionStatusBar.Severity = InfoBarSeverity.Success;
+        ActionStatusBar.Title = "Auto-check updated";
+        ActionStatusBar.Message = isEnabled
+            ? "Automatic daily check and apply is now enabled."
+            : "Automatic daily check and apply is now disabled.";
+    }
+
+    private async Task DisableAutoRefreshAfterManualApplyAsync(apod_wallpaper.ApodWorkflowResult workflow)
+    {
+        if (_backendHost == null || _currentSettingsSnapshot == null || !_currentSettingsSnapshot.AutoRefreshEnabled)
+            return;
+
+        var updatedSnapshot = await GetFreshSettingsSnapshotAsync();
+        updatedSnapshot.AutoRefreshEnabled = false;
+
+        var saveResult = await _backendHost.Backend.SaveSettingsAsync(updatedSnapshot);
+        if (!saveResult.Succeeded || saveResult.Value == null)
+            return;
+
+        ApplySavedSettingsSnapshot(saveResult.Value);
+        ActionStatusBar.Severity = InfoBarSeverity.Success;
+        ActionStatusBar.Title = "Applying wallpaper complete";
+        ActionStatusBar.Message = BuildActionSuccessMessage(workflow) + " Auto-check was turned off because you manually applied a specific date.";
+    }
+
+    private void ApplySavedSettingsSnapshot(apod_wallpaper.ApplicationSettingsSnapshot savedSettings)
+    {
+        _currentSettingsSnapshot = savedSettings;
+        AutoCheckText.Text = savedSettings.AutoRefreshEnabled ? "Enabled" : "Disabled";
+        StartupText.Text = savedSettings.StartWithWindows ? "Enabled" : "Disabled";
+        TrayActionText.Text = savedSettings.TrayDoubleClickAction
+            ? "Apply latest APOD"
+            : "Default window action";
+
+        if (_initialStateSnapshot != null)
+            _initialStateSnapshot.Settings = savedSettings.Clone();
+
+        SetAutoRefreshToggleState(savedSettings.AutoRefreshEnabled);
+        UpdateActionAvailability();
+    }
+
+    private bool CanReuseRenderedPreview(
+        apod_wallpaper.ApodWorkflowResult? previousWorkflow,
+        apod_wallpaper.ApodWorkflowResult currentWorkflow)
+    {
+        if (previousWorkflow == null)
+            return false;
+
+        if (previousWorkflow.Status != apod_wallpaper.ApodWorkflowStatus.Success ||
+            currentWorkflow.Status != apod_wallpaper.ApodWorkflowStatus.Success)
+            return false;
+
+        if (PreviewImageBrush.ImageSource == null || PreviewImageFrame.Visibility != Visibility.Visible)
+            return false;
+
+        var previousResolvedDate = previousWorkflow.ResolvedDate ?? previousWorkflow.RequestedDate;
+        var currentResolvedDate = currentWorkflow.ResolvedDate ?? currentWorkflow.RequestedDate;
+        if (previousResolvedDate.Date != currentResolvedDate.Date)
+            return false;
+
+        return string.Equals(previousWorkflow.PreviewLocation, currentWorkflow.PreviewLocation, StringComparison.OrdinalIgnoreCase);
+    }
+
     private async Task RefreshMonthStateAfterWorkflowAsync(apod_wallpaper.ApodWorkflowResult workflow)
     {
+        InvalidateCalendarMonthsForWorkflow(workflow);
+
         if (workflow.ResolvedDate.HasValue)
         {
             var resolvedMonth = new DateTime(workflow.ResolvedDate.Value.Year, workflow.ResolvedDate.Value.Month, 1);
@@ -1119,9 +1295,93 @@ public sealed partial class MainPage : Page
         return "Resolved " + resolvedDate + " successfully.";
     }
 
-    private void PreviewImage_ImageOpened(object sender, RoutedEventArgs e)
+    private void PreviewBitmap_ImageOpened(object sender, RoutedEventArgs e)
     {
+        if (sender is BitmapImage bitmap)
+            UpdatePreviewFrameMetrics(bitmap);
+
         CompletePreviewImageRender();
+    }
+
+    private async Task EnsureWallpaperAppliedSubscriptionAsync()
+    {
+        if (_backendHost == null || _wallpaperAppliedSubscription != null || _wallpaperAppliedSubscriptionRequested)
+            return;
+
+        _wallpaperAppliedSubscriptionRequested = true;
+        var subscriptionResult = await _backendHost.Backend.SubscribeWallpaperAppliedAsync(OnWallpaperApplied);
+        if (subscriptionResult.Succeeded && subscriptionResult.Value != null)
+            _wallpaperAppliedSubscription = subscriptionResult.Value;
+
+        _wallpaperAppliedSubscriptionRequested = false;
+    }
+
+    private void OnWallpaperApplied(object? sender, apod_wallpaper.WallpaperAppliedEventArgs e)
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            DispatcherQueue.TryEnqueue(() => _ = HandleWallpaperAppliedAsync(e));
+            return;
+        }
+
+        _ = HandleWallpaperAppliedAsync(e);
+    }
+
+    private async Task HandleWallpaperAppliedAsync(apod_wallpaper.WallpaperAppliedEventArgs e)
+    {
+        if (e == null || e.Result == null || !e.Automatic)
+            return;
+
+        var affectedMonths = InvalidateCalendarMonthsForWorkflow(e.Result);
+        await RefreshSettingsSnapshotPreservingCalendarAsync();
+
+        if (affectedMonths.Contains(_visibleMonth))
+            await RefreshVisibleMonthFromCacheAsync();
+
+        var resolvedDate = e.Result.ResolvedDate ?? e.Result.RequestedDate;
+        if (_selectedDate.Date == resolvedDate.Date &&
+            _lastPreviewWorkflow?.Status != apod_wallpaper.ApodWorkflowStatus.Success)
+        {
+            await LoadPreviewForSelectedDateAsync();
+        }
+    }
+
+    private HashSet<DateTime> InvalidateCalendarMonthsForWorkflow(apod_wallpaper.ApodWorkflowResult workflow)
+    {
+        var affectedMonths = GetAffectedCalendarMonths(workflow);
+        foreach (var month in affectedMonths)
+        {
+            _hotMonthCache.Remove(month);
+            _warmedMonths.Remove(month);
+        }
+
+        return affectedMonths;
+    }
+
+    private static HashSet<DateTime> GetAffectedCalendarMonths(apod_wallpaper.ApodWorkflowResult workflow)
+    {
+        var months = new HashSet<DateTime>();
+        if (workflow == null)
+            return months;
+
+        AddAffectedMonth(months, workflow.RequestedDate);
+        if (workflow.ResolvedDate.HasValue)
+            AddAffectedMonth(months, workflow.ResolvedDate.Value);
+        if (workflow.LatestPublishedDate.HasValue)
+            AddAffectedMonth(months, workflow.LatestPublishedDate.Value);
+
+        if (workflow.Entry != null &&
+            DateTime.TryParse(workflow.Entry.Date, CultureInfo.InvariantCulture, DateTimeStyles.None, out var entryDate))
+        {
+            AddAffectedMonth(months, entryDate);
+        }
+
+        return months;
+    }
+
+    private static void AddAffectedMonth(HashSet<DateTime> months, DateTime date)
+    {
+        months.Add(new DateTime(date.Year, date.Month, 1));
     }
 
     private void CompletePreviewImageRender()
@@ -1139,7 +1399,7 @@ public sealed partial class MainPage : Page
             _previewImageStopwatch.ElapsedMilliseconds);
     }
 
-    private void PreviewImage_ImageFailed(object sender, ExceptionRoutedEventArgs e)
+    private void PreviewBitmap_ImageFailed(object sender, ExceptionRoutedEventArgs e)
     {
         if (_previewImageStopwatch.IsRunning)
             _previewImageStopwatch.Stop();
@@ -1155,7 +1415,8 @@ public sealed partial class MainPage : Page
         PreviewPlaceholderText.Text = "The backend resolved preview metadata, but WinUI could not render the image from " + (_pendingPreviewLocation ?? "the resolved source") + ".";
         PreviewPlaceholderIcon.Glyph = "\uE171";
         PreviewPlaceholderPanel.Visibility = Visibility.Visible;
-        PreviewImage.Visibility = Visibility.Collapsed;
+        PreviewImageFrame.Visibility = Visibility.Collapsed;
+        ResetPreviewFrame();
     }
 
     private static Uri BuildPreviewUri(string previewLocation)
@@ -1278,6 +1539,45 @@ public sealed partial class MainPage : Page
         return Math.Max(320, Math.Min(720, targetWidth));
     }
 
+    private void PreviewImageHost_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (PreviewImageFrame.Visibility == Visibility.Visible)
+            UpdatePreviewFrameSize();
+    }
+
+    private void UpdatePreviewFrameMetrics(BitmapImage bitmap)
+    {
+        _previewPixelWidth = bitmap.PixelWidth;
+        _previewPixelHeight = bitmap.PixelHeight;
+        UpdatePreviewFrameSize();
+    }
+
+    private void UpdatePreviewFrameSize()
+    {
+        if (_previewPixelWidth <= 0 || _previewPixelHeight <= 0)
+            return;
+
+        var hostWidth = PreviewImageHost.ActualWidth;
+        var hostHeight = PreviewImageHost.ActualHeight;
+        if (hostWidth <= 0 || hostHeight <= 0)
+            return;
+
+        var scale = Math.Min(hostWidth / _previewPixelWidth, hostHeight / _previewPixelHeight);
+        if (scale <= 0)
+            return;
+
+        PreviewImageFrame.Width = Math.Max(1, _previewPixelWidth * scale);
+        PreviewImageFrame.Height = Math.Max(1, _previewPixelHeight * scale);
+    }
+
+    private void ResetPreviewFrame()
+    {
+        _previewPixelWidth = 0;
+        _previewPixelHeight = 0;
+        PreviewImageFrame.Width = double.NaN;
+        PreviewImageFrame.Height = double.NaN;
+    }
+
     private static HttpClient CreatePreviewAssetHttpClient()
     {
         return new HttpClient
@@ -1334,7 +1634,6 @@ public sealed partial class MainPage : Page
         StorageModeText.Text = "Unavailable";
         LocalImageIndexText.Text = "Unavailable";
         TrayActionText.Text = "Unavailable";
-        RequestedDateText.Text = "Unavailable";
         ResolvedDateText.Text = "Unavailable";
         PreviewWorkflowStatusText.Text = "Unavailable";
         PreviewSourceText.Text = "Unavailable";
@@ -1344,7 +1643,8 @@ public sealed partial class MainPage : Page
         PreviewPlaceholderText.Text = message;
         PreviewPlaceholderIcon.Glyph = "\uE783";
         PreviewPlaceholderPanel.Visibility = Visibility.Visible;
-        PreviewImage.Visibility = Visibility.Collapsed;
+        PreviewImageFrame.Visibility = Visibility.Collapsed;
+        ResetPreviewFrame();
         PreviewProgressRing.IsActive = false;
         PreviewProgressRing.Visibility = Visibility.Collapsed;
         VisibleMonthText.Text = "Unavailable";
@@ -1475,41 +1775,17 @@ public sealed partial class MainPage : Page
         return date.ToString("dddd, dd MMMM yyyy", CultureInfo.CurrentCulture) + Environment.NewLine + status + Environment.NewLine + detail;
     }
 
-    private static string ResolvePreviewTitle(apod_wallpaper.ApodWorkflowResult workflow)
-    {
-        if (workflow.Entry != null && !string.IsNullOrWhiteSpace(workflow.Entry.Title))
-            return workflow.Entry.Title.Trim();
-
-        return workflow.RequestedDate.ToString("MMMM dd, yyyy", CultureInfo.CurrentCulture);
-    }
-
     private static string ResolvePreviewBody(apod_wallpaper.ApodWorkflowResult workflow)
     {
         if (workflow.Entry != null && !string.IsNullOrWhiteSpace(workflow.Entry.Explanation))
-        {
-            var explanation = workflow.Entry.Explanation.Trim();
-            if (explanation.Length <= 180)
-                return explanation;
-
-            return explanation.Substring(0, 177) + "...";
-        }
+            return workflow.Entry.Explanation.Trim();
 
         return "Preview ready.";
     }
 
     private static string ResolveUnavailablePreviewBody(apod_wallpaper.ApodWorkflowResult workflow)
     {
-        var message = workflow.Message ?? string.Empty;
-        if (message.IndexOf("not published", StringComparison.OrdinalIgnoreCase) >= 0)
-            return "NASA has not published APOD for this date yet.";
-
-        if (message.IndexOf("video", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            message.IndexOf("downloadable image", StringComparison.OrdinalIgnoreCase) >= 0)
-            return "This date resolves to video or unsupported media, so no wallpaper preview is available.";
-
-        return string.IsNullOrWhiteSpace(message)
-            ? "This date does not currently resolve to a previewable image."
-            : message;
+        return string.Empty;
     }
 
     private static string ResolvePlaceholderGlyph(string? message)
@@ -1644,5 +1920,37 @@ public sealed partial class MainPage : Page
             _trayStatus.Changed -= TrayStatus_Changed;
 
         base.OnNavigatedFrom(e);
+    }
+
+    private async Task RefreshSettingsSnapshotPreservingCalendarAsync()
+    {
+        if (_backendHost == null)
+            return;
+
+        var settingsResult = await _backendHost.Backend.GetSettingsAsync();
+        if (!settingsResult.Succeeded || settingsResult.Value == null)
+            return;
+
+        _currentSettingsSnapshot = settingsResult.Value;
+        AutoCheckText.Text = _currentSettingsSnapshot.AutoRefreshEnabled ? "Enabled" : "Disabled";
+        StartupText.Text = _currentSettingsSnapshot.StartWithWindows ? "Enabled" : "Disabled";
+        TrayActionText.Text = _currentSettingsSnapshot.TrayDoubleClickAction
+            ? "Apply latest APOD"
+            : "Default window action";
+        SetAutoRefreshToggleState(_currentSettingsSnapshot.AutoRefreshEnabled);
+        SetWallpaperStyleSelection(ResolveWallpaperStyleFromSettings(_currentSettingsSnapshot));
+        UpdateActionAvailability();
+    }
+
+    private async Task<apod_wallpaper.ApplicationSettingsSnapshot> GetFreshSettingsSnapshotAsync()
+    {
+        if (_backendHost == null)
+            return _currentSettingsSnapshot?.Clone() ?? new apod_wallpaper.ApplicationSettingsSnapshot();
+
+        var latestSettingsResult = await _backendHost.Backend.GetSettingsAsync();
+        if (latestSettingsResult.Succeeded && latestSettingsResult.Value != null)
+            return latestSettingsResult.Value.Clone();
+
+        return _currentSettingsSnapshot?.Clone() ?? new apod_wallpaper.ApplicationSettingsSnapshot();
     }
 }

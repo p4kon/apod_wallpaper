@@ -430,14 +430,16 @@ namespace apod_wallpaper
             }
         }
 
-        private static ApodEntry CreateVideoEntry(DateTime date, string videoUrl)
+        private static ApodEntry CreateVideoEntry(DateTime date, string videoUrl, string title = null, string explanation = null)
         {
             return new ApodEntry
             {
                 Date = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                Title = title,
                 Url = videoUrl,
                 HdUrl = null,
                 MediaType = "video",
+                Explanation = explanation,
                 ResolvedFromSource = "html_fallback",
                 IsFallbackImage = false,
             };
@@ -445,6 +447,8 @@ namespace apod_wallpaper
 
         private static void ApplyHtmlResolutionToEntry(ApodEntry entry, DateTime date, string pageUrl, string pageHtml, string scope)
         {
+            ApplyHtmlTextMetadata(entry, pageHtml);
+
             ApodPageImageExtractor.ApodPageMediaResolution resolution;
             if (!ApodPageImageExtractor.TryResolveMedia(pageHtml, pageUrl, out resolution))
             {
@@ -484,6 +488,8 @@ namespace apod_wallpaper
 
         private static ApodEntry CreateEntryFromResolvedMedia(DateTime date, string pageUrl, string pageHtml, string scope)
         {
+            var title = ApodPageImageExtractor.ExtractTitle(pageHtml);
+            var explanation = ApodPageImageExtractor.ExtractExplanation(pageHtml);
             ApodPageImageExtractor.ApodPageMediaResolution resolution;
             if (!ApodPageImageExtractor.TryResolveMedia(pageHtml, pageUrl, out resolution))
             {
@@ -497,9 +503,11 @@ namespace apod_wallpaper
                 return new ApodEntry
                 {
                     Date = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    Title = title,
                     Url = resolution.PreviewUrl,
                     HdUrl = resolution.ImageUrl,
                     MediaType = "image",
+                    Explanation = explanation,
                     ResolvedFromSource = "html_fallback",
                     IsFallbackImage = true,
                 };
@@ -508,11 +516,23 @@ namespace apod_wallpaper
             if (resolution.Kind == ApodPageImageExtractor.ApodPageMediaKind.Unsupported)
             {
                 AppLogger.Web("source=apod_html scope=" + scope + " result=unsupported date=" + date.ToString("yyyy-MM-dd") + " url=" + (resolution.MediaUrl ?? "<null>"));
-                return CreateVideoEntry(date, resolution.MediaUrl);
+                return CreateVideoEntry(date, resolution.MediaUrl, title, explanation);
             }
 
             AppLogger.Web("source=apod_html scope=" + scope + " result=unknown date=" + date.ToString("yyyy-MM-dd"));
             throw new InvalidOperationException("Unable to classify APOD page media for " + date.ToString("yyyy-MM-dd") + ".");
+        }
+
+        private static void ApplyHtmlTextMetadata(ApodEntry entry, string pageHtml)
+        {
+            if (entry == null || string.IsNullOrWhiteSpace(pageHtml))
+                return;
+
+            if (string.IsNullOrWhiteSpace(entry.Title))
+                entry.Title = ApodPageImageExtractor.ExtractTitle(pageHtml);
+
+            if (string.IsNullOrWhiteSpace(entry.Explanation))
+                entry.Explanation = ApodPageImageExtractor.ExtractExplanation(pageHtml);
         }
 
         private static bool ShouldShortCircuitDemoDatedApi(string requestUrl)

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 namespace apod_wallpaper
 {
@@ -28,6 +29,65 @@ namespace apod_wallpaper
             }
 
             WallpaperNative.SilentSet(effectiveImagePath, effectiveStyle);
+        }
+
+        public string ReapplyCurrentWallpaperStyle(WallpaperStyle style)
+        {
+            var currentWallpaperPath = ResolveCurrentWallpaperSourcePath();
+            if (!LocalImageValidator.IsUsableImageFile(currentWallpaperPath))
+                throw new InvalidOperationException("Current wallpaper image could not be resolved for style reapply: " + (currentWallpaperPath ?? "<null>"));
+
+            ApplyPreservingHistory(currentWallpaperPath, style);
+            return currentWallpaperPath;
+        }
+
+        public string ResolveCurrentWallpaperSourcePath()
+        {
+            var currentWallpaperPath = WallpaperNative.GetCurrentWallpaperPath();
+            var originalSourcePath = TryResolveSmartWallpaperSourcePath(currentWallpaperPath);
+            return LocalImageValidator.IsUsableImageFile(originalSourcePath)
+                ? originalSourcePath
+                : currentWallpaperPath;
+        }
+
+        public string ReapplyWallpaperStyle(string sourceImagePath, WallpaperStyle style)
+        {
+            if (LocalImageValidator.IsUsableImageFile(sourceImagePath))
+            {
+                ApplyPreservingHistory(sourceImagePath, style);
+                return sourceImagePath;
+            }
+
+            return ReapplyCurrentWallpaperStyle(style);
+        }
+
+        private static string TryResolveSmartWallpaperSourcePath(string currentWallpaperPath)
+        {
+            if (string.IsNullOrWhiteSpace(currentWallpaperPath))
+                return null;
+
+            var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(currentWallpaperPath);
+            if (string.IsNullOrWhiteSpace(fileNameWithoutExtension) ||
+                !fileNameWithoutExtension.EndsWith(".smart", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var withoutSmartSuffix = fileNameWithoutExtension.Substring(0, fileNameWithoutExtension.Length - ".smart".Length);
+            var resolutionSeparator = withoutSmartSuffix.LastIndexOf('.');
+            if (resolutionSeparator <= 0)
+                return null;
+
+            var withoutResolution = withoutSmartSuffix.Substring(0, resolutionSeparator);
+            var strategySeparator = withoutResolution.LastIndexOf('.');
+            if (strategySeparator <= 0)
+                return null;
+
+            var strategy = withoutResolution.Substring(strategySeparator + 1);
+            if (!string.Equals(strategy, "single", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(strategy, "collage", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var originalBaseName = withoutResolution.Substring(0, strategySeparator);
+            return FileStorage.TryFindExistingImagePath(originalBaseName);
         }
     }
 }

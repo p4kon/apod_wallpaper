@@ -49,6 +49,9 @@ namespace apod_wallpaper
                 var hasUsableLocalImage = LocalImageValidator.IsUsableImageFile(localImagePath);
                 if (cachedEntry.HasImage || hasUsableLocalImage)
                 {
+                    if (ShouldEnrichCachedEntryMetadata(cachedEntry))
+                        cachedEntry = EnrichEntryMetadataFromClient(date, cachedEntry);
+
                     cachedEntry.ResolvedFromSource = hasUsableLocalImage ? "local_file" : "cache";
                     return cachedEntry;
                 }
@@ -62,7 +65,7 @@ namespace apod_wallpaper
 
             if (!forceRefresh && LocalImageValidator.IsUsableImageFile(localImagePath))
             {
-                return CreateLocalFileEntry(date);
+                return EnrichLocalEntryMetadata(date, CreateLocalFileEntry(date));
             }
 
             var entry = _client.GetEntry(date);
@@ -81,6 +84,9 @@ namespace apod_wallpaper
                 var hasUsableLocalImage = LocalImageValidator.IsUsableImageFile(localImagePath);
                 if (cachedEntry.HasImage || hasUsableLocalImage)
                 {
+                    if (ShouldEnrichCachedEntryMetadata(cachedEntry))
+                        cachedEntry = await EnrichEntryMetadataFromClientAsync(date, cachedEntry).ConfigureAwait(false);
+
                     cachedEntry.ResolvedFromSource = hasUsableLocalImage ? "local_file" : "cache";
                     return cachedEntry;
                 }
@@ -94,7 +100,7 @@ namespace apod_wallpaper
 
             if (!forceRefresh && LocalImageValidator.IsUsableImageFile(localImagePath))
             {
-                return CreateLocalFileEntry(date);
+                return await EnrichLocalEntryMetadataAsync(date, CreateLocalFileEntry(date)).ConfigureAwait(false);
             }
 
             var entry = await _client.GetEntryAsync(date).ConfigureAwait(false);
@@ -131,6 +137,9 @@ namespace apod_wallpaper
                         var cachedEntry = cached.ToEntry();
                         if (cachedEntry.HasImage || !ShouldRefreshCachedEntry(cached, entryDate))
                         {
+                            if (ShouldEnrichCachedEntryMetadata(cachedEntry))
+                                cachedEntry = EnrichEntryMetadataFromClient(entryDate, cachedEntry);
+
                             cachedEntry.ResolvedFromSource = cachedEntry.HasImage ? "cache" : cachedEntry.ResolvedFromSource;
                             _latestEntry = cachedEntry;
                             _latestEntryFetchedAtUtc = DateTime.UtcNow;
@@ -174,6 +183,9 @@ namespace apod_wallpaper
                         var cachedEntry = cached.ToEntry();
                         if (cachedEntry.HasImage || !ShouldRefreshCachedEntry(cached, entryDate))
                         {
+                            if (ShouldEnrichCachedEntryMetadata(cachedEntry))
+                                cachedEntry = await EnrichEntryMetadataFromClientAsync(entryDate, cachedEntry).ConfigureAwait(false);
+
                             cachedEntry.ResolvedFromSource = cachedEntry.HasImage ? "cache" : cachedEntry.ResolvedFromSource;
                             _latestEntry = cachedEntry;
                             _latestEntryFetchedAtUtc = DateTime.UtcNow;
@@ -449,6 +461,31 @@ namespace apod_wallpaper
             };
         }
 
+        public string ReapplyCurrentWallpaperStyle(WallpaperStyle style)
+        {
+            return _wallpaperService.ReapplyCurrentWallpaperStyle(style);
+        }
+
+        public string ResolveCurrentWallpaperSourcePath()
+        {
+            return _wallpaperService.ResolveCurrentWallpaperSourcePath();
+        }
+
+        public string ReapplyWallpaperStyle(string sourceImagePath, WallpaperStyle style)
+        {
+            var concreteWallpaperService = _wallpaperService as WallpaperService;
+            if (concreteWallpaperService != null)
+                return concreteWallpaperService.ReapplyWallpaperStyle(sourceImagePath, style);
+
+            if (LocalImageValidator.IsUsableImageFile(sourceImagePath))
+            {
+                _wallpaperService.ApplyPreservingHistory(sourceImagePath, style);
+                return sourceImagePath;
+            }
+
+            return _wallpaperService.ReapplyCurrentWallpaperStyle(style);
+        }
+
         public string OpenPost(DateTime date)
         {
             return GetPostUrl(date);
@@ -615,6 +652,81 @@ namespace apod_wallpaper
                 ResolvedFromSource = "local_file",
                 IsFallbackImage = false,
             };
+        }
+
+        private static bool ShouldEnrichCachedEntryMetadata(ApodEntry entry)
+        {
+            if (entry == null)
+                return false;
+
+            return string.IsNullOrWhiteSpace(entry.Title) || string.IsNullOrWhiteSpace(entry.Explanation);
+        }
+
+        private ApodEntry EnrichEntryMetadataFromClient(DateTime date, ApodEntry fallbackEntry)
+        {
+            try
+            {
+                var freshEntry = _client.GetEntry(date);
+                if (freshEntry != null)
+                {
+                    _cache.Upsert(freshEntry);
+                    return MergeEntryMetadata(fallbackEntry, freshEntry);
+                }
+            }
+            catch
+            {
+            }
+
+            return fallbackEntry;
+        }
+
+        private async Task<ApodEntry> EnrichEntryMetadataFromClientAsync(DateTime date, ApodEntry fallbackEntry)
+        {
+            try
+            {
+                var freshEntry = await _client.GetEntryAsync(date).ConfigureAwait(false);
+                if (freshEntry != null)
+                {
+                    _cache.Upsert(freshEntry);
+                    return MergeEntryMetadata(fallbackEntry, freshEntry);
+                }
+            }
+            catch
+            {
+            }
+
+            return fallbackEntry;
+        }
+
+        private ApodEntry EnrichLocalEntryMetadata(DateTime date, ApodEntry localEntry)
+        {
+            return EnrichEntryMetadataFromClient(date, localEntry);
+        }
+
+        private Task<ApodEntry> EnrichLocalEntryMetadataAsync(DateTime date, ApodEntry localEntry)
+        {
+            return EnrichEntryMetadataFromClientAsync(date, localEntry);
+        }
+
+        private static ApodEntry MergeEntryMetadata(ApodEntry primaryEntry, ApodEntry metadataEntry)
+        {
+            if (primaryEntry == null)
+                return metadataEntry;
+
+            if (metadataEntry == null)
+                return primaryEntry;
+
+            primaryEntry.Title = string.IsNullOrWhiteSpace(primaryEntry.Title) ? metadataEntry.Title : primaryEntry.Title;
+            primaryEntry.Explanation = string.IsNullOrWhiteSpace(primaryEntry.Explanation) ? metadataEntry.Explanation : primaryEntry.Explanation;
+            primaryEntry.Copyright = string.IsNullOrWhiteSpace(primaryEntry.Copyright) ? metadataEntry.Copyright : primaryEntry.Copyright;
+            if (string.IsNullOrWhiteSpace(primaryEntry.Url))
+                primaryEntry.Url = metadataEntry.Url;
+            if (string.IsNullOrWhiteSpace(primaryEntry.HdUrl))
+                primaryEntry.HdUrl = metadataEntry.HdUrl;
+            if (string.IsNullOrWhiteSpace(primaryEntry.MediaType))
+                primaryEntry.MediaType = metadataEntry.MediaType;
+
+            return primaryEntry;
         }
 
         public DateTime GetLatestAvailableDate()

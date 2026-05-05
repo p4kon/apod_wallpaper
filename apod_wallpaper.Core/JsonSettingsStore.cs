@@ -87,6 +87,7 @@ namespace apod_wallpaper
                 ImagesDirectoryPath = string.Empty,
                 LastAutoRefreshRunDate = string.Empty,
                 LastAutoRefreshAppliedDate = string.Empty,
+                LastAppliedWallpaperImagePath = string.Empty,
             };
         }
 

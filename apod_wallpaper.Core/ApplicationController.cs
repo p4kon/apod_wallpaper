@@ -281,6 +281,7 @@ namespace apod_wallpaper
             {
                 await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
                 var result = await _workflowService.ApplyDayAsync(date, style, forceRefresh).ConfigureAwait(false);
+                PersistLastAppliedWallpaperImagePath(result.ImagePath);
                 _calendarStateService.Clear();
                 RaiseWallpaperApplied(result, false);
                 return EnsureWorkflowResultSucceeded(result, "Unable to apply the requested APOD image as wallpaper.");
@@ -293,10 +294,19 @@ namespace apod_wallpaper
             {
                 await EnsureApiKeyValidationAsync().ConfigureAwait(false);
                 var result = await _workflowService.ApplyLatestPublishedAsync(style, forceRefresh).ConfigureAwait(false);
+                PersistLastAppliedWallpaperImagePath(result.ImagePath);
                 _calendarStateService.Clear();
                 RaiseWallpaperApplied(result, false);
                 return EnsureWorkflowResultSucceeded(result, "Unable to apply the latest available APOD image.");
             }, OperationErrorCode.WorkflowFailed, "Unable to apply the latest available APOD image.");
+        }
+
+        public Task<OperationResult<string>> ReapplyCurrentWallpaperStyleAsync(WallpaperStyle style)
+        {
+            return Task.FromResult(ExecuteOperation(
+                () => _workflowService.ReapplyCurrentWallpaperStyle(style),
+                OperationErrorCode.WorkflowFailed,
+                "Unable to reapply the current wallpaper with the selected style."));
         }
 
         public Task<OperationResult<string>> GetPostUrlAsync(DateTime date)
@@ -362,6 +372,7 @@ namespace apod_wallpaper
             settings.ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath);
             settings.LastAutoRefreshRunDate = Normalize(settings.LastAutoRefreshRunDate);
             settings.LastAutoRefreshAppliedDate = Normalize(settings.LastAutoRefreshAppliedDate);
+            settings.LastAppliedWallpaperImagePath = Normalize(settings.LastAppliedWallpaperImagePath);
             return settings;
         }
 
@@ -397,6 +408,7 @@ namespace apod_wallpaper
                 LastAutoRefreshAppliedDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
                     ? string.Empty
                     : Normalize(settings.LastAutoRefreshAppliedDate),
+                LastAppliedWallpaperImagePath = Normalize(settings.LastAppliedWallpaperImagePath),
             });
 
             if (apiKeyChanged)
@@ -404,7 +416,8 @@ namespace apod_wallpaper
 
             ApplyRuntimeSettings();
             _calendarStateService.Clear();
-            ConfigureScheduler(settings);
+            if (previousAutoRefreshEnabled != settings.AutoRefreshEnabled || apiKeyChanged)
+                ConfigureScheduler(BuildSettingsSnapshot());
             _startupRegistrationService.SetStartWithWindows(settings.StartWithWindows);
         }
 
@@ -509,7 +522,8 @@ namespace apod_wallpaper
 
                 // Day-level short circuit: once scheduler has already finished successfully for local "today",
                 // do not burn extra API/HTML checks until the next day.
-                if (ShouldSkipSchedulerForToday(lastRunDate, lastAppliedDate, localToday))
+                if (ShouldSkipSchedulerForToday(lastRunDate, lastAppliedDate, localToday) &&
+                    IsLastAppliedWallpaperCurrentlyActive(settings))
                 {
                     AppLogger.Info("Scheduler skipped because today's auto-check already completed.");
                     return;
@@ -525,13 +539,16 @@ namespace apod_wallpaper
                     lastRunDate.HasValue &&
                     lastRunDate.Value == localToday &&
                     lastAppliedDate.HasValue &&
-                    lastAppliedDate.Value == latestAvailableDate)
+                    lastAppliedDate.Value == latestAvailableDate &&
+                    IsLastAppliedWallpaperCurrentlyActive(settings))
                 {
                     AppLogger.Info("Scheduler skipped because the latest available APOD was already applied today.");
                     return;
                 }
 
-                if (lastAppliedDate.HasValue && lastAppliedDate.Value == latestAvailableDate)
+                if (lastAppliedDate.HasValue &&
+                    lastAppliedDate.Value == latestAvailableDate &&
+                    IsLastAppliedWallpaperCurrentlyActive(settings))
                 {
                     AppLogger.Info("Scheduler checked APOD and found the same latest available image already applied: " + latestAvailableDate.ToString("yyyy-MM-dd") + ".");
                     return;
@@ -542,6 +559,7 @@ namespace apod_wallpaper
                     return;
 
                 _calendarStateService.Clear();
+                PersistLastAppliedWallpaperImagePath(result.ImagePath);
                 var resolvedDate = result.ResolvedDate.HasValue
                     ? result.ResolvedDate.Value.Date
                     : latestAvailableDate;
@@ -712,6 +730,28 @@ namespace apod_wallpaper
                 return;
 
             WallpaperApplied?.Invoke(this, new WallpaperAppliedEventArgs(result, automatic));
+        }
+
+        private void PersistLastAppliedWallpaperImagePath(string imagePath)
+        {
+            if (!LocalImageValidator.IsUsableImageFile(imagePath))
+                return;
+
+            var settings = _settingsStore.Load() ?? new ApplicationSettingsSnapshot();
+            settings.LastAppliedWallpaperImagePath = Normalize(imagePath);
+            _settingsStore.Save(settings);
+        }
+
+        private bool IsLastAppliedWallpaperCurrentlyActive(ApplicationSettingsSnapshot settings)
+        {
+            if (settings == null || !LocalImageValidator.IsUsableImageFile(settings.LastAppliedWallpaperImagePath))
+                return false;
+
+            var currentSourcePath = _workflowService.ResolveCurrentWallpaperSourcePath();
+            return string.Equals(
+                Normalize(currentSourcePath),
+                Normalize(settings.LastAppliedWallpaperImagePath),
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private void UnsubscribeWallpaperApplied(EventHandler<WallpaperAppliedEventArgs> handler)

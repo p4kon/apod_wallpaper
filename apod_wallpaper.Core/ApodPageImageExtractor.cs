@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text.RegularExpressions;
 
 namespace apod_wallpaper
@@ -58,6 +59,30 @@ namespace apod_wallpaper
             "\\b\\d{4}\\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2}\\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        private static readonly Regex HtmlTitleRegex = new Regex(
+            "<title>\\s*APOD\\s*:\\s*.*?-\\s*(?<title>[^<]+?)\\s*</title>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+        private static readonly Regex ExplanationLabelRegex = new Regex(
+            "<b>\\s*Explanation\\s*:\\s*</b>|Explanation\\s*:",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+        private static readonly Regex ScriptStyleCommentRegex = new Regex(
+            "<script\\b[^>]*>.*?</script>|<style\\b[^>]*>.*?</style>|<!--.*?-->",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+        private static readonly Regex HtmlBreakRegex = new Regex(
+            "<br\\s*/?>|</p>|</div>|</li>|</tr>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+        private static readonly Regex HtmlTagRegex = new Regex(
+            "<[^>]+>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+        private static readonly Regex WhitespaceRegex = new Regex(
+            "\\s+",
+            RegexOptions.Compiled);
+
         public static bool TryExtract(string html, string pageUrl, out string previewUrl, out string imageUrl)
         {
             previewUrl = null;
@@ -82,6 +107,39 @@ namespace apod_wallpaper
 
             videoUrl = resolution.MediaUrl;
             return !string.IsNullOrWhiteSpace(videoUrl);
+        }
+
+        internal static string ExtractTitle(string html)
+        {
+            if (string.IsNullOrWhiteSpace(html))
+                return null;
+
+            var titleMatch = HtmlTitleRegex.Match(html);
+            if (!titleMatch.Success)
+                return null;
+
+            return NormalizePlainText(titleMatch.Groups["title"].Value);
+        }
+
+        internal static string ExtractExplanation(string html)
+        {
+            if (string.IsNullOrWhiteSpace(html))
+                return null;
+
+            var explanationMatch = ExplanationLabelRegex.Match(html);
+            if (!explanationMatch.Success)
+                return null;
+
+            var explanationHtml = html.Substring(explanationMatch.Index + explanationMatch.Length);
+            var endIndex = FindExplanationEndIndex(explanationHtml);
+            if (endIndex > 0)
+                explanationHtml = explanationHtml.Substring(0, endIndex);
+
+            explanationHtml = ScriptStyleCommentRegex.Replace(explanationHtml, " ");
+            explanationHtml = HtmlBreakRegex.Replace(explanationHtml, "\n");
+            explanationHtml = HtmlTagRegex.Replace(explanationHtml, " ");
+
+            return NormalizePlainText(explanationHtml);
         }
 
         internal static bool TryResolveMedia(string html, string pageUrl, out ApodPageMediaResolution resolution)
@@ -298,6 +356,46 @@ namespace apod_wallpaper
                 return absoluteUri.ToString();
 
             return null;
+        }
+
+        private static int FindExplanationEndIndex(string explanationHtml)
+        {
+            if (string.IsNullOrWhiteSpace(explanationHtml))
+                return -1;
+
+            var markers = new[]
+            {
+                "Tomorrow's picture:",
+                "Tomorrow's APOD:",
+                "Tomorrow's image:",
+                "<title>",
+                "</body>",
+            };
+
+            var matches = markers
+                .Select(marker => explanationHtml.IndexOf(marker, StringComparison.OrdinalIgnoreCase))
+                .Where(index => index >= 0)
+                .ToArray();
+
+            return matches.Length == 0 ? -1 : matches.Min();
+        }
+
+        private static string NormalizePlainText(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            var decoded = WebUtility.HtmlDecode(value).Replace('\u00A0', ' ');
+            var lines = decoded
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => WhitespaceRegex.Replace(line, " ").Trim())
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .ToArray();
+
+            if (lines.Length == 0)
+                return null;
+
+            return WhitespaceRegex.Replace(string.Join(" ", lines), " ").Trim();
         }
 
         private sealed class Candidate

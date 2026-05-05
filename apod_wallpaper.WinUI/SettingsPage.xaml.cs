@@ -18,20 +18,11 @@ namespace apod_wallpaper.WinUI;
 
 public sealed partial class SettingsPage : Page
 {
-    private static readonly apod_wallpaper.WallpaperStyle[] WallpaperStyleDisplayOrder =
-    {
-        apod_wallpaper.WallpaperStyle.Smart,
-        apod_wallpaper.WallpaperStyle.Fill,
-        apod_wallpaper.WallpaperStyle.Fit,
-        apod_wallpaper.WallpaperStyle.Stretch,
-        apod_wallpaper.WallpaperStyle.Tile,
-        apod_wallpaper.WallpaperStyle.Center,
-        apod_wallpaper.WallpaperStyle.Span,
-    };
-
     private static readonly Brush ApiKeyValidBrush = new SolidColorBrush(ColorHelper.FromArgb(0x33, 0x3D, 0x8C, 0x63));
     private static readonly Brush ApiKeyInvalidBrush = new SolidColorBrush(ColorHelper.FromArgb(0x33, 0xC4, 0x5A, 0x5A));
     private static readonly Brush ApiKeyDemoBrush = new SolidColorBrush(ColorHelper.FromArgb(0x33, 0x2F, 0x79, 0xD9));
+    private static readonly Brush SelectedWallpaperStyleBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x00, 0x78, 0xD4));
+    private static readonly Brush SelectedWallpaperStyleForegroundBrush = new SolidColorBrush(Colors.White);
 
     private const string NasaApiKeyUrl = "https://api.nasa.gov/";
 
@@ -44,7 +35,7 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         InitializeComponent();
-        WallpaperStyleComboBox.ItemsSource = WallpaperStyleDisplayOrder;
+        NavigationCacheMode = NavigationCacheMode.Required;
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -102,7 +93,7 @@ public sealed partial class SettingsPage : Page
             StartWithWindowsToggle.IsOn = settings.StartWithWindows;
             CloseToTrayToggle.IsOn = settings.MinimizeToTrayOnClose;
             ImagesDirectoryTextBox.Text = settings.ImagesDirectoryPath ?? string.Empty;
-            WallpaperStyleComboBox.SelectedItem = ResolveWallpaperStyleFromSettings(settings);
+            SetWallpaperStyleButtons(ResolveWallpaperStyleFromSettings(settings));
             CloseBehaviorComboBox.SelectedIndex = settings.MinimizeToTrayOnClose ? 0 : 1;
         }
         finally
@@ -163,12 +154,21 @@ public sealed partial class SettingsPage : Page
             });
     }
 
-    private async void WallpaperStyleComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void WallpaperStyleButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_isHydratingControls || WallpaperStyleComboBox.SelectedItem is not apod_wallpaper.WallpaperStyle selectedStyle)
+        if (_isHydratingControls || sender is not Button button)
             return;
 
-        await SaveSettingsAsync(snapshot => snapshot.WallpaperStyleIndex = (int)selectedStyle, "Wallpaper style preference saved.");
+        if (!Enum.TryParse<apod_wallpaper.WallpaperStyle>(button.Tag?.ToString(), out var selectedStyle))
+            return;
+
+        if (_settingsSnapshot != null && ResolveWallpaperStyleFromSettings(_settingsSnapshot) == selectedStyle)
+        {
+            SetWallpaperStyleButtons(selectedStyle);
+            return;
+        }
+
+        await SaveWallpaperStyleAsync(selectedStyle);
     }
 
     private async void ApiKeyTextBox_LostFocus(object sender, RoutedEventArgs e)
@@ -339,7 +339,7 @@ public sealed partial class SettingsPage : Page
         if (_isHydratingControls || _settingsSnapshot == null || _backendHost == null)
             return;
 
-        var updatedSnapshot = _settingsSnapshot.Clone();
+        var updatedSnapshot = await GetFreshSettingsSnapshotAsync();
         update(updatedSnapshot);
 
         SettingsStatusBar.Severity = InfoBarSeverity.Informational;
@@ -368,6 +368,95 @@ public sealed partial class SettingsPage : Page
         SettingsStatusBar.Severity = InfoBarSeverity.Success;
         SettingsStatusBar.Title = "Settings saved";
         SettingsStatusBar.Message = string.Format(CultureInfo.InvariantCulture, "{0} ({1} ms)", successMessage, stopwatch.ElapsedMilliseconds);
+    }
+
+    private void SetWallpaperStyleButtons(apod_wallpaper.WallpaperStyle style)
+    {
+        _isHydratingControls = true;
+        try
+        {
+            ApplyWallpaperStyleButtonState(SmartStyleButton, style == apod_wallpaper.WallpaperStyle.Smart);
+            ApplyWallpaperStyleButtonState(FillStyleButton, style == apod_wallpaper.WallpaperStyle.Fill);
+            ApplyWallpaperStyleButtonState(FitStyleButton, style == apod_wallpaper.WallpaperStyle.Fit);
+            ApplyWallpaperStyleButtonState(StretchStyleButton, style == apod_wallpaper.WallpaperStyle.Stretch);
+            ApplyWallpaperStyleButtonState(TileStyleButton, style == apod_wallpaper.WallpaperStyle.Tile);
+            ApplyWallpaperStyleButtonState(CenterStyleButton, style == apod_wallpaper.WallpaperStyle.Center);
+            ApplyWallpaperStyleButtonState(SpanStyleButton, style == apod_wallpaper.WallpaperStyle.Span);
+        }
+        finally
+        {
+            _isHydratingControls = false;
+        }
+    }
+
+    private static void ApplyWallpaperStyleButtonState(Button button, bool isSelected)
+    {
+        if (isSelected)
+        {
+            button.Background = SelectedWallpaperStyleBrush;
+            button.BorderBrush = SelectedWallpaperStyleBrush;
+            button.Foreground = SelectedWallpaperStyleForegroundBrush;
+            return;
+        }
+
+        button.ClearValue(Control.BackgroundProperty);
+        button.ClearValue(Control.BorderBrushProperty);
+        button.ClearValue(Control.ForegroundProperty);
+    }
+
+    private async Task SaveWallpaperStyleAsync(apod_wallpaper.WallpaperStyle selectedStyle)
+    {
+        if (_settingsSnapshot == null || _backendHost == null)
+            return;
+
+        var updatedSnapshot = await GetFreshSettingsSnapshotAsync();
+        updatedSnapshot.WallpaperStyleIndex = (int)selectedStyle;
+
+        SettingsStatusBar.Severity = InfoBarSeverity.Informational;
+        SettingsStatusBar.Title = "Saving wallpaper style";
+        SettingsStatusBar.Message = "Persisting wallpaper style and reapplying the current wallpaper.";
+
+        var stopwatch = Stopwatch.StartNew();
+        var saveResult = await _backendHost.Backend.SaveSettingsAsync(updatedSnapshot);
+        if (!saveResult.Succeeded || saveResult.Value == null)
+        {
+            stopwatch.Stop();
+            SettingsStatusBar.Severity = InfoBarSeverity.Error;
+            SettingsStatusBar.Title = "Wallpaper style was not saved";
+            SettingsStatusBar.Message = saveResult.Error?.Message ?? "Unable to save the wallpaper style.";
+            if (_settingsSnapshot != null)
+                PopulateSettings(_settingsSnapshot, _apiKeyValidationState);
+            return;
+        }
+
+        _settingsSnapshot = saveResult.Value;
+        PopulateSettings(_settingsSnapshot, _apiKeyValidationState);
+
+        var reapplyResult = await _backendHost.Backend.ReapplyCurrentWallpaperStyleAsync(selectedStyle);
+        stopwatch.Stop();
+        if (!reapplyResult.Succeeded)
+        {
+            SettingsStatusBar.Severity = InfoBarSeverity.Warning;
+            SettingsStatusBar.Title = "Style saved, but wallpaper was not reapplied";
+            SettingsStatusBar.Message = reapplyResult.Error?.Message ?? "Unable to reapply the current wallpaper with the selected style.";
+            return;
+        }
+
+        SettingsStatusBar.Severity = InfoBarSeverity.Success;
+        SettingsStatusBar.Title = "Wallpaper style applied";
+        SettingsStatusBar.Message = string.Format(CultureInfo.InvariantCulture, "The current wallpaper was reapplied using {0}. ({1} ms)", selectedStyle, stopwatch.ElapsedMilliseconds);
+    }
+
+    private async Task<apod_wallpaper.ApplicationSettingsSnapshot> GetFreshSettingsSnapshotAsync()
+    {
+        if (_backendHost == null)
+            return _settingsSnapshot?.Clone() ?? new apod_wallpaper.ApplicationSettingsSnapshot();
+
+        var latestSettingsResult = await _backendHost.Backend.GetSettingsAsync();
+        if (latestSettingsResult.Succeeded && latestSettingsResult.Value != null)
+            return latestSettingsResult.Value.Clone();
+
+        return _settingsSnapshot?.Clone() ?? new apod_wallpaper.ApplicationSettingsSnapshot();
     }
 
     private void UpdateApiKeyStateBadge(apod_wallpaper.ApplicationSettingsSnapshot settings, apod_wallpaper.ApiKeyValidationState validationState)
@@ -408,7 +497,13 @@ public sealed partial class SettingsPage : Page
         ImagesDirectoryTextBox.IsEnabled = false;
         BrowseImagesFolderButton.IsEnabled = false;
         OpenImagesFolderButton.IsEnabled = false;
-        WallpaperStyleComboBox.IsEnabled = false;
+        SmartStyleButton.IsEnabled = false;
+        FillStyleButton.IsEnabled = false;
+        FitStyleButton.IsEnabled = false;
+        StretchStyleButton.IsEnabled = false;
+        TileStyleButton.IsEnabled = false;
+        CenterStyleButton.IsEnabled = false;
+        SpanStyleButton.IsEnabled = false;
         GetApiKeyButton.IsEnabled = false;
     }
 }

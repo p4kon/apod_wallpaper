@@ -196,6 +196,7 @@ namespace apod_wallpaper
         {
             return Execute(DateTime.UtcNow.Date, () =>
             {
+                var latestPublishedDate = _wallpaperService.GetLatestPublishedDate();
                 var apply = _wallpaperService.ApplyLatestPublishedWallpaper(style, forceRefresh);
                 var resolvedDate = ParseEntryDate(apply.Entry, DateTime.UtcNow.Date);
 
@@ -204,7 +205,7 @@ namespace apod_wallpaper
                     Status = ApodWorkflowStatus.Success,
                     RequestedDate = DateTime.UtcNow.Date,
                     ResolvedDate = resolvedDate,
-                    LatestPublishedDate = resolvedDate,
+                    LatestPublishedDate = latestPublishedDate,
                     Entry = apply.Entry,
                     ImagePath = apply.ImagePath,
                     PreviewLocation = apply.ImagePath,
@@ -220,6 +221,7 @@ namespace apod_wallpaper
         {
             return ExecuteAsync(DateTime.UtcNow.Date, async () =>
             {
+                var latestPublishedDate = await _wallpaperService.GetLatestPublishedDateAsync().ConfigureAwait(false);
                 var apply = await _wallpaperService.ApplyLatestPublishedWallpaperAsync(style, forceRefresh).ConfigureAwait(false);
                 var resolvedDate = ParseEntryDate(apply.Entry, DateTime.UtcNow.Date);
 
@@ -228,7 +230,7 @@ namespace apod_wallpaper
                     Status = ApodWorkflowStatus.Success,
                     RequestedDate = DateTime.UtcNow.Date,
                     ResolvedDate = resolvedDate,
-                    LatestPublishedDate = resolvedDate,
+                    LatestPublishedDate = latestPublishedDate,
                     Entry = apply.Entry,
                     ImagePath = apply.ImagePath,
                     PreviewLocation = apply.ImagePath,
@@ -238,6 +240,21 @@ namespace apod_wallpaper
                     Source = apply.Source,
                 };
             });
+        }
+
+        public string ReapplyCurrentWallpaperStyle(WallpaperStyle style)
+        {
+            return _wallpaperService.ReapplyCurrentWallpaperStyle(style);
+        }
+
+        public string ResolveCurrentWallpaperSourcePath()
+        {
+            return _wallpaperService.ResolveCurrentWallpaperSourcePath();
+        }
+
+        public string ReapplyWallpaperStyle(string sourceImagePath, WallpaperStyle style)
+        {
+            return _wallpaperService.ReapplyWallpaperStyle(sourceImagePath, style);
         }
 
         public IReadOnlyList<ApodDayAvailability> GetMonthStatus(DateTime month, bool refreshMissingDates)

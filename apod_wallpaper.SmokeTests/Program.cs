@@ -38,6 +38,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("HTML extractor resolves preview and full image", HtmlExtractorResolvesImagePage);
                 Run("HTML extractor rejects video page", HtmlExtractorRejectsVideoPage);
                 Run("HTML extractor handles annotated image page", HtmlExtractorHandlesAnnotatedImagePage);
+                Run("HTML extractor resolves title and explanation text", HtmlExtractorResolvesTextMetadata);
                 Run("Runtime settings fall back to DEMO_KEY for invalid key", InvalidApiKeyFallsBackToDemoKey);
                 Run("Local image is preferred for preview", LocalImageIsPreferredForPreview);
                 Run("ApplyLatestPublished walks back through video days", ApplyLatestPublishedFallsBackAcrossVideoDays);
@@ -272,6 +273,36 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             Assert(imageUrl == "https://apod.nasa.gov/apod/image/2603/MayanMilkyWay_Fernandez_1600.jpg", "Unexpected full image URL for annotated image page.");
         }
 
+        private static void HtmlExtractorResolvesTextMetadata()
+        {
+            const string html =
+@"<html>
+<head>
+<title>APOD: 2026 May 04 - Spiral Echoes</title>
+</head>
+<body>
+<center>
+2026 May 04
+<br>
+<a href=""image/2605/spiral_full.jpg"">
+<img src=""image/2605/spiral_preview.jpg""></a>
+</center>
+<p><b> Explanation: </b>
+Spiral dust lanes &amp; glowing gas reveal how galaxies evolve.<br>
+Bright clusters mark newborn stars.
+</p>
+<p>Tomorrow's picture: another sky surprise.</p>
+</body>
+</html>";
+
+            var title = apod_wallpaper.ApodPageImageExtractor.ExtractTitle(html);
+            var explanation = apod_wallpaper.ApodPageImageExtractor.ExtractExplanation(html);
+
+            Assert(title == "Spiral Echoes", "Expected APOD HTML title to be extracted.");
+            Assert(explanation == "Spiral dust lanes & glowing gas reveal how galaxies evolve. Bright clusters mark newborn stars.",
+                "Expected APOD explanation text to be extracted and normalized.");
+        }
+
         private static void InvalidApiKeyFallsBackToDemoKey()
         {
             apod_wallpaper.AppRuntimeSettings.Configure("invalid-key", null, apod_wallpaper.ApiKeyValidationState.Invalid);
@@ -355,6 +386,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
 
                 Assert(result.Status == apod_wallpaper.ApodWorkflowStatus.Success, "Expected ApplyLatestPublished to succeed.");
                 Assert(result.ResolvedDate == imageDate, "Expected ApplyLatestPublished to fall back to the nearest image date.");
+                Assert(result.LatestPublishedDate == today, "Expected ApplyLatestPublished to preserve the real latest published date for calendar updates.");
                 Assert(string.Equals(result.ImagePath, localImagePath, StringComparison.OrdinalIgnoreCase), "Expected fallback image path to point to the local image.");
                 Assert(fakeWallpaperApplier.LastAppliedImagePath == localImagePath, "Expected wallpaper applier to receive the fallback local image.");
             }
@@ -1093,6 +1125,17 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
             {
                 LastAppliedImagePath = imagePath;
                 LastAppliedStyle = style;
+            }
+
+            public string ReapplyCurrentWallpaperStyle(apod_wallpaper.WallpaperStyle style)
+            {
+                LastAppliedStyle = style;
+                return LastAppliedImagePath;
+            }
+
+            public string ResolveCurrentWallpaperSourcePath()
+            {
+                return LastAppliedImagePath;
             }
         }
     }

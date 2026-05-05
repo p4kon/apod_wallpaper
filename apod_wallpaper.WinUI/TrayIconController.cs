@@ -8,6 +8,7 @@ namespace apod_wallpaper.WinUI;
 internal sealed class TrayIconController : IDisposable
 {
     private const int GwlWndProc = -4;
+    private const int WmGetMinMaxInfo = 0x0024;
     private const int WmClose = 0x0010;
     private const int WmApp = 0x8000;
     private const int WmLButtonDblClk = 0x0203;
@@ -49,6 +50,8 @@ internal sealed class TrayIconController : IDisposable
     private bool _allowWindowClose;
     private bool _minimizeToTrayOnClose = true;
     private bool _disposed;
+    private int _minimumWindowWidth = 820;
+    private int _minimumWindowHeight = 760;
 
     public TrayIconController(MainWindow owner, TraySpikeStatus status)
     {
@@ -93,6 +96,12 @@ internal sealed class TrayIconController : IDisposable
     public void SetCloseBehavior(bool minimizeToTrayOnClose)
     {
         _minimizeToTrayOnClose = minimizeToTrayOnClose;
+    }
+
+    public void SetMinimumWindowSize(int width, int height)
+    {
+        _minimumWindowWidth = width;
+        _minimumWindowHeight = height;
     }
 
     public void Dispose()
@@ -150,6 +159,12 @@ internal sealed class TrayIconController : IDisposable
 
     private IntPtr WindowProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
+        if (msg == WmGetMinMaxInfo)
+        {
+            ApplyMinimumWindowSize(lParam);
+            return IntPtr.Zero;
+        }
+
         if (msg == WmClose && !_allowWindowClose)
         {
             if (_minimizeToTrayOnClose)
@@ -180,6 +195,17 @@ internal sealed class TrayIconController : IDisposable
         }
 
         return CallWindowProc(_originalWndProc, hwnd, msg, wParam, lParam);
+    }
+
+    private void ApplyMinimumWindowSize(IntPtr lParam)
+    {
+        if (lParam == IntPtr.Zero)
+            return;
+
+        var minMaxInfo = Marshal.PtrToStructure<MinMaxInfo>(lParam);
+        minMaxInfo.ptMinTrackSize.X = _minimumWindowWidth;
+        minMaxInfo.ptMinTrackSize.Y = _minimumWindowHeight;
+        Marshal.StructureToPtr(minMaxInfo, lParam, false);
     }
 
     private void ShowContextMenu()
@@ -260,6 +286,16 @@ internal sealed class TrayIconController : IDisposable
     {
         public int X;
         public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MinMaxInfo
+    {
+        public NativePoint ptReserved;
+        public NativePoint ptMaxSize;
+        public NativePoint ptMaxPosition;
+        public NativePoint ptMinTrackSize;
+        public NativePoint ptMaxTrackSize;
     }
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]

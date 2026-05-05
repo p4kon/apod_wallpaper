@@ -26,19 +26,11 @@
                     CornerRadius="22,0,0,22">
                     <Grid Padding="8,16">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <FontIcon
-                            Grid.Row="0"
-                            HorizontalAlignment="Center"
-                            Glyph="&#xE80F;"
-                            FontSize="18"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-
-                        <StackPanel Grid.Row="1" VerticalAlignment="Top" Spacing="12">
+                        <StackPanel Grid.Row="0" VerticalAlignment="Top" Spacing="12">
                             <Button
                                 x:Name="PreviewButton"
                                 Width="36"
@@ -73,7 +65,7 @@
                         </StackPanel>
 
                         <Button
-                            Grid.Row="2"
+                            Grid.Row="1"
                             Width="36"
                             Height="36"
                             Padding="0"

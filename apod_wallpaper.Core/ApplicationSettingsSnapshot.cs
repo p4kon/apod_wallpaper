@@ -12,6 +12,7 @@ namespace apod_wallpaper
         public string ImagesDirectoryPath { get; set; }
         public string LastAutoRefreshRunDate { get; set; }
         public string LastAutoRefreshAppliedDate { get; set; }
+        public string LastAppliedWallpaperImagePath { get; set; }
 
         public ApplicationSettingsSnapshot Clone()
         {
@@ -27,6 +28,7 @@ namespace apod_wallpaper
                 ImagesDirectoryPath = ImagesDirectoryPath,
                 LastAutoRefreshRunDate = LastAutoRefreshRunDate,
                 LastAutoRefreshAppliedDate = LastAutoRefreshAppliedDate,
+                LastAppliedWallpaperImagePath = LastAppliedWallpaperImagePath,
             };
         }
     }

@@ -23,7 +23,8 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
 
         AppWindow.SetIcon("Assets/AppIcon.ico");
-        AppWindow.Resize(new SizeInt32(860, 820));
+        AppWindow.Resize(new SizeInt32(860, 840));
+        _trayIconController.SetMinimumWindowSize(820, 840);
         if (initialization.Succeeded && initialization.Value != null)
             SetCloseBehavior(initialization.Value.MinimizeToTrayOnClose);
         _trayIconController.Initialize();
