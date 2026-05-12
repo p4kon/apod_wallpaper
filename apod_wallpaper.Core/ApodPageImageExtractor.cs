@@ -84,7 +84,7 @@ namespace apod_wallpaper
             RegexOptions.Compiled);
 
         private static readonly Regex ExplanationFooterBlockRegex = new Regex(
-            "<p\\b[^>]*>\\s*<center\\b[^>]*>\\s*<b\\b[^>]*>\\s*[^<]{1,80}:\\s*</b>",
+            "<p\\b[^>]*>\\s*<center\\b[^>]*>",
             RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
         public static bool TryExtract(string html, string pageUrl, out string previewUrl, out string imageUrl)
@@ -372,6 +372,7 @@ namespace apod_wallpaper
                 "Tomorrow's picture:",
                 "Tomorrow's APOD:",
                 "Tomorrow's image:",
+                "Growing Gallery:",
                 "<title>",
                 "</body>",
             };

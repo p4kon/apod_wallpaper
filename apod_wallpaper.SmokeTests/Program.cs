@@ -290,7 +290,8 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
 <img src=""image/2605/spiral_preview.jpg""></a>
 </center>
 <p><b> Explanation: </b>
-Spiral dust lanes &amp; glowing gas reveal how galaxies evolve.<br>
+Spiral dust lanes &amp; glowing gas reveal how galaxies evolve.
+<p>
 Bright clusters mark newborn stars.
 </p>
 <p> <center>
