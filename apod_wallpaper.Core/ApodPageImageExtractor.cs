@@ -83,6 +83,10 @@ namespace apod_wallpaper
             "\\s+",
             RegexOptions.Compiled);
 
+        private static readonly Regex ExplanationFooterBlockRegex = new Regex(
+            "<p\\b[^>]*>\\s*<center\\b[^>]*>\\s*<b\\b[^>]*>\\s*[^<]{1,80}:\\s*</b>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
         public static bool TryExtract(string html, string pageUrl, out string previewUrl, out string imageUrl)
         {
             previewUrl = null;
@@ -368,18 +372,20 @@ namespace apod_wallpaper
                 "Tomorrow's picture:",
                 "Tomorrow's APOD:",
                 "Tomorrow's image:",
-                "Growing Gallery:",
-                "Gallery:",
                 "<title>",
                 "</body>",
             };
 
-            var matches = markers
+            var markerMatches = markers
                 .Select(marker => explanationHtml.IndexOf(marker, StringComparison.OrdinalIgnoreCase))
                 .Where(index => index >= 0)
                 .ToArray();
 
-            return matches.Length == 0 ? -1 : matches.Min();
+            var footerMatch = ExplanationFooterBlockRegex.Match(explanationHtml);
+            if (footerMatch.Success)
+                markerMatches = markerMatches.Concat(new[] { footerMatch.Index }).ToArray();
+
+            return markerMatches.Length == 0 ? -1 : markerMatches.Min();
         }
 
         private static string NormalizePlainText(string value)

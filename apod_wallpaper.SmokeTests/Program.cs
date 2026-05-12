@@ -293,7 +293,9 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
 Spiral dust lanes &amp; glowing gas reveal how galaxies evolve.<br>
 Bright clusters mark newborn stars.
 </p>
-<p>Growing Gallery: extra related link.</p>
+<p> <center>
+<b> Growing Gallery: </b><a href=""ap260503.html"">extra related link</a>
+</center>
 <p>Tomorrow's picture: another sky surprise.</p>
 </body>
 </html>";
