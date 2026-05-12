@@ -45,11 +45,12 @@ namespace apod_wallpaper
 
                 if (normalizedAspectRatio > WiderThanScreenThreshold)
                 {
+                    var wideFocusPath = ComposeSingleFocusWallpaper(originalImagePath, image, screenBounds, "wide");
                     return new SmartWallpaperComposition
                     {
-                        ImagePath = originalImagePath,
+                        ImagePath = wideFocusPath,
                         Style = WallpaperStyle.Fill,
-                        Strategy = "fill_wider_than_screen",
+                        Strategy = "wide_focus_background",
                     };
                 }
 
@@ -64,7 +65,7 @@ namespace apod_wallpaper
                     };
                 }
 
-                var singleFocusPath = ComposeSingleFocusWallpaper(originalImagePath, image, screenBounds);
+                var singleFocusPath = ComposeSingleFocusWallpaper(originalImagePath, image, screenBounds, "single");
                 return new SmartWallpaperComposition
                 {
                     ImagePath = singleFocusPath,
@@ -95,9 +96,9 @@ namespace apod_wallpaper
             return targetPath;
         }
 
-        private static string ComposeSingleFocusWallpaper(string originalImagePath, Image sourceImage, Rectangle screenBounds)
+        private static string ComposeSingleFocusWallpaper(string originalImagePath, Image sourceImage, Rectangle screenBounds, string targetName)
         {
-            var targetPath = BuildSmartTargetPath(originalImagePath, screenBounds, "single");
+            var targetPath = BuildSmartTargetPath(originalImagePath, screenBounds, targetName);
 
             using (var canvas = new Bitmap(screenBounds.Width, screenBounds.Height))
             using (var graphics = Graphics.FromImage(canvas))

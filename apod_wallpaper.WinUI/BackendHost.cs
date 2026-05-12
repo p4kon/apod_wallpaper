@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using Windows.Storage;
 
@@ -8,10 +9,7 @@ internal sealed class BackendHost : IDisposable
 {
     public BackendHost()
     {
-        var localFolderPath = ApplicationData.Current.LocalFolder.Path;
-        apod_wallpaper.ApplicationStorageLayout.Configure(
-            apod_wallpaper.ApplicationStorageMode.Store,
-            localFolderPath);
+        ConfigureStorageLayout();
 
         SettingsStore = new apod_wallpaper.JsonSettingsStore();
         SecretStore = new apod_wallpaper.DpapiUserSecretStore();
@@ -52,5 +50,23 @@ internal sealed class BackendHost : IDisposable
     {
         if (Backend is IDisposable disposable)
             disposable.Dispose();
+    }
+
+    private static void ConfigureStorageLayout()
+    {
+        try
+        {
+            var localFolderPath = ApplicationData.Current.LocalFolder.Path;
+            apod_wallpaper.ApplicationStorageLayout.Configure(
+                apod_wallpaper.ApplicationStorageMode.Store,
+                localFolderPath);
+        }
+        catch
+        {
+            var portableDataPath = Path.Combine(AppContext.BaseDirectory, "data");
+            apod_wallpaper.ApplicationStorageLayout.Configure(
+                apod_wallpaper.ApplicationStorageMode.Portable,
+                portableDataPath);
+        }
     }
 }

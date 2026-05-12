@@ -1,10 +1,14 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Windowing;
 using Windows.Graphics;
 
 namespace apod_wallpaper.WinUI;
 
 public sealed partial class MainWindow : Window
 {
+    private const int FixedWindowWidth = 860;
+    private const int FixedWindowHeight = 840;
+
     private readonly BackendHost _backendHost;
     private readonly TraySpikeStatus _trayStatus;
     private readonly TrayIconController _trayIconController;
@@ -23,8 +27,11 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
 
         AppWindow.SetIcon("Assets/AppIcon.ico");
-        AppWindow.Resize(new SizeInt32(860, 840));
-        _trayIconController.SetMinimumWindowSize(820, 840);
+        AppWindow.Resize(new SizeInt32(FixedWindowWidth, FixedWindowHeight));
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+            presenter.IsResizable = false;
+
+        _trayIconController.SetMinimumWindowSize(FixedWindowWidth, FixedWindowHeight);
         if (initialization.Succeeded && initialization.Value != null)
             SetCloseBehavior(initialization.Value.MinimizeToTrayOnClose);
         _trayIconController.Initialize();

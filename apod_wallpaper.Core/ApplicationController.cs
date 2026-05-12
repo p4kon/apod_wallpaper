@@ -550,22 +550,36 @@ namespace apod_wallpaper
                     lastAppliedDate.Value == latestAvailableDate &&
                     IsLastAppliedWallpaperCurrentlyActive(settings))
                 {
+                    if (latestPublicationIsForToday)
+                    {
+                        settings.LastAutoRefreshAppliedDate = latestAvailableDate.ToString("yyyy-MM-dd");
+                        settings.LastAutoRefreshRunDate = localToday.ToString("yyyy-MM-dd");
+                        _settingsStore.Save(settings);
+                        _calendarStateService.Clear();
+                        RaiseWallpaperApplied(CreateAutomaticCheckResult(localToday, latestAvailableDate, latestPublishedDate, settings.LastAppliedWallpaperImagePath), true);
+                    }
+
                     AppLogger.Info("Scheduler checked APOD and found the same latest available image already applied: " + latestAvailableDate.ToString("yyyy-MM-dd") + ".");
                     return;
                 }
 
-                var result = _workflowService.ApplyLatestPublished((WallpaperStyle)settings.WallpaperStyleIndex, true);
+                var result = _workflowService.ApplyDay(latestAvailableDate, (WallpaperStyle)settings.WallpaperStyleIndex, false);
                 if (!result.IsSuccess)
                     return;
 
-                _calendarStateService.Clear();
-                PersistLastAppliedWallpaperImagePath(result.ImagePath);
                 var resolvedDate = result.ResolvedDate.HasValue
                     ? result.ResolvedDate.Value.Date
                     : latestAvailableDate;
+                result.LatestPublishedDate = latestPublishedDate;
+
+                _calendarStateService.Clear();
+                PersistLastAppliedWallpaperImagePath(result.ImagePath);
 
                 settings.LastAutoRefreshAppliedDate = resolvedDate.ToString("yyyy-MM-dd");
-                settings.LastAutoRefreshRunDate = localToday.ToString("yyyy-MM-dd");
+                settings.LastAutoRefreshRunDate = latestPublicationIsForToday
+                    ? localToday.ToString("yyyy-MM-dd")
+                    : Normalize(settings.LastAutoRefreshRunDate);
+                settings.LastAppliedWallpaperImagePath = Normalize(result.ImagePath);
                 _settingsStore.Save(settings);
                 RaiseWallpaperApplied(result, true);
             }
@@ -732,6 +746,21 @@ namespace apod_wallpaper
             WallpaperApplied?.Invoke(this, new WallpaperAppliedEventArgs(result, automatic));
         }
 
+        private static ApodWorkflowResult CreateAutomaticCheckResult(DateTime requestedDate, DateTime resolvedDate, DateTime latestPublishedDate, string imagePath)
+        {
+            return new ApodWorkflowResult
+            {
+                Status = ApodWorkflowStatus.Success,
+                RequestedDate = requestedDate.Date,
+                ResolvedDate = resolvedDate.Date,
+                LatestPublishedDate = latestPublishedDate.Date,
+                ImagePath = imagePath,
+                PreviewLocation = imagePath,
+                IsLocalFile = LocalImageValidator.IsUsableImageFile(imagePath),
+                Source = ApodDataSource.LocalFile,
+            };
+        }
+
         private void PersistLastAppliedWallpaperImagePath(string imagePath)
         {
             if (!LocalImageValidator.IsUsableImageFile(imagePath))
@@ -766,7 +795,8 @@ namespace apod_wallpaper
         {
             return lastRunDate.HasValue &&
                    lastRunDate.Value == localToday.Date &&
-                   lastAppliedDate.HasValue;
+                   lastAppliedDate.HasValue &&
+                   lastAppliedDate.Value >= localToday.Date;
         }
 
         private static OperationError CreateOperationError(OperationErrorCode code, string message, Exception exception, bool retryable)

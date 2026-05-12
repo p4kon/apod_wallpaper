@@ -10,7 +10,6 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using WinRT.Interop;
-using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.System;
 
@@ -30,6 +29,7 @@ public sealed partial class SettingsPage : Page
     private BackendHost? _backendHost;
     private apod_wallpaper.ApplicationSettingsSnapshot? _settingsSnapshot;
     private apod_wallpaper.ApiKeyValidationState _apiKeyValidationState;
+    private string _effectiveImagesDirectory = string.Empty;
     private bool _isHydratingControls;
 
     public SettingsPage()
@@ -75,6 +75,7 @@ public sealed partial class SettingsPage : Page
         _settingsSnapshot = settingsResult.Value;
         var apiKeyStateResult = await _backendHost.Backend.GetApiKeyValidationStateAsync();
         _apiKeyValidationState = apiKeyStateResult.Succeeded ? apiKeyStateResult.Value : apod_wallpaper.ApiKeyValidationState.Unknown;
+        _effectiveImagesDirectory = await ResolveEffectiveImagesDirectoryAsync();
 
         PopulateSettings(_settingsSnapshot, _apiKeyValidationState);
 
@@ -92,7 +93,7 @@ public sealed partial class SettingsPage : Page
             AutoCheckToggle.IsOn = settings.AutoRefreshEnabled;
             StartWithWindowsToggle.IsOn = settings.StartWithWindows;
             CloseToTrayToggle.IsOn = settings.MinimizeToTrayOnClose;
-            ImagesDirectoryTextBox.Text = settings.ImagesDirectoryPath ?? string.Empty;
+            ImagesDirectoryTextBox.Text = ResolveDisplayedImagesDirectory(settings);
             SetWallpaperStyleButtons(ResolveWallpaperStyleFromSettings(settings));
             CloseBehaviorComboBox.SelectedIndex = settings.MinimizeToTrayOnClose ? 0 : 1;
         }
@@ -102,9 +103,7 @@ public sealed partial class SettingsPage : Page
         }
 
         UpdateApiKeyStateBadge(settings, apiKeyValidationState);
-        ImagesDirectoryHintText.Text = string.IsNullOrWhiteSpace(settings.ImagesDirectoryPath)
-            ? "The backend will fall back to its default images directory until you choose a custom folder."
-            : "Current folder: " + settings.ImagesDirectoryPath;
+        UpdateImagesDirectoryHint(settings);
     }
 
     private static apod_wallpaper.WallpaperStyle ResolveWallpaperStyleFromSettings(apod_wallpaper.ApplicationSettingsSnapshot settings)
@@ -214,15 +213,17 @@ public sealed partial class SettingsPage : Page
 
     private async Task CommitImagesDirectoryAsync(string path)
     {
+        var normalizedPath = path.Trim();
         await SaveSettingsAsync(
-            snapshot => snapshot.ImagesDirectoryPath = path,
+            snapshot => snapshot.ImagesDirectoryPath = ShouldUseDefaultImagesDirectory(normalizedPath)
+                ? string.Empty
+                : normalizedPath,
             "Images directory saved.",
-            afterSave: saved =>
+            afterSave: async saved =>
             {
-                ImagesDirectoryHintText.Text = string.IsNullOrWhiteSpace(saved.ImagesDirectoryPath)
-                    ? "The backend will fall back to its default images directory until you choose a custom folder."
-                    : "Current folder: " + saved.ImagesDirectoryPath;
-                return Task.CompletedTask;
+                _effectiveImagesDirectory = await ResolveEffectiveImagesDirectoryAsync();
+                ImagesDirectoryTextBox.Text = ResolveDisplayedImagesDirectory(saved);
+                UpdateImagesDirectoryHint(saved);
             });
     }
 
@@ -246,9 +247,9 @@ public sealed partial class SettingsPage : Page
         await CommitImagesDirectoryAsync(folder.Path);
     }
 
-    private async void OpenImagesFolderButton_Click(object sender, RoutedEventArgs e)
+    private void OpenImagesFolderButton_Click(object sender, RoutedEventArgs e)
     {
-        var path = ImagesDirectoryTextBox.Text.Trim();
+        var path = ResolveImagesDirectoryToOpen();
         if (string.IsNullOrWhiteSpace(path))
         {
             SettingsStatusBar.Severity = InfoBarSeverity.Warning;
@@ -259,8 +260,12 @@ public sealed partial class SettingsPage : Page
 
         try
         {
-            var folder = await StorageFolder.GetFolderFromPathAsync(path);
-            await Launcher.LaunchFolderAsync(folder);
+            Directory.CreateDirectory(path);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true,
+            });
         }
         catch (Exception ex)
         {
@@ -268,6 +273,65 @@ public sealed partial class SettingsPage : Page
             SettingsStatusBar.Title = "Unable to open folder";
             SettingsStatusBar.Message = ex.Message;
         }
+    }
+
+    private async Task<string> ResolveEffectiveImagesDirectoryAsync()
+    {
+        if (_backendHost == null)
+            return string.Empty;
+
+        var ensureResult = await _backendHost.Backend.EnsureEffectiveImagesDirectoryAsync();
+        if (ensureResult.Succeeded && !string.IsNullOrWhiteSpace(ensureResult.Value))
+            return ensureResult.Value;
+
+        var getResult = await _backendHost.Backend.GetEffectiveImagesDirectoryAsync();
+        return getResult.Succeeded && !string.IsNullOrWhiteSpace(getResult.Value)
+            ? getResult.Value
+            : string.Empty;
+    }
+
+    private string ResolveDisplayedImagesDirectory(apod_wallpaper.ApplicationSettingsSnapshot settings)
+    {
+        return string.IsNullOrWhiteSpace(settings.ImagesDirectoryPath)
+            ? _effectiveImagesDirectory
+            : settings.ImagesDirectoryPath;
+    }
+
+    private string ResolveImagesDirectoryToOpen()
+    {
+        var textBoxPath = ImagesDirectoryTextBox.Text.Trim();
+        if (!string.IsNullOrWhiteSpace(textBoxPath))
+            return textBoxPath;
+
+        return _effectiveImagesDirectory;
+    }
+
+    private bool ShouldUseDefaultImagesDirectory(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return true;
+
+        if (string.IsNullOrWhiteSpace(_effectiveImagesDirectory))
+            return false;
+
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(_effectiveImagesDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void UpdateImagesDirectoryHint(apod_wallpaper.ApplicationSettingsSnapshot settings)
+    {
+        ImagesDirectoryHintText.Text = string.IsNullOrWhiteSpace(settings.ImagesDirectoryPath)
+            ? "Default portable folder: " + _effectiveImagesDirectory
+            : "Custom folder: " + settings.ImagesDirectoryPath;
     }
 
     private async void GetApiKeyButton_Click(object sender, RoutedEventArgs e)

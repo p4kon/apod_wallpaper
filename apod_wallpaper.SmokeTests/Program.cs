@@ -44,10 +44,12 @@ namespace apod_wallpaper.SmokeTests
                 Run("ApplyLatestPublished walks back through video days", ApplyLatestPublishedFallsBackAcrossVideoDays);
                 Run("Smart composer stretches near screen ratio images", SmartComposerUsesStretchForNearScreenRatio);
                 Run("Smart composer creates single focus image for square content", SmartComposerCreatesSingleFocusForSquareImages);
+                Run("Smart composer preserves ultrawide images without Fill cropping", SmartComposerPreservesUltraWideImages);
                 Run("Scheduler uses hourly polling for DEMO_KEY", SchedulerUsesHourlyPollingForDemoKey);
                 Run("Scheduler uses 30 minute polling for personal key", SchedulerUsesThirtyMinutePollingForPersonalKey);
                 Run("Wallpaper service rejects invalid local file", WallpaperServiceRejectsInvalidLocalFile);
-                Run("Scheduler day lock skips repeated checks for today", SchedulerDayLockSkipsRepeatedChecks);
+                Run("Scheduler day lock skips repeated checks after today's image", SchedulerDayLockSkipsAfterTodaysImage);
+                Run("Scheduler day lock keeps checking after yesterday fallback", SchedulerDayLockKeepsCheckingAfterYesterdayFallback);
                 Run("Scheduler day lock does not skip when no applied date", SchedulerDayLockRequiresAppliedDate);
                 Run("API key is stored outside plaintext settings", ApiKeyIsStoredOutsidePlaintextSettings);
                 Run("Legacy API key migrates to protected storage", LegacyApiKeyMigratesToProtectedStorage);
@@ -291,6 +293,7 @@ onMouseOut=""if (document.images) document.imagename1.src='image/2603/MayanMilky
 Spiral dust lanes &amp; glowing gas reveal how galaxies evolve.<br>
 Bright clusters mark newborn stars.
 </p>
+<p>Growing Gallery: extra related link.</p>
 <p>Tomorrow's picture: another sky surprise.</p>
 </body>
 </html>";
@@ -463,6 +466,36 @@ Bright clusters mark newborn stars.
             }
         }
 
+        private static void SmartComposerPreservesUltraWideImages()
+        {
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_smoke_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+            var snapshot = CaptureSettings();
+
+            try
+            {
+                var imagePath = Path.Combine(tempDirectory, "ultrawide.jpg");
+
+                using (var bitmap = new Bitmap(2920, 1000))
+                {
+                    bitmap.Save(imagePath, System.Drawing.Imaging.ImageFormat.Jpeg);
+                }
+
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(tempDirectory);
+                var composition = apod_wallpaper.SmartWallpaperComposer.Prepare(imagePath);
+
+                Assert(composition.Style == apod_wallpaper.WallpaperStyle.Fill, "Expected ultrawide image to use Fill only after smart composition.");
+                Assert(composition.Strategy == "wide_focus_background", "Expected ultrawide image to use wide focus strategy instead of raw Fill cropping.");
+                Assert(File.Exists(composition.ImagePath), "Expected composed ultrawide smart wallpaper file to exist.");
+                Assert(!string.Equals(composition.ImagePath, imagePath, StringComparison.OrdinalIgnoreCase), "Expected ultrawide smart mode to create a composed wallpaper rather than applying the original image.");
+            }
+            finally
+            {
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(tempDirectory);
+            }
+        }
+
         private static void SchedulerUsesHourlyPollingForDemoKey()
         {
             var pollingInterval = apod_wallpaper.ApplicationController.ResolveSchedulerPollingInterval(new apod_wallpaper.ApplicationSettingsSnapshot
@@ -512,11 +545,18 @@ Bright clusters mark newborn stars.
             }
         }
 
-        private static void SchedulerDayLockSkipsRepeatedChecks()
+        private static void SchedulerDayLockSkipsAfterTodaysImage()
+        {
+            var today = DateTime.Today;
+            var shouldSkip = apod_wallpaper.ApplicationController.ShouldSkipSchedulerForToday(today, today, today);
+            Assert(shouldSkip, "Expected scheduler day lock to skip repeated checks after today's image was applied.");
+        }
+
+        private static void SchedulerDayLockKeepsCheckingAfterYesterdayFallback()
         {
             var today = DateTime.Today;
             var shouldSkip = apod_wallpaper.ApplicationController.ShouldSkipSchedulerForToday(today, today.AddDays(-1), today);
-            Assert(shouldSkip, "Expected scheduler day lock to skip repeated checks when today's run already completed.");
+            Assert(!shouldSkip, "Expected scheduler day lock to keep checking when today's early run only applied an older fallback image.");
         }
 
         private static void SchedulerDayLockRequiresAppliedDate()

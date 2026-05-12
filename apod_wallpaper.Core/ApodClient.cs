@@ -76,6 +76,9 @@ namespace apod_wallpaper
         public ApodEntry GetLatestEntry()
         {
             var requestUrl = BuildLatestRequestUrl();
+            if (ShouldUseHtmlOnlyForDemoLatestApi())
+                return GetLatestEntryFromPages();
+
             var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=latest url=" + requestUrl);
             try
@@ -94,6 +97,9 @@ namespace apod_wallpaper
         public async Task<ApodEntry> GetLatestEntryAsync()
         {
             var requestUrl = BuildLatestRequestUrl();
+            if (ShouldUseHtmlOnlyForDemoLatestApi())
+                return await GetLatestEntryFromPagesAsync().ConfigureAwait(false);
+
             var retryProfile = ResolveApiRetryProfile();
             AppLogger.Web("source=nasa_api scope=latest_async url=" + requestUrl);
             try
@@ -554,6 +560,15 @@ namespace apod_wallpaper
                 AppLogger.Web("source=nasa_api scope=demo_guard result=blocked until=" + _demoDatedApiBlockedUntilUtc.ToString("o"));
                 return true;
             }
+        }
+
+        private static bool ShouldUseHtmlOnlyForDemoLatestApi()
+        {
+            if (!string.Equals(ResolveApiKey(), DemoApiKey, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            AppLogger.Web("source=nasa_api scope=latest result=demo_html_only");
+            return true;
         }
 
         private static void RecordApiSuccess(string requestUrl)

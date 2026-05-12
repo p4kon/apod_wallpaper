@@ -826,6 +826,9 @@ namespace apod_wallpaper
             var cachedEntry = cached.ToEntry();
             if (!cachedEntry.HasImage)
             {
+                if (IsConfirmedUnsupportedEntry(cachedEntry))
+                    return false;
+
                 if (requestedDate.Date >= DateTime.UtcNow.Date.AddDays(-3))
                     return cacheAge >= TimeSpan.FromHours(2);
 
@@ -836,6 +839,15 @@ namespace apod_wallpaper
                 return cacheAge >= TimeSpan.FromHours(2);
 
             return cacheAge >= TimeSpan.FromDays(7);
+        }
+
+        private static bool IsConfirmedUnsupportedEntry(ApodEntry entry)
+        {
+            if (entry == null || entry.HasImage)
+                return false;
+
+            return string.Equals(entry.MediaType, "video", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(entry.MediaType, "unsupported", StringComparison.OrdinalIgnoreCase);
         }
 
         private void RunHousekeepingIfNeeded()

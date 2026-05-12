@@ -368,6 +368,8 @@ namespace apod_wallpaper
                 "Tomorrow's picture:",
                 "Tomorrow's APOD:",
                 "Tomorrow's image:",
+                "Growing Gallery:",
+                "Gallery:",
                 "<title>",
                 "</body>",
             };
