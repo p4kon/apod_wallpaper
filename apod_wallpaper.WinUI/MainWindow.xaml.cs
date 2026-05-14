@@ -1,13 +1,19 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Windowing;
+using System;
+using System.Runtime.InteropServices;
 using Windows.Graphics;
+using WinRT.Interop;
 
 namespace apod_wallpaper.WinUI;
 
 public sealed partial class MainWindow : Window
 {
-    private const int FixedWindowWidth = 860;
-    private const int FixedWindowHeight = 840;
+    private const int PreferredWindowWidthDip = 860;
+    private const int PreferredWindowHeightDip = 840;
+    private const int MinimumWindowWidthPixels = 720;
+    private const int MinimumWindowHeightPixels = 680;
+    private const int WorkAreaMarginPixels = 32;
 
     private readonly BackendHost _backendHost;
     private readonly TraySpikeStatus _trayStatus;
@@ -27,11 +33,12 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
 
         AppWindow.SetIcon("Assets/AppIcon.ico");
-        AppWindow.Resize(new SizeInt32(FixedWindowWidth, FixedWindowHeight));
+        var fixedWindowSize = ResolveFixedWindowSize();
+        AppWindow.Resize(fixedWindowSize);
         if (AppWindow.Presenter is OverlappedPresenter presenter)
             presenter.IsResizable = false;
 
-        _trayIconController.SetMinimumWindowSize(FixedWindowWidth, FixedWindowHeight);
+        _trayIconController.SetMinimumWindowSize(fixedWindowSize.Width, fixedWindowSize.Height);
         if (initialization.Succeeded && initialization.Value != null)
             SetCloseBehavior(initialization.Value.MinimizeToTrayOnClose);
         _trayIconController.Initialize();
@@ -72,4 +79,29 @@ public sealed partial class MainWindow : Window
         _trayIconController.Dispose();
         _backendHost.Dispose();
     }
+
+    private SizeInt32 ResolveFixedWindowSize()
+    {
+        var scale = ResolveRasterizationScale();
+        var preferredWidth = (int)Math.Ceiling(PreferredWindowWidthDip * scale);
+        var preferredHeight = (int)Math.Ceiling(PreferredWindowHeightDip * scale);
+        var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+
+        var maxWidth = Math.Max(MinimumWindowWidthPixels, workArea.Width - WorkAreaMarginPixels);
+        var maxHeight = Math.Max(MinimumWindowHeightPixels, workArea.Height - WorkAreaMarginPixels);
+
+        return new SizeInt32(
+            Math.Max(MinimumWindowWidthPixels, Math.Min(preferredWidth, maxWidth)),
+            Math.Max(MinimumWindowHeightPixels, Math.Min(preferredHeight, maxHeight)));
+    }
+
+    private double ResolveRasterizationScale()
+    {
+        var hwnd = WindowNative.GetWindowHandle(this);
+        var dpi = GetDpiForWindow(hwnd);
+        return dpi > 0 ? dpi / 96d : 1d;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
 }

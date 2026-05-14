@@ -25,6 +25,8 @@ namespace apod_wallpaper.WinUI;
 
 public sealed partial class MainPage : Page
 {
+    private static readonly CultureInfo UiDateCulture = CultureInfo.InvariantCulture;
+
     private sealed class MonthCacheEntry
     {
         public required apod_wallpaper.ApodCalendarMonthState State { get; init; }
@@ -108,7 +110,7 @@ public sealed partial class MainPage : Page
         NavigationCacheMode = NavigationCacheMode.Required;
         WallpaperStyleComboBox.ItemsSource = WallpaperStyleDisplayOrder;
         EnsureCalendarGridDefinitions();
-        VisibleMonthText.Text = _visibleMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        VisibleMonthText.Text = FormatVisibleMonth(_visibleMonth);
         RefreshSelectedDateText();
         EnsureCalendarMonthBuilt(_visibleMonth);
         UpdateActionAvailability();
@@ -272,7 +274,7 @@ public sealed partial class MainPage : Page
         _selectedDate = snapshot.PreferredDisplayDate.Date;
         _visibleMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
         RefreshSelectedDateText();
-        VisibleMonthText.Text = _visibleMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        VisibleMonthText.Text = FormatVisibleMonth(_visibleMonth);
         EnsureCalendarMonthBuilt(_visibleMonth);
         UpdateCalendarSelectionOnly();
         SetWallpaperStyleSelection(snapshot.SelectedWallpaperStyle);
@@ -300,7 +302,7 @@ public sealed partial class MainPage : Page
 
         var month = new DateTime(_visibleMonth.Year, _visibleMonth.Month, 1);
         var requestVersion = Interlocked.Increment(ref _monthRequestVersion);
-        VisibleMonthText.Text = month.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        VisibleMonthText.Text = FormatVisibleMonth(month);
         EnsureCalendarMonthBuilt(month);
         SetCalendarToLoadingState(month);
         TouchVisibleMonthWindow(month);
@@ -402,7 +404,7 @@ public sealed partial class MainPage : Page
 
     private void SetMonthErrorState(DateTime month, string message)
     {
-        VisibleMonthText.Text = month.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        VisibleMonthText.Text = FormatVisibleMonth(month);
         MonthStatusBar.Severity = InfoBarSeverity.Error;
         MonthStatusBar.Title = "Calendar month failed";
         MonthStatusBar.Message = message;
@@ -414,7 +416,7 @@ public sealed partial class MainPage : Page
         EnsureCalendarGridDefinitions();
         EnsureCalendarMonthBuilt(monthState.Month);
 
-        VisibleMonthText.Text = monthState.Month.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+        VisibleMonthText.Text = FormatVisibleMonth(monthState.Month);
         RefreshSelectedDateText();
 
         var monthStart = monthState.Month;
@@ -1023,6 +1025,11 @@ public sealed partial class MainPage : Page
     private void RefreshSelectedDateText()
     {
         SelectedDateText.Text = "Selected date: " + _selectedDate.ToString("dddd, dd MMMM yyyy", CultureInfo.CurrentCulture);
+    }
+
+    private static string FormatVisibleMonth(DateTime month)
+    {
+        return month.ToString("MMMM yyyy", UiDateCulture);
     }
 
     private apod_wallpaper.WallpaperStyle GetSelectedWallpaperStyle()
