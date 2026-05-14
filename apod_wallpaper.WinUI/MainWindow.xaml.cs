@@ -36,7 +36,10 @@ public sealed partial class MainWindow : Window
         var fixedWindowSize = ResolveFixedWindowSize();
         AppWindow.Resize(fixedWindowSize);
         if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
             presenter.IsResizable = false;
+            presenter.IsMaximizable = false;
+        }
 
         _trayIconController.SetMinimumWindowSize(fixedWindowSize.Width, fixedWindowSize.Height);
         if (initialization.Succeeded && initialization.Value != null)
@@ -87,12 +90,12 @@ public sealed partial class MainWindow : Window
         var preferredHeight = (int)Math.Ceiling(PreferredWindowHeightDip * scale);
         var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
 
-        var maxWidth = Math.Max(MinimumWindowWidthPixels, workArea.Width - WorkAreaMarginPixels);
-        var maxHeight = Math.Max(MinimumWindowHeightPixels, workArea.Height - WorkAreaMarginPixels);
+        var maxWidth = Math.Max(1, workArea.Width - WorkAreaMarginPixels);
+        var maxHeight = Math.Max(1, workArea.Height - WorkAreaMarginPixels);
 
         return new SizeInt32(
-            Math.Max(MinimumWindowWidthPixels, Math.Min(preferredWidth, maxWidth)),
-            Math.Max(MinimumWindowHeightPixels, Math.Min(preferredHeight, maxHeight)));
+            Math.Min(Math.Max(MinimumWindowWidthPixels, preferredWidth), maxWidth),
+            Math.Min(Math.Max(MinimumWindowHeightPixels, preferredHeight), maxHeight));
     }
 
     private double ResolveRasterizationScale()

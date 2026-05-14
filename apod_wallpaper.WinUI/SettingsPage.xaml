@@ -107,13 +107,13 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
 
-                                    <Button x:Name="SmartStyleButton" Grid.Column="0" MinWidth="72" Height="36" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Smart" Tag="Smart" />
-                                    <Button x:Name="FillStyleButton" Grid.Column="1" MinWidth="72" Height="36" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Fill" Tag="Fill" />
-                                    <Button x:Name="FitStyleButton" Grid.Column="2" MinWidth="72" Height="36" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Fit" Tag="Fit" />
-                                    <Button x:Name="StretchStyleButton" Grid.Column="3" MinWidth="72" Height="36" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Stretch" Tag="Stretch" />
-                                    <Button x:Name="TileStyleButton" Grid.Column="4" MinWidth="72" Height="36" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Tile" Tag="Tile" />
-                                    <Button x:Name="CenterStyleButton" Grid.Column="5" MinWidth="72" Height="36" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Center" Tag="Center" />
-                                    <Button x:Name="SpanStyleButton" Grid.Column="6" MinWidth="72" Height="36" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Span" Tag="Span" />
+                                    <Button x:Name="SmartStyleButton" Grid.Column="0" MinWidth="0" Height="36" Padding="4,0" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Smart" Tag="Smart" />
+                                    <Button x:Name="FillStyleButton" Grid.Column="1" MinWidth="0" Height="36" Padding="4,0" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Fill" Tag="Fill" />
+                                    <Button x:Name="FitStyleButton" Grid.Column="2" MinWidth="0" Height="36" Padding="4,0" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Fit" Tag="Fit" />
+                                    <Button x:Name="StretchStyleButton" Grid.Column="3" MinWidth="0" Height="36" Padding="4,0" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Stretch" Tag="Stretch" />
+                                    <Button x:Name="TileStyleButton" Grid.Column="4" MinWidth="0" Height="36" Padding="4,0" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Tile" Tag="Tile" />
+                                    <Button x:Name="CenterStyleButton" Grid.Column="5" MinWidth="0" Height="36" Padding="4,0" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Center" Tag="Center" />
+                                    <Button x:Name="SpanStyleButton" Grid.Column="6" MinWidth="0" Height="36" Padding="4,0" HorizontalContentAlignment="Center" Click="WallpaperStyleButton_Click" Content="Span" Tag="Span" />
                                 </Grid>
                             </Border>
                         </StackPanel>

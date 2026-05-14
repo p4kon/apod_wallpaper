@@ -7,6 +7,11 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        VerticalScrollBarVisibility="Auto"
+        VerticalScrollMode="Auto">
     <Grid Padding="18">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -388,4 +393,5 @@
         </StackPanel>
 
     </Grid>
+    </ScrollViewer>
 </Page>

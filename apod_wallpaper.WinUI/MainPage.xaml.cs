@@ -48,11 +48,16 @@ public sealed partial class MainPage : Page
     private static readonly SolidColorBrush CalendarGreenBrush = new(ColorHelper.FromArgb(0xFF, 0x3D, 0x8C, 0x63));
     private static readonly SolidColorBrush CalendarBlueBrush = new(ColorHelper.FromArgb(0xFF, 0x2F, 0x79, 0xD9));
     private static readonly SolidColorBrush CalendarRedBrush = new(ColorHelper.FromArgb(0xFF, 0xC4, 0x5A, 0x5A));
-    private static readonly SolidColorBrush CalendarUnknownBrush = new(ColorHelper.FromArgb(0xFF, 0x5F, 0x5F, 0x5F));
-    private static readonly SolidColorBrush CalendarFutureBrush = new(ColorHelper.FromArgb(0xFF, 0x31, 0x31, 0x31));
-    private static readonly SolidColorBrush CalendarSelectedBorderBrush = new(ColorHelper.FromArgb(0xFF, 0xF1, 0xF5, 0xF9));
     private static readonly SolidColorBrush CalendarDefaultForegroundBrush = new(Colors.White);
-    private static readonly SolidColorBrush CalendarFutureForegroundBrush = new(ColorHelper.FromArgb(0xFF, 0xAA, 0xAA, 0xAA));
+    private static readonly SolidColorBrush CalendarLightUnknownBrush = new(ColorHelper.FromArgb(0xFF, 0xCB, 0xD5, 0xE1));
+    private static readonly SolidColorBrush CalendarLightFutureBrush = new(ColorHelper.FromArgb(0xFF, 0xF8, 0xFA, 0xFC));
+    private static readonly SolidColorBrush CalendarLightMutedForegroundBrush = new(ColorHelper.FromArgb(0xFF, 0x64, 0x74, 0x8B));
+    private static readonly SolidColorBrush CalendarLightDefaultForegroundBrush = new(ColorHelper.FromArgb(0xFF, 0x1E, 0x29, 0x3B));
+    private static readonly SolidColorBrush CalendarDarkUnknownBrush = new(ColorHelper.FromArgb(0xFF, 0x5F, 0x5F, 0x5F));
+    private static readonly SolidColorBrush CalendarDarkFutureBrush = new(ColorHelper.FromArgb(0xFF, 0x31, 0x31, 0x31));
+    private static readonly SolidColorBrush CalendarDarkFutureForegroundBrush = new(ColorHelper.FromArgb(0xFF, 0xAA, 0xAA, 0xAA));
+    private static readonly SolidColorBrush CalendarSelectedLightBorderBrush = new(ColorHelper.FromArgb(0xFF, 0x25, 0x63, 0xEB));
+    private static readonly SolidColorBrush CalendarSelectedDarkBorderBrush = new(ColorHelper.FromArgb(0xFF, 0xF1, 0xF5, 0xF9));
     private static readonly apod_wallpaper.WallpaperStyle[] WallpaperStyleDisplayOrder =
     {
         apod_wallpaper.WallpaperStyle.Smart,
@@ -114,6 +119,7 @@ public sealed partial class MainPage : Page
         RefreshSelectedDateText();
         EnsureCalendarMonthBuilt(_visibleMonth);
         UpdateActionAvailability();
+        ActualThemeChanged += MainPage_ActualThemeChanged;
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -147,6 +153,12 @@ public sealed partial class MainPage : Page
 
         await EnsureWallpaperAppliedSubscriptionAsync();
         await RefreshStateAsync();
+    }
+
+    private void MainPage_ActualThemeChanged(FrameworkElement sender, object args)
+    {
+        UpdateCalendarSelectionOnly();
+        UpdateAutoRefreshToggleVisual();
     }
 
     private async void ReloadPreviewButton_Click(object sender, RoutedEventArgs e)
@@ -513,24 +525,28 @@ public sealed partial class MainPage : Page
         var isUnknown = !hasLocalImage && !hasRemoteImage && !isUnsupported;
         var isSelected = _selectedDate.Date == date.Date;
 
-        var background = CalendarUnknownBrush;
-        var foreground = CalendarDefaultForegroundBrush;
+        var isLightTheme = ActualTheme == ElementTheme.Light;
+        var background = ResolveCalendarUnknownBrush(isLightTheme);
+        var foreground = ResolveCalendarUnknownForegroundBrush(isLightTheme);
         if (isFuture)
         {
-            background = CalendarFutureBrush;
-            foreground = CalendarFutureForegroundBrush;
+            background = ResolveCalendarFutureBrush(isLightTheme);
+            foreground = ResolveCalendarFutureForegroundBrush(isLightTheme);
         }
         else if (hasLocalImage)
         {
             background = CalendarGreenBrush;
+            foreground = CalendarDefaultForegroundBrush;
         }
         else if (hasRemoteImage)
         {
             background = CalendarBlueBrush;
+            foreground = CalendarDefaultForegroundBrush;
         }
         else if (isUnsupported)
         {
             background = CalendarRedBrush;
+            foreground = CalendarDefaultForegroundBrush;
         }
 
         visual.DayNumberText.Text = date.Day.ToString(CultureInfo.InvariantCulture);
@@ -541,7 +557,7 @@ public sealed partial class MainPage : Page
 
         visual.Button.Background = background;
         visual.Button.Foreground = foreground;
-        visual.Button.BorderBrush = isSelected ? CalendarSelectedBorderBrush : background;
+        visual.Button.BorderBrush = isSelected ? ResolveCalendarSelectedBorderBrush(isLightTheme) : background;
         visual.Button.BorderThickness = isSelected ? new Thickness(2) : new Thickness(1);
         visual.Button.IsEnabled = !isFuture;
         visual.Button.Tag = date;
@@ -555,6 +571,31 @@ public sealed partial class MainPage : Page
             isLoading && !isFuture
                 ? date.ToString("dddd, dd MMMM yyyy", CultureInfo.CurrentCulture) + Environment.NewLine + "Loading calendar state"
                 : BuildDayTooltip(date, isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown));
+    }
+
+    private static SolidColorBrush ResolveCalendarUnknownBrush(bool isLightTheme)
+    {
+        return isLightTheme ? CalendarLightUnknownBrush : CalendarDarkUnknownBrush;
+    }
+
+    private static SolidColorBrush ResolveCalendarUnknownForegroundBrush(bool isLightTheme)
+    {
+        return isLightTheme ? CalendarLightDefaultForegroundBrush : CalendarDefaultForegroundBrush;
+    }
+
+    private static SolidColorBrush ResolveCalendarFutureBrush(bool isLightTheme)
+    {
+        return isLightTheme ? CalendarLightFutureBrush : CalendarDarkFutureBrush;
+    }
+
+    private static SolidColorBrush ResolveCalendarFutureForegroundBrush(bool isLightTheme)
+    {
+        return isLightTheme ? CalendarLightMutedForegroundBrush : CalendarDarkFutureForegroundBrush;
+    }
+
+    private static SolidColorBrush ResolveCalendarSelectedBorderBrush(bool isLightTheme)
+    {
+        return isLightTheme ? CalendarSelectedLightBorderBrush : CalendarSelectedDarkBorderBrush;
     }
 
     private async void CalendarDayButton_Click(object sender, RoutedEventArgs e)
@@ -1342,12 +1383,21 @@ public sealed partial class MainPage : Page
         var affectedMonths = InvalidateCalendarMonthsForWorkflow(e.Result);
         await RefreshSettingsSnapshotPreservingCalendarAsync();
 
+        var resolvedDate = e.Result.ResolvedDate ?? e.Result.RequestedDate;
+        var resolvedMonth = new DateTime(resolvedDate.Year, resolvedDate.Month, 1);
+        var selectionChanged = _selectedDate.Date != resolvedDate.Date;
+
+        _selectedDate = resolvedDate.Date;
+        _visibleMonth = resolvedMonth;
+        RefreshSelectedDateText();
+        VisibleMonthText.Text = FormatVisibleMonth(_visibleMonth);
+
         if (affectedMonths.Contains(_visibleMonth))
             await RefreshVisibleMonthFromCacheAsync();
+        else
+            await LoadVisibleMonthAsync();
 
-        var resolvedDate = e.Result.ResolvedDate ?? e.Result.RequestedDate;
-        if (_selectedDate.Date == resolvedDate.Date &&
-            _lastPreviewWorkflow?.Status != apod_wallpaper.ApodWorkflowStatus.Success)
+        if (selectionChanged || _lastPreviewWorkflow?.Status != apod_wallpaper.ApodWorkflowStatus.Success)
         {
             await LoadPreviewForSelectedDateAsync();
         }
@@ -1906,7 +1956,8 @@ public sealed partial class MainPage : Page
             hasRemoteImage ? "remote" : "no-remote",
             isUnsupported ? "unsupported" : "supported",
             isLoading ? "loading" : "ready",
-            isSelected ? "selected" : "idle");
+            isSelected ? "selected" : "idle",
+            ActualTheme.ToString());
     }
 
     private static DateTime GetLoadingLatestPublishedDate(DateTime month)
