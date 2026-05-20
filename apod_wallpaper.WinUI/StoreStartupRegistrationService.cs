@@ -1,6 +1,7 @@
 using Microsoft.Win32;
 using System;
 using System.IO;
+using System.Reflection;
 using Windows.ApplicationModel;
 using Windows.Foundation;
 
@@ -80,7 +81,7 @@ internal sealed class StoreStartupRegistrationService : apod_wallpaper.IStartupR
         {
             var executablePath = Environment.ProcessPath;
             if (string.IsNullOrWhiteSpace(executablePath))
-                executablePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                executablePath = Assembly.GetEntryAssembly()?.Location;
 
             if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
                 throw new InvalidOperationException("Unable to resolve the current executable path for Windows startup registration.");

@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using WinRT.Interop;
+using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.System;
 
@@ -247,7 +248,7 @@ public sealed partial class SettingsPage : Page
         await CommitImagesDirectoryAsync(folder.Path);
     }
 
-    private void OpenImagesFolderButton_Click(object sender, RoutedEventArgs e)
+    private async void OpenImagesFolderButton_Click(object sender, RoutedEventArgs e)
     {
         var path = ResolveImagesDirectoryToOpen();
         if (string.IsNullOrWhiteSpace(path))
@@ -261,11 +262,10 @@ public sealed partial class SettingsPage : Page
         try
         {
             Directory.CreateDirectory(path);
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = path,
-                UseShellExecute = true,
-            });
+            var folder = await StorageFolder.GetFolderFromPathAsync(path);
+            var opened = await Launcher.LaunchFolderAsync(folder);
+            if (!opened)
+                throw new InvalidOperationException("Windows did not open the images folder.");
         }
         catch (Exception ex)
         {
