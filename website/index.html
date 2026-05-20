@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="APOD Wallpaper is a compact Windows app for previewing, downloading, and applying NASA Astronomy Picture of the Day images as desktop wallpaper.">
+  <meta name="theme-color" content="#090d1f">
+  <title>APOD Wallpaper by p4kon</title>
+  <link rel="icon" href="assets/app-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="sky" aria-hidden="true">
+    <span class="star star-a"></span>
+    <span class="star star-b"></span>
+    <span class="star star-c"></span>
+    <span class="nebula nebula-blue"></span>
+    <span class="nebula nebula-rose"></span>
+  </div>
+
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="APOD Wallpaper home">
+      <img src="assets/app-icon.png" alt="" width="34" height="34">
+      <span>APOD Wallpaper</span>
+    </a>
+    <nav class="nav" aria-label="Primary navigation">
+      <a href="#features">Features</a>
+      <a href="#screens">Screens</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#support">Support</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero section">
+      <div class="hero-copy">
+        <p class="eyebrow">Windows desktop wallpaper, powered by NASA APOD</p>
+        <h1>A calmer way to keep space on your desktop.</h1>
+        <p class="lead">
+          Browse Astronomy Picture of the Day by date, preview images, skip video days,
+          and let APOD Wallpaper quietly keep your desktop fresh.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/p4kon/apod_wallpaper">View on GitHub</a>
+          <a class="button ghost" href="mailto:p4kon1@gmail.com?subject=APOD%20Wallpaper%20support">Contact support</a>
+        </div>
+        <p class="microcopy">Microsoft Store release is being prepared. Portable and MSIX builds are in testing.</p>
+      </div>
+
+      <div class="app-preview" aria-label="APOD Wallpaper app preview">
+        <div class="window-chrome">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="mock-app">
+          <aside>
+            <span class="nav-dot active"></span>
+            <span class="nav-dot"></span>
+            <span class="nav-dot"></span>
+          </aside>
+          <section class="mock-content">
+            <div class="month-row">
+              <span>&larr;</span>
+              <strong>May 2026</strong>
+              <span>&rarr;</span>
+            </div>
+            <div class="calendar-grid" aria-hidden="true">
+              <span class="day muted">4</span>
+              <span class="day muted">5</span>
+              <span class="day blue">9</span>
+              <span class="day blue">10</span>
+              <span class="day red">11</span>
+              <span class="day green">12</span>
+              <span class="day green selected">20</span>
+              <span class="day future">25</span>
+            </div>
+            <div class="preview-card">
+              <div class="preview-image"></div>
+              <div>
+                <b>Explanation</b>
+                <p>A compact calendar, local cache, and APOD text stay together in one quiet desktop shell.</p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="section feature-section">
+      <div class="section-heading">
+        <p class="eyebrow">What it does</p>
+        <h2>Built for the tiny daily ritual of changing your wallpaper.</h2>
+      </div>
+      <div class="features">
+        <article>
+          <span class="icon">01</span>
+          <h3>Calendar-first browsing</h3>
+          <p>See local images, available APOD image days, video days, and unchecked days without opening a browser.</p>
+        </article>
+        <article>
+          <span class="icon">02</span>
+          <h3>Preview before apply</h3>
+          <p>Load the preview and explanation text first, then download or apply only when the date is worth it.</p>
+        </article>
+        <article>
+          <span class="icon">03</span>
+          <h3>Automatic daily checks</h3>
+          <p>Run quietly from the system tray and apply the latest available image when auto-check is enabled.</p>
+        </article>
+        <article>
+          <span class="icon">04</span>
+          <h3>Wallpaper fit modes</h3>
+          <p>Use Smart, Fill, Fit, Stretch, Center, Tile, or Span. Smart mode avoids ugly crops where possible.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="screens" class="section screenshots">
+      <div class="section-heading">
+        <p class="eyebrow">Screens</p>
+        <h2>Minimal interface, no dashboard noise.</h2>
+      </div>
+      <div class="screen-grid">
+        <figure>
+          <img src="assets/screenshot-main.png" alt="APOD Wallpaper calendar screen">
+          <figcaption>Main calendar and preview</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/screenshot-settings.png" alt="APOD Wallpaper settings screen">
+          <figcaption>Settings and wallpaper style</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/screenshot-api-key.png" alt="NASA API key dialog">
+          <figcaption>Optional NASA API key</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/screenshot-about.png" alt="About screen">
+          <figcaption>About and support links</figcaption>
+        </figure>
+      </div>
+      <p class="microcopy">Replace these files in <code>website/assets</code> with final Store screenshots before publishing.</p>
+    </section>
+
+    <section id="privacy" class="section split">
+      <div>
+        <p class="eyebrow">Privacy</p>
+        <h2>Local-first by design.</h2>
+      </div>
+      <div class="panel">
+        <p>
+          APOD Wallpaper stores settings and optional NASA API key data locally on your device.
+          It contacts NASA APOD services to fetch metadata, images, and APOD pages.
+        </p>
+        <a href="https://github.com/p4kon/apod_wallpaper/blob/main/PRIVACY.md">Read the privacy policy</a>
+      </div>
+    </section>
+
+    <section id="support" class="section support-card">
+      <p class="eyebrow">Support development</p>
+      <h2>If this app becomes part of your daily desktop, you can help keep it alive.</h2>
+      <p>
+        Donations are optional and do not unlock features. Donation links will be added after
+        Microsoft Store policy review is complete.
+      </p>
+      <div class="actions">
+        <a class="button primary" href="mailto:p4kon1@gmail.com?subject=APOD%20Wallpaper">Email p4kon</a>
+        <a class="button ghost" href="https://github.com/p4kon/apod_wallpaper/issues">Report an issue</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>APOD Wallpaper by p4kon. Independent project, not affiliated with NASA.</p>
+    <p>NASA APOD images, videos, explanations, and credits belong to NASA APOD and/or credited authors.</p>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
