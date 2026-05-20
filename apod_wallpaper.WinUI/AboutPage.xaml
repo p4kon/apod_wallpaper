@@ -45,8 +45,9 @@
 
             <StackPanel HorizontalAlignment="Center" Spacing="10">
                 <Button Width="220" HorizontalAlignment="Center" Click="ProjectRepositoryButton_Click" HorizontalContentAlignment="Center" Content="GitHub Repository" />
-                <Button Width="220" HorizontalAlignment="Center" Click="SupportButton_Click" HorizontalContentAlignment="Center" Content="Official Website" />
-                <Button Width="220" HorizontalAlignment="Center" Click="PrivacyButton_Click" HorizontalContentAlignment="Center" Content="Contact Support" />
+                <Button Width="220" HorizontalAlignment="Center" Click="OfficialWebsiteButton_Click" HorizontalContentAlignment="Center" Content="Official Website" />
+                <Button Width="220" HorizontalAlignment="Center" Click="SupportButton_Click" HorizontalContentAlignment="Center" Content="Contact Support" />
+                <Button Width="220" HorizontalAlignment="Center" Click="PrivacyButton_Click" HorizontalContentAlignment="Center" Content="Privacy Policy" />
                 <Button Width="220" HorizontalAlignment="Center" Click="LicenseButton_Click" HorizontalContentAlignment="Center" Content="License Agreement" />
                 <Button Width="220" HorizontalAlignment="Center" Click="ThirdPartyNoticesButton_Click" HorizontalContentAlignment="Center" Content="Third-party Notices" />
             </StackPanel>
