@@ -47,4 +47,6 @@ For privacy questions, open an issue at:
 
 https://github.com/p4kon/apod_wallpaper/issues
 
-Before a public Store release, this contact section should be updated with the final support email or support website.
+You can also contact support by email:
+
+p4kon1@gmail.com

@@ -8,9 +8,11 @@ APOD Wallpaper is in active pre-release testing. Security fixes are handled on t
 
 Please do not open a public issue for sensitive security reports.
 
-Until a dedicated security contact is published, report security concerns through the repository owner using GitHub contact options or request a private contact channel through GitHub Issues without posting exploit details.
+Report security concerns by email:
 
-Before a public Store release, this file should be updated with a dedicated security email address.
+p4kon1@gmail.com
+
+Please include enough detail to reproduce the issue, but do not include private NASA API keys or unrelated personal data.
 
 ## Local secrets
 

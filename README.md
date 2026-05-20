@@ -38,7 +38,9 @@ See [PRIVACY.md](PRIVACY.md).
 
 ## Support
 
-For bugs, feature requests, or support, use [GitHub Issues](https://github.com/p4kon/apod_wallpaper/issues).
+For bugs and feature requests, use [GitHub Issues](https://github.com/p4kon/apod_wallpaper/issues).
+
+For direct support, email <p4kon1@gmail.com>.
 
 ## License
 

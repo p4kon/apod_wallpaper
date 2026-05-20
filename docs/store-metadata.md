@@ -28,7 +28,7 @@ APOD Wallpaper
 Publisher display name:
 
 ```text
-TODO: replace AppPublisher with the real publisher name.
+p4kon
 ```
 
 ## Category
@@ -174,7 +174,7 @@ Support contact:
 
 ```text
 GitHub Issues: https://github.com/p4kon/apod_wallpaper/issues
-TODO: optional support email before Store submission.
+Email: p4kon1@gmail.com
 ```
 
 Recommended support URL:
@@ -186,7 +186,7 @@ https://github.com/p4kon/apod_wallpaper/issues
 Support text:
 
 ```text
-For bug reports, feature requests, or help with APOD Wallpaper, please use the GitHub Issues page or the support contact listed in the Store.
+For bug reports, feature requests, or help with APOD Wallpaper, please use the GitHub Issues page or email p4kon1@gmail.com.
 ```
 
 ## Privacy policy URL
@@ -239,7 +239,7 @@ APOD Wallpaper is a desktop personalization app. It uses full-trust desktop capa
 
 Before submission:
 
-- Replace placeholder publisher identity/display name.
+- Replace package publisher identity if Partner Center requires a certificate subject different from the local test publisher.
 - Confirm app icon/logo assets meet Store requirements.
 - Confirm `systemAIModels` capability remains removed.
 - Confirm `runFullTrust` justification is ready.

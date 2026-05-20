@@ -11,7 +11,7 @@ public sealed partial class AboutPage : Page
 {
     private static readonly Uri ProjectRepositoryUri = new("https://github.com/p4kon/apod_wallpaper");
     private static readonly Uri OfficialWebsiteUri = new("https://github.com/p4kon/apod_wallpaper");
-    private static readonly Uri SupportUri = new("https://github.com/p4kon/apod_wallpaper/issues");
+    private static readonly Uri SupportUri = new("mailto:p4kon1@gmail.com?subject=APOD%20Wallpaper%20support");
     private static readonly Uri PrivacyPolicyUri = new("https://github.com/p4kon/apod_wallpaper/blob/main/PRIVACY.md");
     private static readonly Uri LicenseUri = new("https://github.com/p4kon/apod_wallpaper/blob/main/LICENSE");
     private static readonly Uri ThirdPartyNoticesUri = new("https://github.com/p4kon/apod_wallpaper/blob/main/THIRD_PARTY_NOTICES.md");
