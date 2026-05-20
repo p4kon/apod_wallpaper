@@ -36,16 +36,11 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
-    <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\apod_wallpaper.Core\apod_wallpaper.Core.csproj">
       <Project>{A5E9275F-FB85-4509-81A7-8B4AEE2A6B6F}</Project>
       <Name>apod_wallpaper.Core</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\apod_wallpaper\apod_wallpaper.csproj">
-      <Project>{F3E29F2C-7D62-482C-83FD-6EBBA0CC4B99}</Project>
-      <Name>apod_wallpaper</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

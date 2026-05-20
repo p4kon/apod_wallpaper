@@ -17,6 +17,7 @@ AnyCPU/
 TestResults/
 
 # Publish artifacts
+artifacts/
 app.publish/
 publish/
 *.publish.xml

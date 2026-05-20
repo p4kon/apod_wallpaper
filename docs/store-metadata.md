@@ -173,7 +173,8 @@ Suggested IARC questionnaire answers should reflect:
 Support contact:
 
 ```text
-TODO: support email or GitHub Issues URL.
+GitHub Issues: https://github.com/p4kon/apod_wallpaper/issues
+TODO: optional support email before Store submission.
 ```
 
 Recommended support URL:
@@ -193,13 +194,13 @@ For bug reports, feature requests, or help with APOD Wallpaper, please use the G
 Required before Store submission:
 
 ```text
-TODO: public privacy policy URL.
+https://github.com/p4kon/apod_wallpaper/blob/main/PRIVACY.md
 ```
 
 Recommended options:
 
-1. Add `PRIVACY.md` to the repository and publish it through GitHub.
-2. Use a GitHub Pages page for a cleaner permanent URL.
+1. Use `PRIVACY.md` from the public GitHub repository for the first submission.
+2. Use a GitHub Pages or custom-domain page later if a cleaner permanent URL is preferred.
 
 Privacy summary draft:
 

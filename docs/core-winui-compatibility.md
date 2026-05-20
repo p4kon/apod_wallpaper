@@ -16,8 +16,8 @@ The backend can now be referenced by a modern Windows host without rewriting its
 The migration pass introduced:
 
 - SDK-style project format for `apod_wallpaper.Core`
-- dual-target build for current WinForms host and future WinUI host
-- a dedicated `net8` compatibility probe project
+- dual-target backend build used during the WinForms-to-WinUI migration
+- a dedicated `net8` compatibility probe project, later retired after WinUI/MSIX validation
 
 Validated areas:
 
@@ -70,10 +70,12 @@ Packaged WinUI behavior still needs live PoC validation, but the backend-side st
 
 ### Recommended direction
 
-The chosen direction is now implemented:
+The chosen direction is implemented:
 
-- keep `net48` for the current WinForms host
-- add `net8.0-windows10.0.19041.0` for the future WinUI host
+- keep the backend multi-targeted while smoke tests still validate `net48` compatibility
+- use `net8.0-windows10.0.19041.0` for the active WinUI host
+
+The legacy WinForms host has been removed from the solution after the WinUI/MSIX path passed local smoke testing.
 
 ### Why not `netstandard2.0`
 

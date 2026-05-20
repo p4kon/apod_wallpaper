@@ -1,80 +1,60 @@
 # Third-Party Notices
 
-Last audited: April 30, 2026
+Last audited: May 20, 2026
 
-## Audit result
+## Summary
 
-This repository does not use any third-party NuGet packages or `packages.config`-based dependencies.
+APOD Wallpaper is licensed under the MIT License.
 
-All three projects in the solution are built only on:
+The current app is built from:
 
-- project-to-project references inside this repository
-- Microsoft .NET Framework assemblies
-- Windows desktop platform APIs that ship with the operating system or Visual Studio/.NET Framework developer tooling
+- project source code in this repository
+- Microsoft .NET / Windows platform components
+- NuGet packages listed below
+- NASA APOD services used at runtime
 
-No GPL, LGPL, AGPL, or other copyleft package dependencies were found.
+No GPL, LGPL, AGPL, or other copyleft package dependencies were identified in the current project files during this audit.
+
+## NuGet packages
+
+Top-level package references:
+
+| Project | Package | Version |
+|---|---|---|
+| `apod_wallpaper.WinUI` | `Microsoft.Windows.SDK.BuildTools` | `10.0.28000.1839` |
+| `apod_wallpaper.WinUI` | `Microsoft.WindowsAppSDK` | `2.0.1` |
+| `apod_wallpaper.Core` | `System.Drawing.Common` | `8.0.0` |
+| `apod_wallpaper.Core` | `System.Security.Cryptography.ProtectedData` | `8.0.0` |
+
+These packages are Microsoft/.NET platform packages used to build and run the Windows desktop application.
 
 ## Project inventory
 
-| Project | PackageReference | packages.config | External NuGet packages |
-|---|---|---|---|
-| `apod_wallpaper` | none | none | none |
-| `apod_wallpaper.Core` | none | none | none |
-| `apod_wallpaper.SmokeTests` | none | none | none |
-
-## Referenced framework assemblies
-
-These are framework/platform references declared in the project files. They are not vendored in this repository as third-party package source code.
-
-| Assembly | Referenced by |
+| Project | Purpose |
 |---|---|
-| `Microsoft.CSharp` | `apod_wallpaper`, `apod_wallpaper.Core`, `apod_wallpaper.SmokeTests` |
-| `System` | `apod_wallpaper`, `apod_wallpaper.Core`, `apod_wallpaper.SmokeTests` |
-| `System.Core` | `apod_wallpaper`, `apod_wallpaper.Core`, `apod_wallpaper.SmokeTests` |
-| `System.Data` | `apod_wallpaper` |
-| `System.Data.DataSetExtensions` | `apod_wallpaper` |
-| `System.Deployment` | `apod_wallpaper` |
-| `System.Drawing` | `apod_wallpaper`, `apod_wallpaper.Core`, `apod_wallpaper.SmokeTests` |
-| `System.Net.Http` | `apod_wallpaper`, `apod_wallpaper.Core` |
-| `System.Runtime.Serialization` | `apod_wallpaper`, `apod_wallpaper.Core` |
-| `System.Security` | `apod_wallpaper.Core` |
-| `System.Windows.Forms` | `apod_wallpaper`, `apod_wallpaper.Core`, `apod_wallpaper.SmokeTests` |
-| `System.Xml` | `apod_wallpaper`, `apod_wallpaper.Core` |
-| `System.Xml.Linq` | `apod_wallpaper`, `apod_wallpaper.Core` |
-
-## Transitive dependency status
-
-Because there are no NuGet packages in the solution, there are no transitive package dependencies to audit for license inheritance or copyleft obligations.
-
-The only transitive runtime surface comes from:
-
-- the .NET Framework runtime
-- Windows OS APIs such as Registry, DPAPI, WinForms, and `user32.dll`
-
-These are platform dependencies, not third-party redistributable packages within this repository.
-
-## Bootstrapper packages
-
-The WinForms host project declares Visual Studio bootstrapper metadata for:
-
-- `.NETFramework,Version=v4.8`
-- `Microsoft.Net.Framework.3.5.SP1`
-
-These entries are installer/bootstrapper metadata only. They are not third-party source dependencies included in this repository and do not introduce copyleft obligations to this codebase.
+| `apod_wallpaper.Core` | Backend/domain logic, APOD workflow, settings, storage, wallpaper operations |
+| `apod_wallpaper.WinUI` | WinUI desktop frontend and MSIX/portable host |
+| `apod_wallpaper.SmokeTests` | Local smoke-test executable |
 
 ## External services
 
 This application integrates with NASA services at runtime:
 
-- [NASA APOD API](https://api.nasa.gov/)
 - [NASA APOD](https://apod.nasa.gov/apod/)
+- [NASA APOD API](https://api.nasa.gov/)
 
-These are service integrations, not code dependencies bundled with the repository. Runtime use is governed by NASA's own service terms, rate limits, and availability.
+These are service integrations, not code dependencies bundled with this repository. Runtime use is governed by NASA's own service terms, rate limits, availability, and content credits.
+
+## APOD content
+
+APOD images, videos, explanations, titles, and credits may be owned by NASA or third-party copyright holders credited on each APOD page.
+
+APOD Wallpaper does not claim ownership of APOD content. The app displays and downloads publicly available APOD content for the user's local wallpaper workflow.
+
+## Removed legacy projects
+
+The legacy WinForms host and the temporary .NET 8 probe project were removed after the WinUI/MSIX path passed local smoke testing.
 
 ## Conclusion
 
-The dependency surface audited on April 30, 2026 is compatible with the repository's MIT license:
-
-- no third-party NuGet packages are present
-- no copyleft package dependencies were found
-- no untracked package license obligations were identified in the current solution structure
+As of this audit, the dependency surface is suitable for continuing toward a public Windows desktop release, with final Store submission still requiring review of Microsoft Store policy, NASA content attribution, and public privacy/support URLs.

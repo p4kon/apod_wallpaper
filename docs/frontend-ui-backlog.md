@@ -172,26 +172,11 @@ Until preview/apply/settings flows are proven in the real host:
 
 - Startup still appears to trigger two overlapping paths for the first "today" preview in some sessions: the preview workflow and month-state initialization can both probe the same date at nearly the same time. This should be reduced carefully later without regressing month coloring or startup responsiveness.
 
-## WinForms Retirement Gate
+## WinForms Retirement
 
-The legacy WinForms host should not remain in the solution indefinitely.
+Status: completed.
 
-Target date:
-
-- `2026-05-16`
-
-Removal rule:
-
-- if the WinUI host has had 14 days of stable daily use by `2026-05-16`
-- and the final acceptance checklist is complete
-- remove `apod_wallpaper` (WinForms host) from the solution in the next cleanup pass
-
-Stability means at minimum:
-
-- tray scenario works reliably
-- preview/apply/settings work end-to-end
-- calendar coloring works for image and video days
-- no blocking startup/runtime regressions remain open
+The legacy WinForms host was removed after the WinUI/MSIX path passed local smoke testing for install, launch, tray, wallpaper apply, storage, and update-over-old-version.
 
 ## State Screen vs Settings Screen
 
