@@ -170,6 +170,12 @@ Suggested IARC questionnaire answers should reflect:
 
 ## Support info
 
+Official website:
+
+```text
+https://apod_wallpaper.p4kon.com
+```
+
 Support contact:
 
 ```text
@@ -180,7 +186,7 @@ Email: p4kon1@gmail.com
 Recommended support URL:
 
 ```text
-https://github.com/p4kon/apod_wallpaper/issues
+https://apod_wallpaper.p4kon.com/#support
 ```
 
 Support text:
@@ -194,13 +200,13 @@ For bug reports, feature requests, or help with APOD Wallpaper, please use the G
 Required before Store submission:
 
 ```text
-https://github.com/p4kon/apod_wallpaper/blob/main/PRIVACY.md
+https://apod_wallpaper.p4kon.com/#privacy
 ```
 
 Recommended options:
 
-1. Use `PRIVACY.md` from the public GitHub repository for the first submission.
-2. Use a GitHub Pages or custom-domain page later if a cleaner permanent URL is preferred.
+1. Use the public website privacy section for Microsoft Store submission.
+2. Keep `PRIVACY.md` in the public GitHub repository as the source-of-truth long-form policy.
 
 Privacy summary draft:
 

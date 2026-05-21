@@ -10,7 +10,7 @@ namespace apod_wallpaper.WinUI;
 public sealed partial class AboutPage : Page
 {
     private static readonly Uri ProjectRepositoryUri = new("https://github.com/p4kon/apod_wallpaper");
-    private static readonly Uri OfficialWebsiteUri = new("https://github.com/p4kon/apod_wallpaper");
+    private static readonly Uri OfficialWebsiteUri = new("https://apod_wallpaper.p4kon.com");
     private static readonly Uri SupportUri = new("mailto:p4kon1@gmail.com?subject=APOD%20Wallpaper%20support");
     private static readonly Uri PrivacyPolicyUri = new("https://github.com/p4kon/apod_wallpaper/blob/main/PRIVACY.md");
     private static readonly Uri LicenseUri = new("https://github.com/p4kon/apod_wallpaper/blob/main/LICENSE");

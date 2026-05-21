@@ -5,13 +5,13 @@ This guide describes how to publish the static APOD Wallpaper landing page to a 
 Recommended hostname:
 
 ```text
-apod.p4kon.com
+apod_wallpaper.p4kon.com
 ```
 
 Alternative hostname:
 
 ```text
-apod-wallpaper.p4kon.com
+apod.p4kon.com
 ```
 
 The current website source lives in:
@@ -72,7 +72,7 @@ For an IPv4 VPS:
 
 ```text
 Type: A
-Name: apod
+Name: apod_wallpaper
 IPv4 address: YOUR_VPS_IPV4
 Proxy status: Proxied
 TTL: Auto
@@ -82,7 +82,7 @@ For a CNAME to an existing host:
 
 ```text
 Type: CNAME
-Name: apod
+Name: apod_wallpaper
 Target: existing-host.p4kon.com
 Proxy status: Proxied
 TTL: Auto
@@ -94,7 +94,7 @@ TTL: Auto
 Check from your local machine:
 
 ```powershell
-nslookup apod.p4kon.com
+nslookup apod_wallpaper.p4kon.com
 ```
 
 ## 3. Create a dedicated Linux user
@@ -146,7 +146,7 @@ Paste:
 server {
     listen 80;
     listen [::]:80;
-    server_name apod.p4kon.com;
+    server_name apod_wallpaper.p4kon.com;
 
     root /var/www/apod-wallpaper/site;
     index index.html;
@@ -177,7 +177,7 @@ sudo systemctl reload nginx
 Open:
 
 ```text
-http://apod.p4kon.com
+http://apod_wallpaper.p4kon.com
 ```
 
 ## 6. HTTPS
@@ -192,7 +192,7 @@ For Let's Encrypt with nginx:
 ```bash
 sudo apt update
 sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d apod.p4kon.com
+sudo certbot --nginx -d apod_wallpaper.p4kon.com
 ```
 
 Certbot documentation: https://eff-certbot.readthedocs.io/en/stable/using.html
@@ -254,7 +254,7 @@ nginx reverse proxy config:
 server {
     listen 80;
     listen [::]:80;
-    server_name apod.p4kon.com;
+    server_name apod_wallpaper.p4kon.com;
 
     access_log /var/log/nginx/apod-wallpaper.access.log;
     error_log /var/log/nginx/apod-wallpaper.error.log;

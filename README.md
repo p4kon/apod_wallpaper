@@ -4,6 +4,8 @@ APOD Wallpaper is a small Windows desktop app for browsing NASA's Astronomy Pict
 
 The app is built around a compact calendar view: available image days, video/unsupported days, and locally saved days are visible at a glance. It can also run quietly in the system tray and automatically apply the latest available APOD image.
 
+Website: https://apod_wallpaper.p4kon.com
+
 ## Features
 
 - Browse APOD entries by date.
