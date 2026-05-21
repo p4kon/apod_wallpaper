@@ -10,11 +10,11 @@
   IgnorableNamespaces="uap uap5 uap11 rescap">
 
   <Identity
-    Name="DBC3583C-3BE3-4B57-8C61-672FB5F6E9A5"
-    Publisher="CN=AppPublisher"
-    Version="1.0.0.4" />
+    Name="p4kon.APODWallpaper"
+    Publisher="CN=0E57DF5B-1784-409E-997B-8B7C5133CB08"
+    Version="1.0.0.5" />
 
-  <mp:PhoneIdentity PhoneProductId="DBC3583C-3BE3-4B57-8C61-672FB5F6E9A5" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+  <mp:PhoneIdentity PhoneProductId="dfe22bbe-fa49-4dc5-af46-94a9de0893ad" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
     <DisplayName>APOD Wallpaper</DisplayName>

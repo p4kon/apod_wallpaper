@@ -31,6 +31,19 @@ Publisher display name:
 p4kon
 ```
 
+Partner Center product identity:
+
+```text
+Package/Identity/Name: p4kon.APODWallpaper
+Package/Identity/Publisher: CN=0E57DF5B-1784-409E-997B-8B7C5133CB08
+Package/Properties/PublisherDisplayName: p4kon
+Package Family Name: p4kon.APODWallpaper_c3w66p7sehx5w
+Store ID: 9P5F4VG16KC2
+Store URL: https://apps.microsoft.com/detail/9P5F4VG16KC2
+Store protocol link: ms-windows-store://pdp/?productid=9P5F4VG16KC2
+MSA app ID: dfe22bbe-fa49-4dc5-af46-94a9de0893ad
+```
+
 ## Category
 
 Recommended category:
