@@ -433,10 +433,27 @@ h3 {
   display: block;
   width: 100%;
   min-height: 150px;
-  object-fit: cover;
+  max-height: 260px;
+  object-fit: contain;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.06);
+}
+
+.smart-card-wide {
+  grid-template-columns: 1fr;
+}
+
+.smart-card-wide img {
+  width: min(100%, 760px);
+  min-height: 0;
+  max-height: 280px;
+  margin: 0 auto;
+}
+
+.smart-card-wide .smart-arrow {
+  justify-self: center;
+  transform: rotate(90deg);
 }
 
 .smart-card h3,
