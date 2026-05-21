@@ -477,14 +477,28 @@ h3 {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at 18% 10%, rgba(111, 231, 255, 0.09), transparent 18rem),
+    rgba(255, 255, 255, 0.08);
 }
 
 .screen-grid figcaption {
-  padding: 14px 8px 4px;
+  display: grid;
+  gap: 8px;
+  padding: 16px 10px 6px;
   color: var(--muted);
+  line-height: 1.55;
+}
+
+.screen-grid figcaption strong {
+  color: var(--text);
+  font-size: 1.08rem;
+}
+
+.screen-grid figcaption span {
+  display: block;
 }
 
 .split {
