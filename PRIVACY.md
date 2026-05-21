@@ -1,6 +1,8 @@
 # Privacy Policy
 
-Last updated: May 20, 2026
+Last updated: May 21, 2026
+
+Public web version: https://apod_wallpaper.p4kon.com/privacy.html
 
 APOD Wallpaper is designed to keep app data local to the user's device.
 

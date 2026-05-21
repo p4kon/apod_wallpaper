@@ -620,6 +620,46 @@ h3 {
   font-weight: 800;
 }
 
+.legal-page {
+  max-width: 880px;
+}
+
+.legal-page h1 {
+  margin-bottom: 14px;
+  font-size: clamp(3rem, 7vw, 6.2rem);
+}
+
+.legal-card {
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.18);
+}
+
+.legal-card h2 {
+  margin: 34px 0 12px;
+  font-size: clamp(1.45rem, 3vw, 2.2rem);
+  letter-spacing: -0.04em;
+}
+
+.legal-card p,
+.legal-card li {
+  color: var(--muted);
+  line-height: 1.72;
+}
+
+.legal-card ul {
+  display: grid;
+  gap: 10px;
+  padding-left: 1.2rem;
+}
+
+.legal-card a {
+  color: var(--cyan);
+  font-weight: 800;
+}
+
 .inline-links {
   display: flex;
   flex-wrap: wrap;

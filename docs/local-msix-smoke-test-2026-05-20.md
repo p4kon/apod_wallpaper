@@ -13,10 +13,10 @@ artifacts\msix-spike\apod_wallpaper.WinUI_1.0.0.0_x64_Test\apod_wallpaper.WinUI_
 Status:
 
 ```text
-PASS WITH STARTUP REBOOT CHECK PENDING
+PASS
 ```
 
-The MSIX package builds, signs with a local test certificate, installs, updates over an older package version, launches, writes package-local data, supports tray UX, and applies wallpapers from the packaged app. Startup registration still needs a reboot check.
+The MSIX package builds, signs with a local test certificate, installs, updates over an older package version, launches, writes package-local data, supports tray UX, registers startup behavior, and applies wallpapers from the packaged app.
 
 ## Details
 
@@ -97,6 +97,8 @@ ProcessName: apod_wallpaper.WinUI
 Result: PASS
 ```
 
+The package manifest was later moved to `1.0.0.3` for the next update build so the displayed publisher name can be changed to `p4kon` without relying on same-version reinstall behavior.
+
 ## Update-over-old-version check
 
 The first installed package was:
@@ -165,7 +167,29 @@ Verified in the installed MSIX package:
 
 Still pending:
 
-- Startup task reboot check: startup toggle was not reboot-tested in this MSIX run.
+- Replace the local test certificate / `CN=AppPublisher` identity with the real Microsoft Store publisher identity before public Store submission.
+- Re-run WACK and this smoke test after any packaging/runtime/signing changes.
+
+## Follow-up update package
+
+After the website and About links were finalized, the package version was bumped to `1.0.0.2` and an update package was built:
+
+```text
+artifacts\msix-update-v102\apod_wallpaper.WinUI_1.0.0.2_x64.msix
+```
+
+Installed over:
+
+```text
+DBC3583C-3BE3-4B57-8C61-672FB5F6E9A5_1.0.0.1_x64__1z32rh13vfry6
+```
+
+Update result:
+
+```text
+PackageFullName: DBC3583C-3BE3-4B57-8C61-672FB5F6E9A5_1.0.0.2_x64__1z32rh13vfry6
+Result: PASS
+```
 
 ## Packaging note
 

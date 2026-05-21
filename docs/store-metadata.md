@@ -200,7 +200,7 @@ For bug reports, feature requests, or help with APOD Wallpaper, please use the G
 Required before Store submission:
 
 ```text
-https://apod_wallpaper.p4kon.com/#privacy
+https://apod_wallpaper.p4kon.com/privacy.html
 ```
 
 Recommended options:

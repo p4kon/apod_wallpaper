@@ -36,7 +36,7 @@ See [NOTICE.md](NOTICE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 
 
 ## Privacy
 
-See [PRIVACY.md](PRIVACY.md).
+See the public [privacy policy](https://apod_wallpaper.p4kon.com/privacy.html) or the repository copy in [PRIVACY.md](PRIVACY.md).
 
 ## Support
 
