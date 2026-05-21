@@ -203,6 +203,11 @@ h3 {
   line-height: 1.65;
 }
 
+.lead.compact {
+  max-width: 820px;
+  font-size: 1.08rem;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -363,7 +368,8 @@ h3 {
 }
 
 .features,
-.screen-grid {
+.screen-grid,
+.smart-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 18px;
@@ -372,7 +378,8 @@ h3 {
 .features article,
 .panel,
 .support-card,
-.screen-grid figure {
+.screen-grid figure,
+.smart-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
@@ -404,6 +411,57 @@ h3 {
 
 .screenshots {
   padding-top: 40px;
+}
+
+.smart-section {
+  padding-top: 40px;
+}
+
+.smart-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.smart-card {
+  display: grid;
+  grid-template-columns: 1fr auto 1.35fr;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+}
+
+.smart-card img {
+  display: block;
+  width: 100%;
+  min-height: 150px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.smart-card h3,
+.smart-card p {
+  grid-column: 1 / -1;
+}
+
+.smart-card h3 {
+  margin: 6px 0 0;
+}
+
+.smart-card p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.smart-arrow {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: #07101f;
+  font-weight: 900;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #83e9ff, #ef9bff);
 }
 
 .screen-grid {
@@ -444,6 +502,22 @@ h3 {
 .panel a {
   color: var(--cyan);
   font-weight: 800;
+}
+
+.inline-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.inline-links a {
+  padding: 10px 14px;
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .support-card {
@@ -488,6 +562,10 @@ code {
   .features {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .smart-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
@@ -510,8 +588,18 @@ code {
   }
 
   .features,
-  .screen-grid {
+  .screen-grid,
+  .smart-grid {
     grid-template-columns: 1fr;
+  }
+
+  .smart-card {
+    grid-template-columns: 1fr;
+  }
+
+  .smart-arrow {
+    justify-self: center;
+    transform: rotate(90deg);
   }
 
   .mock-app {

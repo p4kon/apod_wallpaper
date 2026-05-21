@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760" role="img" aria-label="Panorama original example">
+  <defs>
+    <radialGradient id="g" cx="48%" cy="40%" r="80%">
+      <stop offset="0" stop-color="#fff2b8"/>
+      <stop offset="0.18" stop-color="#ff8a5b"/>
+      <stop offset="0.55" stop-color="#1f5aa7"/>
+      <stop offset="1" stop-color="#050815"/>
+    </radialGradient>
+  </defs>
+  <rect width="1400" height="760" fill="url(#g)"/>
+  <circle cx="720" cy="340" r="120" fill="none" stroke="#fff" stroke-opacity="0.35" stroke-width="18"/>
+  <text x="48" y="680" fill="#fff" font-family="Segoe UI, sans-serif" font-size="50" font-weight="700">Original panorama</text>
+</svg>

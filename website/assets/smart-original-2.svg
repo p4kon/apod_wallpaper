@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1100" viewBox="0 0 720 1100" role="img" aria-label="Vertical original example">
+  <defs>
+    <linearGradient id="g" y1="0" y2="1">
+      <stop offset="0" stop-color="#071225"/>
+      <stop offset="0.45" stop-color="#215d9a"/>
+      <stop offset="0.72" stop-color="#ff9d6c"/>
+      <stop offset="1" stop-color="#120816"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="1100" fill="url(#g)"/>
+  <circle cx="360" cy="380" r="72" fill="#ffffff" opacity="0.85"/>
+  <text x="38" y="1010" fill="#fff" font-family="Segoe UI, sans-serif" font-size="44" font-weight="700">Original vertical</text>
+</svg>

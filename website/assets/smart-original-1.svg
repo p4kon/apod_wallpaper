@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900" role="img" aria-label="Square original example">
+  <defs>
+    <radialGradient id="g" cx="45%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#ffc27a"/>
+      <stop offset="0.35" stop-color="#e45b9a"/>
+      <stop offset="0.75" stop-color="#28366f"/>
+      <stop offset="1" stop-color="#070a19"/>
+    </radialGradient>
+  </defs>
+  <rect width="900" height="900" fill="url(#g)"/>
+  <circle cx="280" cy="310" r="8" fill="#fff"/>
+  <circle cx="650" cy="500" r="5" fill="#d9f0ff"/>
+  <text x="44" y="820" fill="#fff" font-family="Segoe UI, sans-serif" font-size="48" font-weight="700">Original 1:1</text>
+</svg>
