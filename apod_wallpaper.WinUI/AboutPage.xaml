@@ -54,6 +54,7 @@
         </StackPanel>
 
         <StackPanel Grid.Row="1" HorizontalAlignment="Center" Margin="0,16,0,0" Spacing="4">
+            <TextBlock HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="Created by p4kon." />
             <TextBlock HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="© 2026 APOD Wallpaper. All rights reserved." />
             <TextBlock HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="Data provided by NASA API." />
         </StackPanel>
