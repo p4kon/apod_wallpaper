@@ -21,10 +21,41 @@ Website: https://apod_wallpaper.p4kon.com
 
 - Windows 10 version 2004 or newer, or Windows 11.
 - x64 Windows.
+- .NET 8 Desktop Runtime x64.
+- Windows App Runtime / Windows App SDK runtime.
 
 ## Status
 
-APOD Wallpaper is currently in active testing. Portable and MSIX builds are being validated before a public Microsoft Store release.
+APOD Wallpaper is currently in active testing. Public builds are distributed through GitHub Releases:
+
+- Portable zip: extract the whole folder and run `APODWallpaper.exe`.
+- Setup exe: installs the app for the current Windows user and creates a Start menu shortcut.
+
+MSIX packaging is kept as a technical path, but it is not the primary public distribution channel right now.
+
+## Build a Release
+
+```powershell
+.\scripts\publish-portable.ps1 -Clean
+```
+
+By default the release script creates a framework-dependent build. This keeps the public zip and installer much smaller, but a clean Windows machine may need the .NET 8 Desktop Runtime and Windows App Runtime installed first.
+
+For offline testing only, you can create a larger self-contained build:
+
+```powershell
+.\scripts\publish-portable.ps1 -Clean -SelfContained
+```
+
+The release script creates:
+
+- `artifacts\release\APODWallpaper-<version>-win-x64-portable.zip`
+- `artifacts\release\APODWallpaper-<version>-win-x64-portable.zip.sha256`
+- `artifacts\release\setup\APODWallpaper-<version>-win-x64-setup.exe`, if Inno Setup 6 is installed.
+
+The portable build includes `portable.mode` and pre-created `images`, `images\smart`, and `data` folders. At runtime the app resolves these paths from the folder containing the executable, so every user can place the portable folder wherever they want.
+
+The binaries are not code-signed yet. Windows SmartScreen may show a warning until a trusted signing certificate is available.
 
 ## NASA APOD content
 

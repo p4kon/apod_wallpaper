@@ -21,6 +21,14 @@ artifacts/
 app.publish/
 publish/
 *.publish.xml
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+*.appxupload
+*.msixupload
+*.appxrecipe
+apod_wallpaper.WinUI/AppPackages/
 
 # Runtime-generated application data
 _verify/

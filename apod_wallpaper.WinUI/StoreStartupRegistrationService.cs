@@ -79,15 +79,27 @@ internal sealed class StoreStartupRegistrationService : apod_wallpaper.IStartupR
 
         if (enabled)
         {
-            var executablePath = Environment.ProcessPath;
-            if (string.IsNullOrWhiteSpace(executablePath))
-                executablePath = Assembly.GetEntryAssembly()?.Location;
+            var executablePath = ResolvePortableStartupExecutablePath();
 
             if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
                 throw new InvalidOperationException("Unable to resolve the current executable path for Windows startup registration.");
 
             key.SetValue(PortableAppName, "\"" + executablePath + "\"", RegistryValueKind.String);
         }
+    }
+
+    private static string? ResolvePortableStartupExecutablePath()
+    {
+        var portableRootPath = apod_wallpaper.ApplicationStorageLayout.GetDefaultPortableRootDirectory();
+        var launcherPath = Path.Combine(portableRootPath, "APODWallpaper.exe");
+        if (File.Exists(launcherPath))
+            return launcherPath;
+
+        var executablePath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executablePath))
+            executablePath = Assembly.GetEntryAssembly()?.Location;
+
+        return executablePath;
     }
 
     private static void DeleteKnownStartupApprovalEntries()

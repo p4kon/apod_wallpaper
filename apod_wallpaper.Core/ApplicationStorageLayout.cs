@@ -21,5 +21,10 @@ namespace apod_wallpaper
         {
             return FileStorage.EnsureStorageLayout();
         }
+
+        public static string GetDefaultPortableRootDirectory()
+        {
+            return FileStorage.GetDefaultPortableRootDirectory();
+        }
     }
 }

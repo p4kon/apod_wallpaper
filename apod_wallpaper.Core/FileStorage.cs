@@ -7,6 +7,10 @@ namespace apod_wallpaper
 {
     internal static class FileStorage
     {
+        private const string StorageModeEnvironmentVariable = "APOD_WALLPAPER_STORAGE_MODE";
+        private const string PortableRootEnvironmentVariable = "APOD_WALLPAPER_PORTABLE_ROOT";
+        private const string PortableMarkerFileName = "portable.mode";
+
         private static string _sessionImagesDirectoryOverride;
         private static ApplicationStorageMode? _modeOverride;
         private static string _applicationDataDirectoryOverride;
@@ -93,7 +97,7 @@ namespace apod_wallpaper
             var customImagesDirectory = ResolveImagesDirectory();
             var usesCustomImagesDirectory = !string.IsNullOrWhiteSpace(customImagesDirectory);
             var applicationDataDirectory = ResolveApplicationDataDirectory(mode);
-            var executableImagesDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "images");
+            var executableImagesDirectory = Path.Combine(GetDefaultPortableRootDirectory(), "images");
             var imagesDirectory = usesCustomImagesDirectory
                 ? customImagesDirectory
                 : ResolveDefaultImagesDirectory(mode, executableImagesDirectory, applicationDataDirectory);
@@ -189,6 +193,27 @@ namespace apod_wallpaper
             Configure(_modeOverride, path);
         }
 
+        public static string GetDefaultPortableRootDirectory()
+        {
+            var environmentRoot = NormalizePath(Environment.GetEnvironmentVariable(PortableRootEnvironmentVariable));
+            if (!string.IsNullOrWhiteSpace(environmentRoot))
+                return environmentRoot;
+
+            var baseDirectory = NormalizePath(AppDomain.CurrentDomain.BaseDirectory);
+            if (IsPortableRoot(baseDirectory))
+                return baseDirectory;
+
+            if (!string.IsNullOrWhiteSpace(baseDirectory))
+            {
+                var directoryName = Path.GetFileName(baseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                var parentDirectory = Directory.GetParent(baseDirectory)?.FullName;
+                if (string.Equals(directoryName, "app", StringComparison.OrdinalIgnoreCase) && IsPortableRoot(parentDirectory))
+                    return NormalizePath(parentDirectory);
+            }
+
+            return baseDirectory;
+        }
+
         private static string ResolveImagesDirectory()
         {
             var sessionPath = NormalizePath(_sessionImagesDirectoryOverride);
@@ -217,7 +242,7 @@ namespace apod_wallpaper
             if (_modeOverride.HasValue)
                 return _modeOverride.Value;
 
-            var environmentOverride = NormalizePath(Environment.GetEnvironmentVariable("APOD_WALLPAPER_STORAGE_MODE"));
+            var environmentOverride = NormalizePath(Environment.GetEnvironmentVariable(StorageModeEnvironmentVariable));
             if (string.Equals(environmentOverride, "portable", System.StringComparison.OrdinalIgnoreCase))
                 return ApplicationStorageMode.Portable;
 
@@ -227,8 +252,7 @@ namespace apod_wallpaper
             if (string.Equals(environmentOverride, "store", System.StringComparison.OrdinalIgnoreCase))
                 return ApplicationStorageMode.Store;
 
-            var portableMarkerPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "portable.mode");
-            if (File.Exists(portableMarkerPath))
+            if (IsPortableRoot(GetDefaultPortableRootDirectory()))
                 return ApplicationStorageMode.Portable;
 
             return ApplicationStorageMode.LocalApplicationData;
@@ -241,7 +265,7 @@ namespace apod_wallpaper
                 return overridePath;
 
             if (mode == ApplicationStorageMode.Portable)
-                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+                return Path.Combine(GetDefaultPortableRootDirectory(), "data");
 
             if (mode == ApplicationStorageMode.Store)
                 throw new InvalidOperationException("Store storage mode requires a host-provided application data directory.");
@@ -270,6 +294,12 @@ namespace apod_wallpaper
         private static string NormalizePath(string path)
         {
             return string.IsNullOrWhiteSpace(path) ? null : path.Trim();
+        }
+
+        private static bool IsPortableRoot(string directory)
+        {
+            return !string.IsNullOrWhiteSpace(directory) &&
+                File.Exists(Path.Combine(directory, PortableMarkerFileName));
         }
 
         private static bool PathsEqual(string left, string right)

@@ -63,7 +63,8 @@ internal sealed class BackendHost : IDisposable
         }
         catch
         {
-            var portableDataPath = Path.Combine(AppContext.BaseDirectory, "data");
+            var portableRootPath = apod_wallpaper.ApplicationStorageLayout.GetDefaultPortableRootDirectory();
+            var portableDataPath = Path.Combine(portableRootPath, "data");
             apod_wallpaper.ApplicationStorageLayout.Configure(
                 apod_wallpaper.ApplicationStorageMode.Portable,
                 portableDataPath);
