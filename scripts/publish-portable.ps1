@@ -149,10 +149,12 @@ APOD Wallpaper portable build
 
 Build type: $publishFlavor
 
-The default portable build is framework-dependent to keep the download small.
-If the app does not start on a clean Windows machine, install:
-- .NET 8 Desktop Runtime x64
-- Windows App Runtime / Windows App SDK runtime
+The portable build is self-contained and includes the .NET desktop runtime files needed by the app.
+
+WinUI 3 still requires Windows App Runtime on the target machine. If Windows shows
+"Required components of the Windows App Runtime are missing", use the installer build
+from GitHub Releases. The installer bundles the Windows App Runtime bootstrapper so
+users do not need to find it manually.
 
 This build is not code-signed yet. Windows SmartScreen may show a warning until a trusted signing certificate is available.
 "@ | Set-Content -LiteralPath (Join-Path $portableDir "README-FIRST.txt") -Encoding UTF8

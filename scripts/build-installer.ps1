@@ -46,7 +46,17 @@ if (-not $iscc) {
 
 $installerRoot = Join-Path $OutputRoot "installer"
 $setupOutput = Join-Path $OutputRoot "setup"
-New-Item -ItemType Directory -Force -Path $installerRoot, $setupOutput | Out-Null
+$prerequisitesDir = Join-Path $OutputRoot "prerequisites"
+New-Item -ItemType Directory -Force -Path $installerRoot, $setupOutput, $prerequisitesDir | Out-Null
+
+$windowsAppRuntimeVersion = "2.0.1"
+$windowsAppRuntimeInstallerName = "WindowsAppRuntimeInstall-x64-$windowsAppRuntimeVersion.exe"
+$windowsAppRuntimeInstallerUrl = "https://aka.ms/windowsappsdk/2.0/2.0.1/windowsappruntimeinstall-x64.exe"
+$windowsAppRuntimeInstaller = Join-Path $prerequisitesDir $windowsAppRuntimeInstallerName
+if (-not (Test-Path -LiteralPath $windowsAppRuntimeInstaller)) {
+    Write-Host "Downloading Windows App Runtime $windowsAppRuntimeVersion x64..."
+    Invoke-WebRequest -Uri $windowsAppRuntimeInstallerUrl -OutFile $windowsAppRuntimeInstaller
+}
 
 $issPath = Join-Path $installerRoot "apod-wallpaper.iss"
 $safePortableDir = $PortableDir.TrimEnd("\")
@@ -58,6 +68,8 @@ $exeName = $exe.Name
 #define MyAppPublisher "p4kon"
 #define MyAppURL "https://apod_wallpaper.p4kon.com"
 #define MyAppExeName "$exeName"
+#define WindowsAppRuntimeInstaller "$windowsAppRuntimeInstaller"
+#define WindowsAppRuntimeInstallerFile "WindowsAppRuntimeInstall-x64.exe"
 
 [Setup]
 AppId={{7C7C4C74-8F80-4D11-9F8B-7A8A7C5A4D22}}
@@ -85,11 +97,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "$safePortableDir\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+Source: "{#WindowsAppRuntimeInstaller}"; DestDir: "{tmp}"; DestName: "{#WindowsAppRuntimeInstallerFile}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{autoprograms}\APOD Wallpaper"; Filename: "{app}\{#MyAppExeName}"
 
 [Run]
+Filename: "{tmp}\{#WindowsAppRuntimeInstallerFile}"; Parameters: "--quiet"; StatusMsg: "Installing Windows App Runtime..."; Flags: waituntilterminated runhidden
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch APOD Wallpaper"; Flags: nowait postinstall skipifsilent
 "@ | Set-Content -LiteralPath $issPath -Encoding UTF8
 

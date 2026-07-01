@@ -1,12 +1,11 @@
-# APOD Wallpaper 1.1.0
+# APOD Wallpaper 1.1.1
 
 First public testing build.
 
 ## Download
 
-- `APODWallpaper-1.1.0.0-win-x64-setup.exe` - recommended installer for normal testing.
-- `APODWallpaper-1.1.0.0-win-x64-portable.zip` - portable build. Extract the whole zip first, then run `APODWallpaper.exe`.
-- `APODWallpaper-1.1.0.0-win-x64-portable.zip.sha256` - checksum for the portable zip.
+- `APODWallpaper-1.1.1.0-win-x64-setup.exe` - recommended installer for normal testing. It bundles Windows App Runtime 2.0.1.
+- `APODWallpaper-1.1.1.0-win-x64-self-contained-portable.zip` - portable build. Extract the whole zip first, then run `APODWallpaper.exe`.
 
 ## Highlights
 
@@ -16,9 +15,11 @@ First public testing build.
 - Smart wallpaper fitting for wide, tall, square, and unusual images.
 - Tray-friendly behavior, startup setting, and local settings storage.
 - Portable layout keeps app binaries in `app`, data in `data`, and images in `images`.
+- Setup installer installs the required Windows App Runtime for clean PCs.
 
 ## Notes
 
 - Windows 10/11 x64.
-- Framework-dependent build: a clean PC may need .NET 8 Desktop Runtime x64 and Windows App Runtime.
+- Setup installer is the safest choice for clean PCs.
+- Portable build is self-contained for .NET, but WinUI 3 still requires Windows App Runtime on the machine.
 - The build is unsigned; Windows SmartScreen may show a warning until a trusted signing certificate is available.
