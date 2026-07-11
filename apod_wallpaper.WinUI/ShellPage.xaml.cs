@@ -14,6 +14,7 @@ public sealed partial class ShellPage : Page
     public ShellPage()
     {
         InitializeComponent();
+        LocalizationHelper.ApplyTo(this);
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)

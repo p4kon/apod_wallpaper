@@ -21,6 +21,7 @@ public sealed partial class AboutPage : Page
     public AboutPage()
     {
         InitializeComponent();
+        LocalizationHelper.ApplyTo(this);
         PopulateAppInfo();
     }
 
@@ -30,24 +31,24 @@ public sealed partial class AboutPage : Page
         {
             var package = Package.Current;
             var version = package.Id.Version;
-            VersionTextBlock.Text = $"Version {version.Major}.{version.Minor}.{version.Build} ({(Environment.Is64BitProcess ? "64-bit" : "32-bit")})";
-            PackageTextBlock.Text = $"Build {version.Build}.{version.Revision}";
+            VersionTextBlock.Text = AppStrings.Format("Version {0}.{1}.{2} ({3})", version.Major, version.Minor, version.Build, Environment.Is64BitProcess ? "64-bit" : "32-bit");
+            PackageTextBlock.Text = AppStrings.Format("Build {0}.{1}", version.Build, version.Revision);
 
             AboutStatusBar.Severity = InfoBarSeverity.Informational;
-            AboutStatusBar.Title = "Product info ready";
-            AboutStatusBar.Message = "Repository, support, licensing, and runtime service credits are available from this screen.";
+            AboutStatusBar.Title = AppStrings.Get("Product info ready");
+            AboutStatusBar.Message = AppStrings.Get("Repository, support, licensing, and runtime service credits are available from this screen.");
         }
         catch
         {
             var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
             VersionTextBlock.Text = assemblyVersion != null
-                ? "Version " + assemblyVersion
-                : "Unknown";
-            PackageTextBlock.Text = "Package identity unavailable in this launch context.";
+                ? AppStrings.Format("Version {0}", assemblyVersion)
+                : AppStrings.Get("Unknown");
+            PackageTextBlock.Text = AppStrings.Get("Package identity unavailable in this launch context.");
 
             AboutStatusBar.Severity = InfoBarSeverity.Warning;
-            AboutStatusBar.Title = "Running without package identity";
-            AboutStatusBar.Message = "Version info was resolved from the assembly because packaged identity was unavailable.";
+            AboutStatusBar.Title = AppStrings.Get("Running without package identity");
+            AboutStatusBar.Message = AppStrings.Get("Version info was resolved from the assembly because packaged identity was unavailable.");
         }
     }
 
