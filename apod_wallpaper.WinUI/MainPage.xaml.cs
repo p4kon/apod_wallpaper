@@ -552,7 +552,7 @@ public sealed partial class MainPage : Page
         visual.DayNumberText.Text = date.Day.ToString(CultureInfo.InvariantCulture);
         visual.DayNumberText.FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal;
         visual.StatusText.Text = isLoading
-            ? (isFuture ? "future" : "loading")
+            ? AppStrings.Get(isFuture ? "future" : "loading")
             : BuildMiniStatusLabel(isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown);
 
         visual.Button.Background = background;
@@ -569,7 +569,7 @@ public sealed partial class MainPage : Page
         ToolTipService.SetToolTip(
             visual.Button,
             isLoading && !isFuture
-                ? date.ToString("dddd, dd MMMM yyyy", CultureInfo.CurrentCulture) + Environment.NewLine + "Loading calendar state"
+                ? date.ToString("dddd, dd MMMM yyyy", AppStrings.DateCulture) + Environment.NewLine + AppStrings.Get("Loading calendar state")
                 : BuildDayTooltip(date, isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown));
     }
 
@@ -1752,9 +1752,9 @@ public sealed partial class MainPage : Page
     private string BuildMonthWarmupMessage(DateTime month)
     {
         if (IsCurrentMonth(month))
-            return "Current month is refreshed in the background because APOD can still grow tomorrow or later today.";
+            return AppStrings.Get("Current month is refreshed in the background because APOD can still grow tomorrow or later today.");
 
-        return "Background warmup is filling unknown dates and unsupported-media knowledge for this month.";
+        return AppStrings.Get("Background warmup is filling unknown dates and unsupported-media knowledge for this month.");
     }
 
     private static (int Local, int RemoteImage, int Unsupported, int Unknown) CountMonthStates(apod_wallpaper.ApodCalendarMonthState monthState)
@@ -1794,11 +1794,11 @@ public sealed partial class MainPage : Page
         if (hasLocalImage)
             return AppStrings.Get("local");
         if (hasRemoteImage)
-            return AppStrings.Get("ready");
+            return AppStrings.Get("available");
         if (isUnsupported)
             return AppStrings.Get("video");
         if (isUnknown)
-            return AppStrings.Get("unknown");
+            return AppStrings.Get("unchecked");
         return string.Empty;
     }
 
