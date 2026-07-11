@@ -36,6 +36,15 @@ internal static class LocalizationHelper
             if (element is ContentControl contentControl && contentControl.Content is string content)
                 contentControl.Content = AppStrings.Get(content);
 
+            if (element is ItemsControl itemsControl)
+            {
+                foreach (var item in itemsControl.Items)
+                {
+                    if (item is ContentControl itemContentControl && itemContentControl.Content is string itemContent)
+                        itemContentControl.Content = AppStrings.Get(itemContent);
+                }
+            }
+
             if (element is MenuFlyoutItem menuFlyoutItem)
                 menuFlyoutItem.Text = AppStrings.Get(menuFlyoutItem.Text);
         }
