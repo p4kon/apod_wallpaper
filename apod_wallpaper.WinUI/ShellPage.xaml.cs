@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -15,6 +16,7 @@ public sealed partial class ShellPage : Page
     {
         InitializeComponent();
         LocalizationHelper.ApplyTo(this);
+        ApplyNavigationLabels();
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -85,5 +87,19 @@ public sealed partial class ShellPage : Page
         button.Foreground = isActive
             ? new SolidColorBrush(Microsoft.UI.Colors.White)
             : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
+    }
+
+    private void ApplyNavigationLabels()
+    {
+        ApplyButtonLabel(PreviewButton, "Calendar");
+        ApplyButtonLabel(SettingsButton, "Settings");
+        ApplyButtonLabel(AboutButton, "About");
+    }
+
+    private static void ApplyButtonLabel(Button button, string text)
+    {
+        var localizedText = AppStrings.Get(text);
+        ToolTipService.SetToolTip(button, localizedText);
+        AutomationProperties.SetName(button, localizedText);
     }
 }
