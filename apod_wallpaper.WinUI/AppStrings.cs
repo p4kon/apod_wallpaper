@@ -9,6 +9,7 @@ internal static class AppStrings
 {
     private static readonly CultureInfo EnglishCulture = CultureInfo.GetCultureInfo("en-US");
     private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
+    private static readonly Lazy<IReadOnlyDictionary<string, string>> CanonicalKeys = new(BuildCanonicalKeys);
 
     private static readonly IReadOnlyDictionary<string, string> Russian = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -360,6 +361,16 @@ internal static class AppStrings
             : text;
     }
 
+    public static string GetStableKey(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return text ?? string.Empty;
+
+        return CanonicalKeys.Value.TryGetValue(text, out var key)
+            ? key
+            : text;
+    }
+
     public static string GetBackendMessageOrDefault(string? message, string fallback)
     {
         return string.IsNullOrWhiteSpace(message) ? Get(fallback) : Get(message);
@@ -373,5 +384,17 @@ internal static class AppStrings
     public static string WallpaperStyleName(apod_wallpaper.WallpaperStyle style)
     {
         return Get(style.ToString());
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildCanonicalKeys()
+    {
+        var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var pair in Russian)
+        {
+            keys.TryAdd(pair.Key, pair.Key);
+            keys.TryAdd(pair.Value, pair.Key);
+        }
+
+        return keys;
     }
 }

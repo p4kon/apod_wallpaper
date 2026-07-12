@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -71,8 +72,17 @@ internal static class LocalizationHelper
 
         if (!keys.TryGetValue(propertyName, out var key))
         {
-            key = currentValue;
+            key = AppStrings.GetStableKey(currentValue);
             keys[propertyName] = key;
+        }
+        else
+        {
+            var stableKey = AppStrings.GetStableKey(key);
+            if (!string.Equals(stableKey, key, StringComparison.Ordinal))
+            {
+                key = stableKey;
+                keys[propertyName] = key;
+            }
         }
 
         return AppStrings.Get(key);
