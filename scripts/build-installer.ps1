@@ -89,6 +89,9 @@ SolidCompression=yes
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 WizardStyle=modern
+CloseApplications=yes
+CloseApplicationsFilter=apod_wallpaper.WinUI.exe
+RestartApplications=no
 SetupIconFile=$repoRoot\apod_wallpaper.WinUI\Assets\AppIcon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
@@ -101,6 +104,15 @@ Source: "{#WindowsAppRuntimeInstaller}"; DestDir: "{tmp}"; DestName: "{#WindowsA
 
 [Icons]
 Name: "{autoprograms}\APOD Wallpaper"; Filename: "{app}\{#MyAppExeName}"
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM apod_wallpaper.WinUI.exe /T /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := '';
+end;
 
 [Run]
 Filename: "{tmp}\{#WindowsAppRuntimeInstallerFile}"; Parameters: "--quiet"; StatusMsg: "Installing Windows App Runtime..."; Flags: waituntilterminated runhidden

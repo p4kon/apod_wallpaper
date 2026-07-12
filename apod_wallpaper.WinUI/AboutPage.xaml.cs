@@ -1,5 +1,8 @@
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Reflection;
+using System.Xml.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel;
@@ -21,6 +24,29 @@ public sealed partial class AboutPage : Page
     public AboutPage()
     {
         InitializeComponent();
+        LocalizationHelper.ApplyTo(this);
+        PopulateAppInfo();
+        AppStrings.LanguageChanged += AppStrings_LanguageChanged;
+        Loaded += AboutPage_Loaded;
+        Unloaded += AboutPage_Unloaded;
+    }
+
+    private void AppStrings_LanguageChanged(object? sender, EventArgs e)
+    {
+        LocalizationHelper.ApplyTo(this);
+        PopulateAppInfo();
+    }
+
+    private void AboutPage_Unloaded(object sender, RoutedEventArgs e)
+    {
+        AppStrings.LanguageChanged -= AppStrings_LanguageChanged;
+        Loaded -= AboutPage_Loaded;
+        Unloaded -= AboutPage_Unloaded;
+    }
+
+    private void AboutPage_Loaded(object sender, RoutedEventArgs e)
+    {
+        LocalizationHelper.ApplyTo(this);
         PopulateAppInfo();
     }
 
@@ -30,24 +56,86 @@ public sealed partial class AboutPage : Page
         {
             var package = Package.Current;
             var version = package.Id.Version;
-            VersionTextBlock.Text = $"Version {version.Major}.{version.Minor}.{version.Build} ({(Environment.Is64BitProcess ? "64-bit" : "32-bit")})";
-            PackageTextBlock.Text = $"Build {version.Build}.{version.Revision}";
+            ApplyVersion(version.Major, version.Minor, version.Build, version.Revision);
 
             AboutStatusBar.Severity = InfoBarSeverity.Informational;
-            AboutStatusBar.Title = "Product info ready";
-            AboutStatusBar.Message = "Repository, support, licensing, and runtime service credits are available from this screen.";
+            AboutStatusBar.Title = AppStrings.Get("Product info ready");
+            AboutStatusBar.Message = AppStrings.Get("Repository, support, licensing, and runtime service credits are available from this screen.");
         }
         catch
         {
-            var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
-            VersionTextBlock.Text = assemblyVersion != null
-                ? "Version " + assemblyVersion
-                : "Unknown";
-            PackageTextBlock.Text = "Package identity unavailable in this launch context.";
+            var version = ResolveUnpackagedVersion();
+            if (version != null)
+                ApplyVersion(version.Major, version.Minor, version.Build, version.Revision);
+            else
+                VersionTextBlock.Text = AppStrings.Get("Unknown");
+            PackageTextBlock.Text = AppStrings.Get("Package identity unavailable in this launch context.");
 
             AboutStatusBar.Severity = InfoBarSeverity.Warning;
-            AboutStatusBar.Title = "Running without package identity";
-            AboutStatusBar.Message = "Version info was resolved from the assembly because packaged identity was unavailable.";
+            AboutStatusBar.Title = AppStrings.Get("Running without package identity");
+            AboutStatusBar.Message = AppStrings.Get("Version info was resolved from the assembly because packaged identity was unavailable.");
+        }
+    }
+
+    private void ApplyVersion(int major, int minor, int build, int revision)
+    {
+        VersionTextBlock.Text = AppStrings.Format("Version {0}.{1}.{2} ({3})", major, minor, build, Environment.Is64BitProcess ? "64-bit" : "32-bit");
+        PackageTextBlock.Text = AppStrings.Format("Build {0}.{1}", build, revision);
+    }
+
+    private static Version? ResolveUnpackagedVersion()
+    {
+        return TryReadAppManifestVersion()
+            ?? TryReadExecutableVersion()
+            ?? Assembly.GetExecutingAssembly().GetName().Version;
+    }
+
+    private static Version? TryReadAppManifestVersion()
+    {
+        var baseDirectory = AppContext.BaseDirectory;
+        foreach (var fileName in new[] { "AppxManifest.xml", "Package.appxmanifest" })
+        {
+            var path = Path.Combine(baseDirectory, fileName);
+            if (!File.Exists(path))
+                continue;
+
+            try
+            {
+                var document = XDocument.Load(path);
+                var ns = document.Root?.Name.Namespace ?? XNamespace.None;
+                var versionText = document.Root?.Element(ns + "Identity")?.Attribute("Version")?.Value;
+                if (Version.TryParse(versionText, out var version))
+                    return version;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    private static Version? TryReadExecutableVersion()
+    {
+        try
+        {
+            var executablePath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(executablePath))
+                return null;
+
+            var versionInfo = FileVersionInfo.GetVersionInfo(executablePath);
+            var productVersion = versionInfo.ProductVersion?.Split('+')[0];
+            if (Version.TryParse(productVersion, out var version))
+                return version;
+
+            return Version.TryParse(versionInfo.FileVersion, out version)
+                ? version
+                : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 

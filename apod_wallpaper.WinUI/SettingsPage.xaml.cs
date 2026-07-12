@@ -36,7 +36,9 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         InitializeComponent();
+        LocalizationHelper.ApplyTo(this);
         NavigationCacheMode = NavigationCacheMode.Required;
+        Loaded += SettingsPage_Loaded;
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -46,7 +48,7 @@ public sealed partial class SettingsPage : Page
         _arguments = e.Parameter as SettingsPageArguments;
         if (_arguments == null)
         {
-            SetErrorState("Settings page did not receive backend composition arguments.");
+            SetErrorState(AppStrings.Get("Settings page did not receive backend composition arguments."));
             return;
         }
 
@@ -58,18 +60,18 @@ public sealed partial class SettingsPage : Page
     {
         if (_backendHost == null)
         {
-            SetErrorState("Backend host is unavailable.");
+            SetErrorState(AppStrings.Get("Backend host is unavailable."));
             return;
         }
 
         SettingsStatusBar.Severity = InfoBarSeverity.Informational;
-        SettingsStatusBar.Title = "Loading settings";
-        SettingsStatusBar.Message = "Reading persisted settings and current API key state through the backend facade.";
+        SettingsStatusBar.Title = AppStrings.Get("Loading settings");
+        SettingsStatusBar.Message = AppStrings.Get("Reading persisted settings and current API key state through the backend facade.");
 
         var settingsResult = await _backendHost.Backend.GetSettingsAsync();
         if (!settingsResult.Succeeded || settingsResult.Value == null)
         {
-            SetErrorState(settingsResult.Error?.Message ?? "Unable to load settings.");
+            SetErrorState(AppStrings.GetBackendMessageOrDefault(settingsResult.Error?.Message, "Unable to load settings."));
             return;
         }
 
@@ -81,8 +83,8 @@ public sealed partial class SettingsPage : Page
         PopulateSettings(_settingsSnapshot, _apiKeyValidationState);
 
         SettingsStatusBar.Severity = InfoBarSeverity.Success;
-        SettingsStatusBar.Title = "Settings ready";
-        SettingsStatusBar.Message = "Changes save through the backend as soon as each control is committed.";
+        SettingsStatusBar.Title = AppStrings.Get("Settings ready");
+        SettingsStatusBar.Message = AppStrings.Get("Changes save through the backend as soon as each control is committed.");
     }
 
     private void PopulateSettings(apod_wallpaper.ApplicationSettingsSnapshot settings, apod_wallpaper.ApiKeyValidationState apiKeyValidationState)
@@ -96,6 +98,7 @@ public sealed partial class SettingsPage : Page
             CloseToTrayToggle.IsOn = settings.MinimizeToTrayOnClose;
             ImagesDirectoryTextBox.Text = ResolveDisplayedImagesDirectory(settings);
             SetWallpaperStyleButtons(ResolveWallpaperStyleFromSettings(settings));
+            LanguageComboBox.SelectedIndex = ResolveLanguageSelectedIndex(settings.Language);
             CloseBehaviorComboBox.SelectedIndex = settings.MinimizeToTrayOnClose ? 0 : 1;
         }
         finally
@@ -115,6 +118,35 @@ public sealed partial class SettingsPage : Page
         return apod_wallpaper.WallpaperStyle.Smart;
     }
 
+    private static int ResolveLanguageSelectedIndex(string? language)
+    {
+        var normalized = apod_wallpaper.ApplicationSettingsSnapshot.NormalizeLanguage(language);
+        if (normalized == apod_wallpaper.ApplicationSettingsSnapshot.LanguageEnglish)
+            return 0;
+
+        return 1;
+    }
+
+    private string ResolveLanguageFromSelection()
+    {
+        if (LanguageComboBox.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            return apod_wallpaper.ApplicationSettingsSnapshot.NormalizeLanguage(tag);
+
+        return apod_wallpaper.ApplicationSettingsSnapshot.LanguageEnglish;
+    }
+
+    private void RefreshLocalizedText()
+    {
+        LocalizationHelper.ApplyTo(this);
+        if (_settingsSnapshot != null)
+            PopulateSettings(_settingsSnapshot, _apiKeyValidationState);
+    }
+
+    private void SettingsPage_Loaded(object sender, RoutedEventArgs e)
+    {
+        RefreshLocalizedText();
+    }
+
     private async void AutoCheckToggle_Toggled(object sender, RoutedEventArgs e)
     {
         await SaveSettingsAsync(snapshot => snapshot.AutoRefreshEnabled = AutoCheckToggle.IsOn, "Auto-check preference saved.");
@@ -123,6 +155,23 @@ public sealed partial class SettingsPage : Page
     private async void StartWithWindowsToggle_Toggled(object sender, RoutedEventArgs e)
     {
         await SaveSettingsAsync(snapshot => snapshot.StartWithWindows = StartWithWindowsToggle.IsOn, "Start-with-Windows preference saved.");
+    }
+
+    private async void LanguageComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isHydratingControls || LanguageComboBox.SelectedIndex < 0)
+            return;
+
+        var language = ResolveLanguageFromSelection();
+        await SaveSettingsAsync(
+            snapshot => snapshot.Language = language,
+            "Language preference saved.",
+            afterSave: saved =>
+            {
+                AppStrings.ApplyLanguage(saved.Language);
+                RefreshLocalizedText();
+                return Task.CompletedTask;
+            });
     }
 
     private async void CloseToTrayToggle_Toggled(object sender, RoutedEventArgs e)
@@ -254,8 +303,8 @@ public sealed partial class SettingsPage : Page
         if (string.IsNullOrWhiteSpace(path))
         {
             SettingsStatusBar.Severity = InfoBarSeverity.Warning;
-            SettingsStatusBar.Title = "No images folder configured";
-            SettingsStatusBar.Message = "Choose or enter an images folder first.";
+            SettingsStatusBar.Title = AppStrings.Get("No images folder configured");
+            SettingsStatusBar.Message = AppStrings.Get("Choose or enter an images folder first.");
             return;
         }
 
@@ -265,12 +314,12 @@ public sealed partial class SettingsPage : Page
             var folder = await StorageFolder.GetFolderFromPathAsync(path);
             var opened = await Launcher.LaunchFolderAsync(folder);
             if (!opened)
-                throw new InvalidOperationException("Windows did not open the images folder.");
+                throw new InvalidOperationException(AppStrings.Get("Windows did not open the images folder."));
         }
         catch (Exception ex)
         {
             SettingsStatusBar.Severity = InfoBarSeverity.Error;
-            SettingsStatusBar.Title = "Unable to open folder";
+            SettingsStatusBar.Title = AppStrings.Get("Unable to open folder");
             SettingsStatusBar.Message = ex.Message;
         }
     }
@@ -330,8 +379,8 @@ public sealed partial class SettingsPage : Page
     private void UpdateImagesDirectoryHint(apod_wallpaper.ApplicationSettingsSnapshot settings)
     {
         ImagesDirectoryHintText.Text = string.IsNullOrWhiteSpace(settings.ImagesDirectoryPath)
-            ? "Default portable folder: " + _effectiveImagesDirectory
-            : "Custom folder: " + settings.ImagesDirectoryPath;
+            ? AppStrings.Format("Default portable folder: {0}", _effectiveImagesDirectory)
+            : AppStrings.Format("Custom folder: {0}", settings.ImagesDirectoryPath);
     }
 
     private async void GetApiKeyButton_Click(object sender, RoutedEventArgs e)
@@ -351,13 +400,13 @@ public sealed partial class SettingsPage : Page
 
         var textBox = new TextBox
         {
-            PlaceholderText = "Paste NASA API key",
+            PlaceholderText = AppStrings.Get("Paste NASA API key"),
             Text = ApiKeyTextBox.Text,
         };
 
         var linkButton = new Button
         {
-            Content = "Get NASA API key",
+            Content = AppStrings.Get("Get NASA API key"),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
         linkButton.Click += async (_, _) => await Launcher.LaunchUriAsync(new Uri(NasaApiKeyUrl));
@@ -365,14 +414,14 @@ public sealed partial class SettingsPage : Page
         var stack = new StackPanel { Spacing = 12 };
         stack.Children.Add(new TextBlock
         {
-            Text = "A personal NASA API key unlocks richer calendar warmup and avoids DEMO_KEY rate limits.",
+            Text = AppStrings.Get("A personal NASA API key unlocks richer calendar warmup and avoids DEMO_KEY rate limits."),
             TextWrapping = TextWrapping.Wrap,
         });
         stack.Children.Add(linkButton);
         stack.Children.Add(textBox);
         stack.Children.Add(new TextBlock
         {
-            Text = "If the NASA page does not open in your region, VPN may be required.",
+            Text = AppStrings.Get("If the NASA page does not open in your region, VPN may be required."),
             Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
             TextWrapping = TextWrapping.Wrap,
         });
@@ -380,9 +429,9 @@ public sealed partial class SettingsPage : Page
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "NASA API Key",
-            PrimaryButtonText = "Save",
-            CloseButtonText = "Cancel",
+            Title = AppStrings.Get("NASA API Key"),
+            PrimaryButtonText = AppStrings.Get("Save"),
+            CloseButtonText = AppStrings.Get("Cancel"),
             DefaultButton = ContentDialogButton.Primary,
             Content = stack,
         };
@@ -407,8 +456,8 @@ public sealed partial class SettingsPage : Page
         update(updatedSnapshot);
 
         SettingsStatusBar.Severity = InfoBarSeverity.Informational;
-        SettingsStatusBar.Title = "Saving settings";
-        SettingsStatusBar.Message = "Persisting changes through the backend facade.";
+        SettingsStatusBar.Title = AppStrings.Get("Saving settings");
+        SettingsStatusBar.Message = AppStrings.Get("Persisting changes through the backend facade.");
 
         var stopwatch = Stopwatch.StartNew();
         var saveResult = await _backendHost.Backend.SaveSettingsAsync(updatedSnapshot);
@@ -416,8 +465,8 @@ public sealed partial class SettingsPage : Page
         if (!saveResult.Succeeded || saveResult.Value == null)
         {
             SettingsStatusBar.Severity = InfoBarSeverity.Error;
-            SettingsStatusBar.Title = "Settings were not saved";
-            SettingsStatusBar.Message = saveResult.Error?.Message ?? "Unknown backend error while saving settings.";
+            SettingsStatusBar.Title = AppStrings.Get("Settings were not saved");
+            SettingsStatusBar.Message = saveResult.Error?.Message ?? AppStrings.Get("Unknown backend error while saving settings.");
             if (_settingsSnapshot != null)
                 PopulateSettings(_settingsSnapshot, _apiKeyValidationState);
             return;
@@ -430,8 +479,8 @@ public sealed partial class SettingsPage : Page
             await afterSave(_settingsSnapshot);
 
         SettingsStatusBar.Severity = InfoBarSeverity.Success;
-        SettingsStatusBar.Title = "Settings saved";
-        SettingsStatusBar.Message = string.Format(CultureInfo.InvariantCulture, "{0} ({1} ms)", successMessage, stopwatch.ElapsedMilliseconds);
+        SettingsStatusBar.Title = AppStrings.Get("Settings saved");
+        SettingsStatusBar.Message = string.Format(CultureInfo.CurrentCulture, "{0} ({1} ms)", AppStrings.Get(successMessage), stopwatch.ElapsedMilliseconds);
     }
 
     private void SetWallpaperStyleButtons(apod_wallpaper.WallpaperStyle style)
@@ -477,8 +526,8 @@ public sealed partial class SettingsPage : Page
         updatedSnapshot.WallpaperStyleIndex = (int)selectedStyle;
 
         SettingsStatusBar.Severity = InfoBarSeverity.Informational;
-        SettingsStatusBar.Title = "Saving wallpaper style";
-        SettingsStatusBar.Message = "Persisting wallpaper style and reapplying the current wallpaper.";
+        SettingsStatusBar.Title = AppStrings.Get("Saving wallpaper style");
+        SettingsStatusBar.Message = AppStrings.Get("Persisting wallpaper style and reapplying the current wallpaper.");
 
         var stopwatch = Stopwatch.StartNew();
         var saveResult = await _backendHost.Backend.SaveSettingsAsync(updatedSnapshot);
@@ -486,8 +535,8 @@ public sealed partial class SettingsPage : Page
         {
             stopwatch.Stop();
             SettingsStatusBar.Severity = InfoBarSeverity.Error;
-            SettingsStatusBar.Title = "Wallpaper style was not saved";
-            SettingsStatusBar.Message = saveResult.Error?.Message ?? "Unable to save the wallpaper style.";
+            SettingsStatusBar.Title = AppStrings.Get("Wallpaper style was not saved");
+            SettingsStatusBar.Message = saveResult.Error?.Message ?? AppStrings.Get("Unable to save the wallpaper style.");
             if (_settingsSnapshot != null)
                 PopulateSettings(_settingsSnapshot, _apiKeyValidationState);
             return;
@@ -501,14 +550,17 @@ public sealed partial class SettingsPage : Page
         if (!reapplyResult.Succeeded)
         {
             SettingsStatusBar.Severity = InfoBarSeverity.Warning;
-            SettingsStatusBar.Title = "Style saved, but wallpaper was not reapplied";
-            SettingsStatusBar.Message = reapplyResult.Error?.Message ?? "Unable to reapply the current wallpaper with the selected style.";
+            SettingsStatusBar.Title = AppStrings.Get("Style saved, but wallpaper was not reapplied");
+            SettingsStatusBar.Message = AppStrings.GetBackendMessageOrDefault(reapplyResult.Error?.Message, "Unable to reapply the current wallpaper with the selected style.");
             return;
         }
 
         SettingsStatusBar.Severity = InfoBarSeverity.Success;
-        SettingsStatusBar.Title = "Wallpaper style applied";
-        SettingsStatusBar.Message = string.Format(CultureInfo.InvariantCulture, "The current wallpaper was reapplied using {0}. ({1} ms)", selectedStyle, stopwatch.ElapsedMilliseconds);
+        SettingsStatusBar.Title = AppStrings.Get("Wallpaper style applied");
+        SettingsStatusBar.Message = AppStrings.Format(
+            "The current wallpaper was reapplied using {0}. ({1} ms)",
+            AppStrings.WallpaperStyleName(selectedStyle),
+            stopwatch.ElapsedMilliseconds);
     }
 
     private async Task<apod_wallpaper.ApplicationSettingsSnapshot> GetFreshSettingsSnapshotAsync()
@@ -531,32 +583,33 @@ public sealed partial class SettingsPage : Page
         if (!usesDemoKey && validationState == apod_wallpaper.ApiKeyValidationState.Valid)
         {
             ApiKeyStateBadge.Background = ApiKeyValidBrush;
-            ApiKeyStateText.Text = "Valid personal key";
-            ApiKeySummaryText.Text = "Personal NASA API key is active.";
+            ApiKeyStateText.Text = AppStrings.Get("Valid personal key");
+            ApiKeySummaryText.Text = AppStrings.Get("Personal NASA API key is active.");
             return;
         }
 
         if (!usesDemoKey && validationState == apod_wallpaper.ApiKeyValidationState.Invalid)
         {
             ApiKeyStateBadge.Background = ApiKeyInvalidBrush;
-            ApiKeyStateText.Text = "Invalid key, DEMO_KEY fallback active";
-            ApiKeySummaryText.Text = "The saved key looks invalid, so DEMO_KEY fallback is being used.";
+            ApiKeyStateText.Text = AppStrings.Get("Invalid key, DEMO_KEY fallback active");
+            ApiKeySummaryText.Text = AppStrings.Get("The saved key looks invalid. The app will continue through DEMO_KEY and HTML fallback.");
             return;
         }
 
         ApiKeyStateBadge.Background = ApiKeyDemoBrush;
-        ApiKeyStateText.Text = "DEMO_KEY / no personal key";
-        ApiKeySummaryText.Text = "Configure a personal key to avoid rate limiting issues.";
+        ApiKeyStateText.Text = AppStrings.Get("DEMO_KEY / no personal key");
+        ApiKeySummaryText.Text = AppStrings.Get("Configure a personal key to avoid rate limiting issues.");
     }
 
     private void SetErrorState(string message)
     {
         SettingsStatusBar.Severity = InfoBarSeverity.Error;
-        SettingsStatusBar.Title = "Settings unavailable";
+        SettingsStatusBar.Title = AppStrings.Get("Settings unavailable");
         SettingsStatusBar.Message = message;
         ApiKeyTextBox.IsEnabled = false;
         AutoCheckToggle.IsEnabled = false;
         StartWithWindowsToggle.IsEnabled = false;
+        LanguageComboBox.IsEnabled = false;
         CloseToTrayToggle.IsEnabled = false;
         ImagesDirectoryTextBox.IsEnabled = false;
         BrowseImagesFolderButton.IsEnabled = false;

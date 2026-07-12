@@ -14,14 +14,14 @@ internal sealed class TraySpikeStatus
 
     public int RestoreCount { get; private set; }
 
-    public string LastAction { get; private set; } = "Tray spike is starting.";
+    public string LastAction { get; private set; } = AppStrings.Get("Tray spike is starting.");
 
     public DateTime? LastBackendCheckUtc { get; private set; }
 
     public void MarkTrayIconVisible()
     {
         IsTrayIconVisible = true;
-        LastAction = "Tray icon created.";
+        LastAction = AppStrings.Get("Tray icon created.");
         RaiseChanged();
     }
 
@@ -29,7 +29,7 @@ internal sealed class TraySpikeStatus
     {
         IsWindowHiddenToTray = true;
         HideCount++;
-        LastAction = "Window hidden to tray.";
+        LastAction = AppStrings.Get("Window hidden to tray.");
         RaiseChanged();
     }
 
@@ -43,20 +43,20 @@ internal sealed class TraySpikeStatus
 
     public void MarkContextMenuOpened()
     {
-        LastAction = "Tray context menu opened.";
+        LastAction = AppStrings.Get("Tray context menu opened.");
         RaiseChanged();
     }
 
     public void MarkBackendCheck()
     {
         LastBackendCheckUtc = DateTime.UtcNow;
-        LastAction = "Backend snapshot refreshed.";
+        LastAction = AppStrings.Get("Backend snapshot refreshed.");
         RaiseChanged();
     }
 
     public void MarkExitRequested()
     {
-        LastAction = "Exit requested from tray or UI.";
+        LastAction = AppStrings.Get("Exit requested from tray or UI.");
         RaiseChanged();
     }
 

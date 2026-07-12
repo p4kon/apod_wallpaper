@@ -65,7 +65,7 @@ public sealed partial class MainWindow : Window
     {
         var shutdownResult = await _backendHost.ShutdownAsync();
         if (!shutdownResult.Succeeded)
-            throw new InvalidOperationException(shutdownResult.Error != null ? shutdownResult.Error.Message : "Unable to shut down backend host.");
+            throw new InvalidOperationException(shutdownResult.Error != null ? shutdownResult.Error.Message : AppStrings.Get("Unable to shut down backend host."));
 
         _trayIconController.AllowClose();
         Close();

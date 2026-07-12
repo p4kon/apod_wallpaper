@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -60,6 +62,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Public workflow payload never exposes failed status", FailedWorkflowStatusMapsToOperationError);
                 Run("Backend facade does not expose diagnostics contract", BackendFacadeDoesNotExposeDiagnosticsContract);
                 Run("WallpaperApplied subscription disposes cleanly", WallpaperAppliedSubscriptionDisposesCleanly);
+                Run("WinUI localization literals are covered", WinUiLocalizationLiteralsAreCovered);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -892,6 +895,129 @@ Bright clusters mark newborn stars.
         private static apod_wallpaper.ApplicationSettingsSnapshot CaptureSettings()
         {
             return GetValueOrThrow(CreateController().GetSettingsAsync().GetAwaiter().GetResult(), "Unable to capture current application settings.");
+        }
+
+        private static void WinUiLocalizationLiteralsAreCovered()
+        {
+            const string AutoOnRussian = "\u0410\u0432\u0442\u043e \u0432\u043a\u043b.";
+            const string AutoOffRussian = "\u0410\u0432\u0442\u043e \u0432\u044b\u043a\u043b.";
+
+            var repoRoot = ResolveRepositoryRoot();
+            var winUiDirectory = Path.Combine(repoRoot, "apod_wallpaper.WinUI");
+            var appStringsPath = Path.Combine(winUiDirectory, "AppStrings.cs");
+            var appStringsSource = File.ReadAllText(appStringsPath);
+            var appStringKeys = ExtractAppStringKeys(appStringsSource);
+
+            Assert(!appStringsSource.Contains("LanguageSystem"), "AppStrings must not use the removed System language.");
+            Assert(!appStringsSource.Contains("CultureInfo.CurrentUICulture.TwoLetterISOLanguageName"), "AppStrings must not choose UI language from CurrentUICulture.");
+
+            foreach (var xamlPath in Directory.GetFiles(winUiDirectory, "*.xaml"))
+                AssertXamlLiteralsHaveKeys(xamlPath, appStringKeys);
+
+            foreach (var path in Directory.GetFiles(winUiDirectory, "*.cs").Concat(Directory.GetFiles(winUiDirectory, "*.xaml")))
+            {
+                if (string.Equals(Path.GetFileName(path), "AppStrings.cs", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var text = File.ReadAllText(path);
+                if (text.Contains(AutoOnRussian) || text.Contains(AutoOffRussian))
+                    throw new InvalidOperationException("Auto labels must only appear in AppStrings: " + path);
+
+                if (ContainsCyrillic(text) && !IsAllowedCyrillicFile(path, text))
+                    throw new InvalidOperationException("Russian UI text must live in AppStrings: " + path);
+
+                if (text.Contains("Content=\"System\"") || text.Contains("Tag=\"system\"") || text.Contains("LanguageSystem"))
+                    throw new InvalidOperationException("System language leftover found in UI file: " + path);
+
+                if (text.Contains("CultureInfo.CurrentUICulture.TwoLetterISOLanguageName"))
+                    throw new InvalidOperationException("CurrentUICulture is used as UI language source in: " + path);
+
+                AssertNoDirectUserVisibleAssignments(path, text);
+            }
+        }
+
+        private static string ResolveRepositoryRoot()
+        {
+            foreach (var start in new[] { Environment.CurrentDirectory, AppDomain.CurrentDomain.BaseDirectory })
+            {
+                var directory = new DirectoryInfo(start);
+                while (directory != null)
+                {
+                    var appStringsPath = Path.Combine(directory.FullName, "apod_wallpaper.WinUI", "AppStrings.cs");
+                    if (File.Exists(appStringsPath))
+                        return directory.FullName;
+
+                    directory = directory.Parent;
+                }
+            }
+
+            throw new InvalidOperationException("Unable to locate repository root for localization audit.");
+        }
+
+        private static HashSet<string> ExtractAppStringKeys(string source)
+        {
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (Match match in Regex.Matches(source, "\\[\"(?<key>(?:\\\\.|[^\"\\\\])*)\"\\]\\s*=\\s*\"(?<value>(?:\\\\.|[^\"\\\\])*)\""))
+            {
+                keys.Add(match.Groups["key"].Value);
+                keys.Add(match.Groups["value"].Value);
+            }
+
+            Assert(keys.Contains("Auto On") && keys.Contains("\u0410\u0432\u0442\u043e \u0432\u043a\u043b."), "Expected Auto On localization pair.");
+            Assert(keys.Contains("Local") && keys.Contains("\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e"), "Expected calendar legend localization pair.");
+            Assert(keys.Contains("On") && keys.Contains("\u0412\u043a\u043b."), "Expected ToggleSwitch On localization pair.");
+            return keys;
+        }
+
+        private static void AssertXamlLiteralsHaveKeys(string path, HashSet<string> appStringKeys)
+        {
+            var text = File.ReadAllText(path);
+            var pattern = "(Text|Content|Header|Label|PlaceholderText|ToolTipService\\.ToolTip|AutomationProperties\\.Name|AutomationProperties\\.HelpText|OnContent|OffContent)\\s*=\\s*\"(?<value>[^\"]*)\"";
+            foreach (Match match in Regex.Matches(text, pattern))
+            {
+                var value = match.Groups["value"].Value;
+                if (ShouldIgnoreXamlLiteral(value))
+                    continue;
+
+                if (!appStringKeys.Contains(value))
+                    throw new InvalidOperationException(Path.GetFileName(path) + " literal is missing from AppStrings: " + value);
+            }
+        }
+
+        private static bool ShouldIgnoreXamlLiteral(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return true;
+            if (value.StartsWith("{", StringComparison.Ordinal))
+                return true;
+            if (!Regex.IsMatch(value, "[A-Za-z\u0400-\u04FF]"))
+                return true;
+
+            return value == "English" || value == "\u0420\u0443\u0441\u0441\u043a\u0438\u0439";
+        }
+
+        private static bool ContainsCyrillic(string text)
+        {
+            return Regex.IsMatch(text, "[\u0400-\u04FF]");
+        }
+
+        private static bool IsAllowedCyrillicFile(string path, string text)
+        {
+            return string.Equals(Path.GetFileName(path), "SettingsPage.xaml", StringComparison.OrdinalIgnoreCase)
+                && text.Contains("Content=\"\u0420\u0443\u0441\u0441\u043a\u0438\u0439\"");
+        }
+
+        private static void AssertNoDirectUserVisibleAssignments(string path, string text)
+        {
+            var pattern = "\\.(Text|Content|Title|Message|Header|Label)\\s*=\\s*\"(?<value>[^\"]*[A-Za-z\u0400-\u04FF][^\"]*)\"";
+            foreach (Match match in Regex.Matches(text, pattern))
+            {
+                var value = match.Groups["value"].Value;
+                if (value.StartsWith("http", StringComparison.OrdinalIgnoreCase) || value.Contains("://"))
+                    continue;
+
+                throw new InvalidOperationException(Path.GetFileName(path) + " assigns user-visible text without AppStrings: " + value);
+            }
         }
 
         private static void RestoreSettings(apod_wallpaper.ApplicationSettingsSnapshot snapshot)

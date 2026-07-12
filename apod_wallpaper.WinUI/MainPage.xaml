@@ -105,13 +105,13 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Mo" />
-                        <TextBlock Grid.Column="1" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Tu" />
-                        <TextBlock Grid.Column="2" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="We" />
-                        <TextBlock Grid.Column="3" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Th" />
-                        <TextBlock Grid.Column="4" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Fr" />
-                        <TextBlock Grid.Column="5" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Sa" />
-                        <TextBlock Grid.Column="6" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Su" />
+                        <TextBlock Grid.Column="0" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Mon" />
+                        <TextBlock Grid.Column="1" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Tue" />
+                        <TextBlock Grid.Column="2" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Wed" />
+                        <TextBlock Grid.Column="3" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Thu" />
+                        <TextBlock Grid.Column="4" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Fri" />
+                        <TextBlock Grid.Column="5" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Sat" />
+                        <TextBlock Grid.Column="6" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Sun" />
                     </Grid>
 
                     <Grid x:Name="CalendarDaysGrid" Grid.Row="1" ColumnSpacing="6" RowSpacing="6" />
