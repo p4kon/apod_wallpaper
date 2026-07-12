@@ -167,7 +167,7 @@ internal sealed class TrayIconController : IDisposable
 
         if (msg == WmClose && !_allowWindowClose)
         {
-            if (_minimizeToTrayOnClose)
+            if (_minimizeToTrayOnClose && IsForegroundWindow(hwnd))
             {
                 HideToTray();
             }
@@ -195,6 +195,11 @@ internal sealed class TrayIconController : IDisposable
         }
 
         return CallWindowProc(_originalWndProc, hwnd, msg, wParam, lParam);
+    }
+
+    private static bool IsForegroundWindow(IntPtr hwnd)
+    {
+        return GetForegroundWindow() == hwnd;
     }
 
     private void ApplyMinimumWindowSize(IntPtr lParam)
@@ -315,6 +320,9 @@ internal sealed class TrayIconController : IDisposable
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr LoadImage(IntPtr hInst, string name, uint type, int cx, int cy, uint fuLoad);
