@@ -2,7 +2,6 @@ namespace apod_wallpaper
 {
     public sealed class ApplicationSettingsSnapshot
     {
-        public const string LanguageSystem = "system";
         public const string LanguageEnglish = "en";
         public const string LanguageRussian = "ru";
 
@@ -41,15 +40,15 @@ namespace apod_wallpaper
         public static string NormalizeLanguage(string language)
         {
             if (string.IsNullOrWhiteSpace(language))
-                return LanguageSystem;
+                return LanguageEnglish;
 
             var normalized = language.Trim().ToLowerInvariant();
-            if (normalized == LanguageEnglish || normalized == "en-us" || normalized == "english")
+            if (normalized == "system" || normalized == LanguageEnglish || normalized == "en-us" || normalized == "english")
                 return LanguageEnglish;
             if (normalized == LanguageRussian || normalized == "ru-ru" || normalized == "russian")
                 return LanguageRussian;
 
-            return LanguageSystem;
+            return LanguageEnglish;
         }
     }
 }

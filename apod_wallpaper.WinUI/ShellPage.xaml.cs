@@ -17,6 +17,7 @@ public sealed partial class ShellPage : Page
         InitializeComponent();
         LocalizationHelper.ApplyTo(this);
         ApplyNavigationLabels();
+        AppStrings.LanguageChanged += AppStrings_LanguageChanged;
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -48,6 +49,12 @@ public sealed partial class ShellPage : Page
     private void HideToTrayButton_Click(object sender, RoutedEventArgs e)
     {
         _arguments?.HideWindowToTray();
+    }
+
+    private void AppStrings_LanguageChanged(object? sender, System.EventArgs e)
+    {
+        LocalizationHelper.ApplyTo(this);
+        ApplyNavigationLabels();
     }
 
     private void NavigateToPreview()

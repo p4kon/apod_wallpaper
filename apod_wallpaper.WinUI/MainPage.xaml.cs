@@ -120,6 +120,7 @@ public sealed partial class MainPage : Page
         RefreshSelectedDateText();
         EnsureCalendarMonthBuilt(_visibleMonth);
         UpdateActionAvailability();
+        AppStrings.LanguageChanged += AppStrings_LanguageChanged;
         ActualThemeChanged += MainPage_ActualThemeChanged;
     }
 
@@ -160,6 +161,22 @@ public sealed partial class MainPage : Page
     {
         UpdateCalendarSelectionOnly();
         UpdateAutoRefreshToggleVisual();
+    }
+
+    private void AppStrings_LanguageChanged(object? sender, EventArgs e)
+    {
+        RefreshLocalizedText();
+    }
+
+    private void RefreshLocalizedText()
+    {
+        LocalizationHelper.ApplyTo(this);
+        VisibleMonthText.Text = FormatVisibleMonth(_visibleMonth);
+        RefreshSelectedDateText();
+        UpdateAutoRefreshToggleVisual();
+        UpdateActionAvailability();
+        UpdateCalendarSelectionOnly();
+        RefreshTrayStatus();
     }
 
     private async void ReloadPreviewButton_Click(object sender, RoutedEventArgs e)
@@ -1953,6 +1970,7 @@ public sealed partial class MainPage : Page
             hasRemoteImage ? "remote" : "no-remote",
             isUnsupported ? "unsupported" : "supported",
             isLoading ? "loading" : "ready",
+            AppStrings.CurrentLanguage,
             isSelected ? "selected" : "idle",
             ActualTheme.ToString());
     }

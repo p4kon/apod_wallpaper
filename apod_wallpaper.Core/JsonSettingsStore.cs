@@ -85,7 +85,7 @@ namespace apod_wallpaper
                 AutoRefreshEnabled = false,
                 StartWithWindows = true,
                 MinimizeToTrayOnClose = true,
-                Language = ApplicationSettingsSnapshot.LanguageSystem,
+                Language = ApplicationSettingsSnapshot.LanguageEnglish,
                 NasaApiKeyValidationState = ApiKeyValidationState.Unknown.ToString(),
                 ImagesDirectoryPath = string.Empty,
                 LastAutoRefreshRunDate = string.Empty,

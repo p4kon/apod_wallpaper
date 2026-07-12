@@ -40,7 +40,7 @@
                                 <TextBlock FontSize="20" FontWeight="SemiBold" Text="Start with Windows" />
                                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Automatically launch APOD Wallpaper in the background." TextWrapping="Wrap" />
                             </StackPanel>
-                            <ToggleSwitch x:Name="StartWithWindowsToggle" Grid.Column="1" VerticalAlignment="Center" Toggled="StartWithWindowsToggle_Toggled" />
+                            <ToggleSwitch x:Name="StartWithWindowsToggle" Grid.Column="1" VerticalAlignment="Center" OffContent="Off" OnContent="On" Toggled="StartWithWindowsToggle_Toggled" />
                         </Grid>
 
                         <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -59,7 +59,6 @@
                                 Grid.Column="1"
                                 VerticalAlignment="Center"
                                 SelectionChanged="LanguageComboBox_SelectionChanged">
-                                <ComboBoxItem Content="System" Tag="system" />
                                 <ComboBoxItem Content="English" Tag="en" />
                                 <ComboBoxItem Content="Русский" Tag="ru" />
                             </ComboBox>
@@ -104,7 +103,7 @@
                                 <TextBlock FontSize="20" FontWeight="SemiBold" Text="Auto-check today's APOD" />
                                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Periodically check NASA for new images and apply them automatically." TextWrapping="Wrap" />
                             </StackPanel>
-                            <ToggleSwitch x:Name="AutoCheckToggle" Grid.Column="1" VerticalAlignment="Center" Toggled="AutoCheckToggle_Toggled" />
+                            <ToggleSwitch x:Name="AutoCheckToggle" Grid.Column="1" VerticalAlignment="Center" OffContent="Off" OnContent="On" Toggled="AutoCheckToggle_Toggled" />
                         </Grid>
 
                         <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -239,6 +238,8 @@
             <ToggleSwitch
                 x:Name="CloseToTrayToggle"
                 Header="Clicking X hides to tray instead of exiting"
+                OffContent="Off"
+                OnContent="On"
                 Toggled="CloseToTrayToggle_Toggled" />
         </StackPanel>
     </Grid>

@@ -26,6 +26,20 @@ public sealed partial class AboutPage : Page
         InitializeComponent();
         LocalizationHelper.ApplyTo(this);
         PopulateAppInfo();
+        AppStrings.LanguageChanged += AppStrings_LanguageChanged;
+        Unloaded += AboutPage_Unloaded;
+    }
+
+    private void AppStrings_LanguageChanged(object? sender, EventArgs e)
+    {
+        LocalizationHelper.ApplyTo(this);
+        PopulateAppInfo();
+    }
+
+    private void AboutPage_Unloaded(object sender, RoutedEventArgs e)
+    {
+        AppStrings.LanguageChanged -= AppStrings_LanguageChanged;
+        Unloaded -= AboutPage_Unloaded;
     }
 
     private void PopulateAppInfo()

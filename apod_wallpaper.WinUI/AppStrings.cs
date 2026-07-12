@@ -9,8 +9,6 @@ internal static class AppStrings
 {
     private static readonly CultureInfo EnglishCulture = CultureInfo.GetCultureInfo("en-US");
     private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
-    private static readonly CultureInfo SystemCulture = CultureInfo.CurrentCulture;
-    private static readonly CultureInfo SystemUiCulture = CultureInfo.CurrentUICulture;
 
     private static readonly IReadOnlyDictionary<string, string> Russian = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -77,7 +75,7 @@ internal static class AppStrings
         ["Explanation"] = "Описание",
         ["Fill"] = "Заполнить",
         ["Fit"] = "Вписать",
-        ["Fr"] = "Пт",
+        ["Fri"] = "Пт",
         ["Future date"] = "Будущая дата",
         ["Get API key"] = "Получить API-ключ",
         ["Get NASA API key"] = "Получить API-ключ NASA",
@@ -91,7 +89,7 @@ internal static class AppStrings
         ["Invalid key, DEMO_KEY fallback active"] = "Ключ неверный, используется DEMO_KEY",
         ["Invalid key, using DEMO_KEY"] = "Ключ неверный, используется DEMO_KEY",
         ["Language"] = "Язык",
-        ["Language preference saved. Restart APOD Wallpaper to update every open screen."] = "Настройка языка сохранена. Перезапустите APOD Wallpaper, чтобы обновить все открытые экраны.",
+        ["Language preference saved."] = "Настройка языка сохранена.",
         ["Language used by APOD Wallpaper."] = "Язык интерфейса APOD Wallpaper.",
         ["License Agreement"] = "Лицензия",
         ["Loading backend state"] = "Загрузка состояния backend",
@@ -105,7 +103,7 @@ internal static class AppStrings
         ["Main page did not receive backend composition root arguments."] = "Главный экран не получил аргументы backend-композиции.",
         ["Manual download and apply actions"] = "Ручное скачивание и установка",
         ["Manage application behavior and wallpaper preferences."] = "Управляйте поведением приложения и настройками обоев.",
-        ["Mo"] = "Пн",
+        ["Mon"] = "Пн",
         ["Month loaded"] = "Месяц загружен",
         ["Month refresh partially unavailable"] = "Месяц обновлен частично",
         ["Month refreshed"] = "Месяц обновлен",
@@ -139,7 +137,7 @@ internal static class AppStrings
         ["Requesting the initial snapshot from apod_wallpaper.Core."] = "Запрос начального состояния из apod_wallpaper.Core.",
         ["Requesting the latest available APOD and applying it as wallpaper."] = "Запрос последнего доступного APOD и установка его как обоев.",
         ["Running without package identity"] = "Запущено без идентификатора пакета",
-        ["Sa"] = "Сб",
+        ["Sat"] = "Сб",
         ["Save"] = "Сохранить",
         ["Saving settings"] = "Сохранение настроек",
         ["Saving wallpaper style"] = "Сохранение режима обоев",
@@ -157,20 +155,19 @@ internal static class AppStrings
         ["Start-with-Windows preference saved."] = "Настройка запуска с Windows сохранена.",
         ["Starting backend"] = "Запуск backend",
         ["Stretch"] = "Растянуть",
-        ["Su"] = "Вс",
+        ["Sun"] = "Вс",
         ["Success"] = "Успешно",
-        ["System"] = "System",
         ["The backend did not return a valid APOD page URL."] = "Backend не вернул корректную ссылку на страницу APOD.",
         ["The date was checked and does not contain a downloadable image."] = "Дата проверена, скачиваемого изображения нет.",
         ["The day is not verified yet or background month warmup has not reached it."] = "День еще не проверен или фоновый прогрев месяца до него не дошел.",
         ["The saved key looks invalid. The app will continue through DEMO_KEY and HTML fallback."] = "Сохраненный ключ выглядит неверным. Приложение продолжит работу через DEMO_KEY и HTML fallback.",
         ["The WinUI host created ApplicationController and loaded the initial snapshot in one backend call."] = "WinUI host создал ApplicationController и загрузил начальное состояние одним backend-вызовом.",
         ["This day resolves to image content, but the local file is not present."] = "За этот день есть изображение, но локального файла пока нет.",
-        ["Th"] = "Чт",
+        ["Thu"] = "Чт",
         ["Third-party Notices"] = "Сторонние компоненты",
         ["Tile"] = "Плитка",
         ["Tray-friendly desktop behavior"] = "Работа через трей",
-        ["Tu"] = "Вт",
+        ["Tue"] = "Вт",
         ["Unable to load settings."] = "Не удалось загрузить настройки.",
         ["Unable to open folder"] = "Не удалось открыть папку",
         ["Unable to open NASA page"] = "Не удалось открыть страницу NASA",
@@ -192,7 +189,7 @@ internal static class AppStrings
         ["We could not load the preview."] = "Не удалось загрузить превью.",
         ["We could not open the configured images folder."] = "Не удалось открыть настроенную папку изображений.",
         ["We will keep the current preview visible while the new date is resolved."] = "Текущее превью останется видимым, пока новая дата загружается.",
-        ["We"] = "Ср",
+        ["Wed"] = "Ср",
         ["Windows did not open the images folder."] = "Windows не открыла папку изображений.",
         ["A personal NASA API key unlocks richer calendar warmup and avoids DEMO_KEY rate limits."] = "Личный API-ключ NASA включает более полный прогрев календаря и помогает избежать лимитов DEMO_KEY.",
         ["A usable local wallpaper file exists on disk."] = "На диске найден локальный файл обоев.",
@@ -231,6 +228,8 @@ internal static class AppStrings
         ["No image preview"] = "Нет превью изображения",
         ["No preview image"] = "Нет изображения для превью",
         ["No preview location"] = "Нет пути к превью",
+        ["Off"] = "Выкл.",
+        ["On"] = "Вкл.",
         ["Package identity unavailable in this launch context."] = "Идентификатор пакета недоступен в этом режиме запуска.",
         ["Personal API key detected. Month warmup will refresh missing dates in the background."] = "Найден личный API-ключ. Прогрев месяца будет обновлять недостающие даты в фоне.",
         ["Personal NASA API key is active."] = "Личный API-ключ NASA активен.",
@@ -318,34 +317,37 @@ internal static class AppStrings
         ["video"] = "видео",
     };
 
-    public static string CurrentLanguage { get; private set; } = apod_wallpaper.ApplicationSettingsSnapshot.LanguageSystem;
+    public static event EventHandler? LanguageChanged;
 
-    public static bool IsRussian => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("ru", StringComparison.OrdinalIgnoreCase);
+    public static string CurrentLanguage { get; private set; } = apod_wallpaper.ApplicationSettingsSnapshot.LanguageEnglish;
+
+    public static bool IsRussian => CurrentLanguage == apod_wallpaper.ApplicationSettingsSnapshot.LanguageRussian;
 
     public static CultureInfo DateCulture => IsRussian ? RussianCulture : EnglishCulture;
 
     public static void ApplyLanguage(string? language)
     {
         var normalized = apod_wallpaper.ApplicationSettingsSnapshot.NormalizeLanguage(language);
+        var changed = !string.Equals(CurrentLanguage, normalized, StringComparison.Ordinal);
         CurrentLanguage = normalized;
 
-        var culture = SystemCulture;
-        var uiCulture = SystemUiCulture;
+        var culture = EnglishCulture;
         if (normalized == apod_wallpaper.ApplicationSettingsSnapshot.LanguageEnglish)
         {
             culture = EnglishCulture;
-            uiCulture = EnglishCulture;
         }
         else if (normalized == apod_wallpaper.ApplicationSettingsSnapshot.LanguageRussian)
         {
             culture = RussianCulture;
-            uiCulture = RussianCulture;
         }
 
         CultureInfo.DefaultThreadCurrentCulture = culture;
-        CultureInfo.DefaultThreadCurrentUICulture = uiCulture;
+        CultureInfo.DefaultThreadCurrentUICulture = culture;
         Thread.CurrentThread.CurrentCulture = culture;
-        Thread.CurrentThread.CurrentUICulture = uiCulture;
+        Thread.CurrentThread.CurrentUICulture = culture;
+
+        if (changed)
+            LanguageChanged?.Invoke(null, EventArgs.Empty);
     }
 
     public static string Get(string? text)
@@ -365,7 +367,7 @@ internal static class AppStrings
 
     public static string Format(string format, params object[] args)
     {
-        return string.Format(CultureInfo.CurrentUICulture, Get(format), args);
+        return string.Format(DateCulture, Get(format), args);
     }
 
     public static string WallpaperStyleName(apod_wallpaper.WallpaperStyle style)

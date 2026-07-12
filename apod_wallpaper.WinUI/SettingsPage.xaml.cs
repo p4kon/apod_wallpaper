@@ -121,11 +121,9 @@ public sealed partial class SettingsPage : Page
     {
         var normalized = apod_wallpaper.ApplicationSettingsSnapshot.NormalizeLanguage(language);
         if (normalized == apod_wallpaper.ApplicationSettingsSnapshot.LanguageEnglish)
-            return 1;
-        if (normalized == apod_wallpaper.ApplicationSettingsSnapshot.LanguageRussian)
-            return 2;
+            return 0;
 
-        return 0;
+        return 1;
     }
 
     private string ResolveLanguageFromSelection()
@@ -133,7 +131,7 @@ public sealed partial class SettingsPage : Page
         if (LanguageComboBox.SelectedItem is ComboBoxItem item && item.Tag is string tag)
             return apod_wallpaper.ApplicationSettingsSnapshot.NormalizeLanguage(tag);
 
-        return apod_wallpaper.ApplicationSettingsSnapshot.LanguageSystem;
+        return apod_wallpaper.ApplicationSettingsSnapshot.LanguageEnglish;
     }
 
     private void RefreshLocalizedText()
@@ -161,7 +159,7 @@ public sealed partial class SettingsPage : Page
         var language = ResolveLanguageFromSelection();
         await SaveSettingsAsync(
             snapshot => snapshot.Language = language,
-            "Language preference saved. Restart APOD Wallpaper to update every open screen.",
+            "Language preference saved.",
             afterSave: saved =>
             {
                 AppStrings.ApplyLanguage(saved.Language);
