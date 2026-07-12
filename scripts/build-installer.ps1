@@ -89,6 +89,9 @@ SolidCompression=yes
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 WizardStyle=modern
+CloseApplications=yes
+CloseApplicationsFilter=*.exe
+RestartApplications=no
 SetupIconFile=$repoRoot\apod_wallpaper.WinUI\Assets\AppIcon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
