@@ -218,8 +218,8 @@ internal sealed class TrayIconController : IDisposable
 
         try
         {
-            AppendMenu(menuHandle, MfString, MenuIdShow, "Show");
-            AppendMenu(menuHandle, MfString, MenuIdExit, "Exit");
+            AppendMenu(menuHandle, MfString, MenuIdShow, AppStrings.Get("Show"));
+            AppendMenu(menuHandle, MfString, MenuIdExit, AppStrings.Get("Exit"));
 
             GetCursorPos(out var point);
             SetForegroundWindow(_windowHandle);
