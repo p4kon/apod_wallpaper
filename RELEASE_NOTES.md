@@ -1,11 +1,11 @@
-# APOD Wallpaper 1.1.1
+# APOD Wallpaper 1.2.0
 
-First public testing build.
+Localization and upgrade reliability build.
 
 ## Download
 
-- `APODWallpaper-1.1.1.0-win-x64-setup.exe` - recommended installer for normal testing. It bundles Windows App Runtime 2.0.1.
-- `APODWallpaper-1.1.1.0-win-x64-self-contained-portable.zip` - portable build. Extract the whole zip first, then run `APODWallpaper.exe`.
+- `APODWallpaper-1.2.0.0-win-x64-setup.exe` - recommended installer for normal testing. It bundles Windows App Runtime 2.0.1.
+- `APODWallpaper-1.2.0.0-win-x64-self-contained-portable.zip` - portable build. Extract the whole zip first, then run `APODWallpaper.exe`.
 
 ## Highlights
 
@@ -14,6 +14,9 @@ First public testing build.
 - Download, Apply, Auto On, and NASA page actions.
 - Smart wallpaper fitting for wide, tall, square, and unusual images.
 - Tray-friendly behavior, startup setting, and local settings storage.
+- English / Russian / System language selection with persisted preference.
+- About page version detection for portable and installer builds.
+- Installer update flow targets only the APOD Wallpaper process when closing a running app.
 - Portable layout keeps app binaries in `app`, data in `data`, and images in `images`.
 - Setup installer installs the required Windows App Runtime for clean PCs.
 
