@@ -128,11 +128,11 @@ internal sealed class TrayIconController : IDisposable
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
         _iconHandle = LoadImage(IntPtr.Zero, iconPath, ImageIcon, 0, 0, LrLoadFromFile);
         if (_iconHandle == IntPtr.Zero)
-            throw new InvalidOperationException("Unable to load tray icon from " + iconPath + ".");
+            throw new InvalidOperationException(AppStrings.Format("Unable to load tray icon from {0}.", iconPath));
 
         var notifyIconData = CreateNotifyIconData();
         if (!Shell_NotifyIcon(NimAdd, ref notifyIconData))
-            throw new InvalidOperationException("Unable to create tray icon in the packaged WinUI host.");
+            throw new InvalidOperationException(AppStrings.Get("Unable to create tray icon in the packaged WinUI host."));
 
         _status.MarkTrayIconVisible();
     }
@@ -183,7 +183,7 @@ internal sealed class TrayIconController : IDisposable
             var trayEvent = unchecked((uint)lParam.ToInt64());
             if (trayEvent == WmLButtonDblClk)
             {
-                RestoreFromTray("Window restored from tray double-click.");
+                RestoreFromTray(AppStrings.Get("Window restored from tray double-click."));
                 return IntPtr.Zero;
             }
 
@@ -235,7 +235,7 @@ internal sealed class TrayIconController : IDisposable
 
             if (command == MenuIdShow)
             {
-                RestoreFromTray("Window restored from tray context menu.");
+                RestoreFromTray(AppStrings.Get("Window restored from tray context menu."));
                 return;
             }
 
