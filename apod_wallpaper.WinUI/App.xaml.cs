@@ -28,6 +28,8 @@ public partial class App : Application
             PortableStartupLog.Write("BackendHost created.");
             var initialization = await Host.InitializeAsync();
             PortableStartupLog.Write("Backend initialized. Succeeded=" + initialization.Succeeded);
+            if (initialization.Succeeded && initialization.Value != null)
+                AppStrings.ApplyLanguage(initialization.Value.Language);
 
             _window = new MainWindow(Host, initialization);
             PortableStartupLog.Write("MainWindow created.");

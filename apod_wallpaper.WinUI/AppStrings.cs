@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Threading;
 
 namespace apod_wallpaper.WinUI;
 
@@ -8,6 +9,8 @@ internal static class AppStrings
 {
     private static readonly CultureInfo EnglishCulture = CultureInfo.GetCultureInfo("en-US");
     private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
+    private static readonly CultureInfo SystemCulture = CultureInfo.CurrentCulture;
+    private static readonly CultureInfo SystemUiCulture = CultureInfo.CurrentUICulture;
 
     private static readonly IReadOnlyDictionary<string, string> Russian = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -88,6 +91,8 @@ internal static class AppStrings
         ["Invalid key, DEMO_KEY fallback active"] = "Ключ неверный, используется DEMO_KEY",
         ["Invalid key, using DEMO_KEY"] = "Ключ неверный, используется DEMO_KEY",
         ["Language"] = "Язык",
+        ["Language preference saved. Restart APOD Wallpaper to update every open screen."] = "Настройка языка сохранена. Перезапустите APOD Wallpaper, чтобы обновить все открытые экраны.",
+        ["Language used by APOD Wallpaper."] = "Язык интерфейса APOD Wallpaper.",
         ["License Agreement"] = "Лицензия",
         ["Loading backend state"] = "Загрузка состояния backend",
         ["Loading backend state..."] = "Загрузка состояния backend...",
@@ -154,6 +159,7 @@ internal static class AppStrings
         ["Stretch"] = "Растянуть",
         ["Su"] = "Вс",
         ["Success"] = "Успешно",
+        ["System"] = "System",
         ["The backend did not return a valid APOD page URL."] = "Backend не вернул корректную ссылку на страницу APOD.",
         ["The date was checked and does not contain a downloadable image."] = "Дата проверена, скачиваемого изображения нет.",
         ["The day is not verified yet or background month warmup has not reached it."] = "День еще не проверен или фоновый прогрев месяца до него не дошел.",
@@ -312,9 +318,35 @@ internal static class AppStrings
         ["video"] = "видео",
     };
 
+    public static string CurrentLanguage { get; private set; } = apod_wallpaper.ApplicationSettingsSnapshot.LanguageSystem;
+
     public static bool IsRussian => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("ru", StringComparison.OrdinalIgnoreCase);
 
     public static CultureInfo DateCulture => IsRussian ? RussianCulture : EnglishCulture;
+
+    public static void ApplyLanguage(string? language)
+    {
+        var normalized = apod_wallpaper.ApplicationSettingsSnapshot.NormalizeLanguage(language);
+        CurrentLanguage = normalized;
+
+        var culture = SystemCulture;
+        var uiCulture = SystemUiCulture;
+        if (normalized == apod_wallpaper.ApplicationSettingsSnapshot.LanguageEnglish)
+        {
+            culture = EnglishCulture;
+            uiCulture = EnglishCulture;
+        }
+        else if (normalized == apod_wallpaper.ApplicationSettingsSnapshot.LanguageRussian)
+        {
+            culture = RussianCulture;
+            uiCulture = RussianCulture;
+        }
+
+        CultureInfo.DefaultThreadCurrentCulture = culture;
+        CultureInfo.DefaultThreadCurrentUICulture = uiCulture;
+        Thread.CurrentThread.CurrentCulture = culture;
+        Thread.CurrentThread.CurrentUICulture = uiCulture;
+    }
 
     public static string Get(string? text)
     {

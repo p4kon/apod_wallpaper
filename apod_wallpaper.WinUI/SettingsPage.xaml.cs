@@ -97,6 +97,7 @@ public sealed partial class SettingsPage : Page
             CloseToTrayToggle.IsOn = settings.MinimizeToTrayOnClose;
             ImagesDirectoryTextBox.Text = ResolveDisplayedImagesDirectory(settings);
             SetWallpaperStyleButtons(ResolveWallpaperStyleFromSettings(settings));
+            LanguageComboBox.SelectedIndex = ResolveLanguageSelectedIndex(settings.Language);
             CloseBehaviorComboBox.SelectedIndex = settings.MinimizeToTrayOnClose ? 0 : 1;
         }
         finally
@@ -116,6 +117,32 @@ public sealed partial class SettingsPage : Page
         return apod_wallpaper.WallpaperStyle.Smart;
     }
 
+    private static int ResolveLanguageSelectedIndex(string? language)
+    {
+        var normalized = apod_wallpaper.ApplicationSettingsSnapshot.NormalizeLanguage(language);
+        if (normalized == apod_wallpaper.ApplicationSettingsSnapshot.LanguageEnglish)
+            return 1;
+        if (normalized == apod_wallpaper.ApplicationSettingsSnapshot.LanguageRussian)
+            return 2;
+
+        return 0;
+    }
+
+    private string ResolveLanguageFromSelection()
+    {
+        if (LanguageComboBox.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            return apod_wallpaper.ApplicationSettingsSnapshot.NormalizeLanguage(tag);
+
+        return apod_wallpaper.ApplicationSettingsSnapshot.LanguageSystem;
+    }
+
+    private void RefreshLocalizedText()
+    {
+        LocalizationHelper.ApplyTo(this);
+        if (_settingsSnapshot != null)
+            PopulateSettings(_settingsSnapshot, _apiKeyValidationState);
+    }
+
     private async void AutoCheckToggle_Toggled(object sender, RoutedEventArgs e)
     {
         await SaveSettingsAsync(snapshot => snapshot.AutoRefreshEnabled = AutoCheckToggle.IsOn, "Auto-check preference saved.");
@@ -124,6 +151,23 @@ public sealed partial class SettingsPage : Page
     private async void StartWithWindowsToggle_Toggled(object sender, RoutedEventArgs e)
     {
         await SaveSettingsAsync(snapshot => snapshot.StartWithWindows = StartWithWindowsToggle.IsOn, "Start-with-Windows preference saved.");
+    }
+
+    private async void LanguageComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isHydratingControls || LanguageComboBox.SelectedIndex < 0)
+            return;
+
+        var language = ResolveLanguageFromSelection();
+        await SaveSettingsAsync(
+            snapshot => snapshot.Language = language,
+            "Language preference saved. Restart APOD Wallpaper to update every open screen.",
+            afterSave: saved =>
+            {
+                AppStrings.ApplyLanguage(saved.Language);
+                RefreshLocalizedText();
+                return Task.CompletedTask;
+            });
     }
 
     private async void CloseToTrayToggle_Toggled(object sender, RoutedEventArgs e)
@@ -561,6 +605,7 @@ public sealed partial class SettingsPage : Page
         ApiKeyTextBox.IsEnabled = false;
         AutoCheckToggle.IsEnabled = false;
         StartWithWindowsToggle.IsEnabled = false;
+        LanguageComboBox.IsEnabled = false;
         CloseToTrayToggle.IsEnabled = false;
         ImagesDirectoryTextBox.IsEnabled = false;
         BrowseImagesFolderButton.IsEnabled = false;

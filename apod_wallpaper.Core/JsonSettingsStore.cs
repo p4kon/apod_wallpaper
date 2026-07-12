@@ -43,6 +43,8 @@ namespace apod_wallpaper
                     if (json.IndexOf("MinimizeToTrayOnClose", StringComparison.OrdinalIgnoreCase) < 0)
                         snapshot.MinimizeToTrayOnClose = true;
 
+                    snapshot.Language = ApplicationSettingsSnapshot.NormalizeLanguage(snapshot.Language);
+
                     return snapshot;
                 }
             }
@@ -83,6 +85,7 @@ namespace apod_wallpaper
                 AutoRefreshEnabled = false,
                 StartWithWindows = true,
                 MinimizeToTrayOnClose = true,
+                Language = ApplicationSettingsSnapshot.LanguageSystem,
                 NasaApiKeyValidationState = ApiKeyValidationState.Unknown.ToString(),
                 ImagesDirectoryPath = string.Empty,
                 LastAutoRefreshRunDate = string.Empty,

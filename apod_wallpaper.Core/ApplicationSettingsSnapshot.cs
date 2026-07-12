@@ -2,11 +2,16 @@ namespace apod_wallpaper
 {
     public sealed class ApplicationSettingsSnapshot
     {
+        public const string LanguageSystem = "system";
+        public const string LanguageEnglish = "en";
+        public const string LanguageRussian = "ru";
+
         public bool TrayDoubleClickAction { get; set; }
         public int WallpaperStyleIndex { get; set; }
         public bool AutoRefreshEnabled { get; set; }
         public bool StartWithWindows { get; set; }
         public bool MinimizeToTrayOnClose { get; set; }
+        public string Language { get; set; }
         public string NasaApiKey { get; set; }
         public string NasaApiKeyValidationState { get; set; }
         public string ImagesDirectoryPath { get; set; }
@@ -23,6 +28,7 @@ namespace apod_wallpaper
                 AutoRefreshEnabled = AutoRefreshEnabled,
                 StartWithWindows = StartWithWindows,
                 MinimizeToTrayOnClose = MinimizeToTrayOnClose,
+                Language = NormalizeLanguage(Language),
                 NasaApiKey = NasaApiKey,
                 NasaApiKeyValidationState = NasaApiKeyValidationState,
                 ImagesDirectoryPath = ImagesDirectoryPath,
@@ -30,6 +36,20 @@ namespace apod_wallpaper
                 LastAutoRefreshAppliedDate = LastAutoRefreshAppliedDate,
                 LastAppliedWallpaperImagePath = LastAppliedWallpaperImagePath,
             };
+        }
+
+        public static string NormalizeLanguage(string language)
+        {
+            if (string.IsNullOrWhiteSpace(language))
+                return LanguageSystem;
+
+            var normalized = language.Trim().ToLowerInvariant();
+            if (normalized == LanguageEnglish || normalized == "en-us" || normalized == "english")
+                return LanguageEnglish;
+            if (normalized == LanguageRussian || normalized == "ru-ru" || normalized == "russian")
+                return LanguageRussian;
+
+            return LanguageSystem;
         }
     }
 }

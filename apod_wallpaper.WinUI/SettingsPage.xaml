@@ -51,6 +51,28 @@
                                 <ColumnDefinition Width="180" />
                             </Grid.ColumnDefinitions>
                             <StackPanel>
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Language" />
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Language used by APOD Wallpaper." TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ComboBox
+                                x:Name="LanguageComboBox"
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                SelectionChanged="LanguageComboBox_SelectionChanged">
+                                <ComboBoxItem Content="System" Tag="system" />
+                                <ComboBoxItem Content="English" Tag="en" />
+                                <ComboBoxItem Content="Русский" Tag="ru" />
+                            </ComboBox>
+                        </Grid>
+
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="180" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
                                 <TextBlock FontSize="18" FontWeight="SemiBold" Text="Close behavior" />
                                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Choose what happens when you click the window close button." TextWrapping="Wrap" />
                             </StackPanel>
