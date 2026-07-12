@@ -38,6 +38,7 @@ public sealed partial class SettingsPage : Page
         InitializeComponent();
         LocalizationHelper.ApplyTo(this);
         NavigationCacheMode = NavigationCacheMode.Required;
+        Loaded += SettingsPage_Loaded;
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -139,6 +140,11 @@ public sealed partial class SettingsPage : Page
         LocalizationHelper.ApplyTo(this);
         if (_settingsSnapshot != null)
             PopulateSettings(_settingsSnapshot, _apiKeyValidationState);
+    }
+
+    private void SettingsPage_Loaded(object sender, RoutedEventArgs e)
+    {
+        RefreshLocalizedText();
     }
 
     private async void AutoCheckToggle_Toggled(object sender, RoutedEventArgs e)

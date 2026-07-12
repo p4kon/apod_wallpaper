@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -19,6 +20,14 @@ internal static class LocalizationHelper
     {
         foreach (var element in Enumerate(root))
         {
+            var automationName = AutomationProperties.GetName(element);
+            if (!string.IsNullOrEmpty(automationName))
+                AutomationProperties.SetName(element, Translate(element, "AutomationProperties.Name", automationName));
+
+            var automationHelpText = AutomationProperties.GetHelpText(element);
+            if (!string.IsNullOrEmpty(automationHelpText))
+                AutomationProperties.SetHelpText(element, Translate(element, "AutomationProperties.HelpText", automationHelpText));
+
             if (element is TextBlock textBlock)
                 textBlock.Text = Translate(textBlock, nameof(TextBlock.Text), textBlock.Text);
 
@@ -90,13 +99,59 @@ internal static class LocalizationHelper
 
     private static IEnumerable<DependencyObject> Enumerate(DependencyObject root)
     {
+        var visited = new HashSet<DependencyObject>();
+        foreach (var element in Enumerate(root, visited))
+            yield return element;
+    }
+
+    private static IEnumerable<DependencyObject> Enumerate(DependencyObject root, HashSet<DependencyObject> visited)
+    {
+        if (!visited.Add(root))
+            yield break;
+
         yield return root;
 
         var count = VisualTreeHelper.GetChildrenCount(root);
         for (var i = 0; i < count; i++)
         {
-            foreach (var child in Enumerate(VisualTreeHelper.GetChild(root, i)))
+            foreach (var child in Enumerate(VisualTreeHelper.GetChild(root, i), visited))
                 yield return child;
+        }
+
+        foreach (var child in EnumerateLogicalChildren(root))
+        {
+            foreach (var descendant in Enumerate(child, visited))
+                yield return descendant;
+        }
+    }
+
+    private static IEnumerable<DependencyObject> EnumerateLogicalChildren(DependencyObject root)
+    {
+        if (root is Panel panel)
+        {
+            foreach (var child in panel.Children)
+            {
+                if (child is DependencyObject dependencyObject)
+                    yield return dependencyObject;
+            }
+        }
+
+        if (root is Border border && border.Child is DependencyObject borderChild)
+            yield return borderChild;
+
+        if (root is ScrollViewer scrollViewer && scrollViewer.Content is DependencyObject scrollContent)
+            yield return scrollContent;
+
+        if (root is ContentControl contentControl && contentControl.Content is DependencyObject contentChild)
+            yield return contentChild;
+
+        if (root is ItemsControl itemsControl)
+        {
+            foreach (var item in itemsControl.Items)
+            {
+                if (item is DependencyObject dependencyObject)
+                    yield return dependencyObject;
+            }
         }
     }
 }

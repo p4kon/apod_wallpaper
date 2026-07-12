@@ -27,6 +27,7 @@ public sealed partial class AboutPage : Page
         LocalizationHelper.ApplyTo(this);
         PopulateAppInfo();
         AppStrings.LanguageChanged += AppStrings_LanguageChanged;
+        Loaded += AboutPage_Loaded;
         Unloaded += AboutPage_Unloaded;
     }
 
@@ -39,7 +40,14 @@ public sealed partial class AboutPage : Page
     private void AboutPage_Unloaded(object sender, RoutedEventArgs e)
     {
         AppStrings.LanguageChanged -= AppStrings_LanguageChanged;
+        Loaded -= AboutPage_Loaded;
         Unloaded -= AboutPage_Unloaded;
+    }
+
+    private void AboutPage_Loaded(object sender, RoutedEventArgs e)
+    {
+        LocalizationHelper.ApplyTo(this);
+        PopulateAppInfo();
     }
 
     private void PopulateAppInfo()

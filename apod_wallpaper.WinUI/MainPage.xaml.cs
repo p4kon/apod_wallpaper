@@ -121,6 +121,7 @@ public sealed partial class MainPage : Page
         EnsureCalendarMonthBuilt(_visibleMonth);
         UpdateActionAvailability();
         AppStrings.LanguageChanged += AppStrings_LanguageChanged;
+        Loaded += MainPage_Loaded;
         ActualThemeChanged += MainPage_ActualThemeChanged;
     }
 
@@ -164,6 +165,11 @@ public sealed partial class MainPage : Page
     }
 
     private void AppStrings_LanguageChanged(object? sender, EventArgs e)
+    {
+        RefreshLocalizedText();
+    }
+
+    private void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
         RefreshLocalizedText();
     }

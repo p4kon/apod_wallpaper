@@ -18,6 +18,7 @@ public sealed partial class ShellPage : Page
         LocalizationHelper.ApplyTo(this);
         ApplyNavigationLabels();
         AppStrings.LanguageChanged += AppStrings_LanguageChanged;
+        Loaded += ShellPage_Loaded;
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -52,6 +53,12 @@ public sealed partial class ShellPage : Page
     }
 
     private void AppStrings_LanguageChanged(object? sender, System.EventArgs e)
+    {
+        LocalizationHelper.ApplyTo(this);
+        ApplyNavigationLabels();
+    }
+
+    private void ShellPage_Loaded(object sender, RoutedEventArgs e)
     {
         LocalizationHelper.ApplyTo(this);
         ApplyNavigationLabels();
