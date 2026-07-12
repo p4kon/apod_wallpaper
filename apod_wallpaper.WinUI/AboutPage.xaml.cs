@@ -103,7 +103,11 @@ public sealed partial class AboutPage : Page
                 return null;
 
             var versionInfo = FileVersionInfo.GetVersionInfo(executablePath);
-            return Version.TryParse(versionInfo.ProductVersion, out var version)
+            var productVersion = versionInfo.ProductVersion?.Split('+')[0];
+            if (Version.TryParse(productVersion, out var version))
+                return version;
+
+            return Version.TryParse(versionInfo.FileVersion, out version)
                 ? version
                 : null;
         }
