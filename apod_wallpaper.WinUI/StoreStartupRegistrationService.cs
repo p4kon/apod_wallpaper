@@ -53,13 +53,13 @@ internal sealed class StoreStartupRegistrationService : apod_wallpaper.IStartupR
             {
                 var state = startupTask.RequestEnableAsync().AsTask().GetAwaiter().GetResult();
                 if (state != StartupTaskState.Enabled)
-                    throw new InvalidOperationException("Windows did not enable the packaged startup task. Current state: " + state + ".");
+                    throw new InvalidOperationException(AppStrings.Format("Windows did not enable the packaged startup task. Current state: {0}.", state));
             }
 
             if (startupTask.State == StartupTaskState.Enabled)
                 return;
 
-            throw new InvalidOperationException("Packaged startup task cannot be enabled from its current state: " + startupTask.State + ".");
+            throw new InvalidOperationException(AppStrings.Format("Packaged startup task cannot be enabled from its current state: {0}.", startupTask.State));
         }
 
         if (startupTask.State == StartupTaskState.Enabled)
@@ -72,7 +72,7 @@ internal sealed class StoreStartupRegistrationService : apod_wallpaper.IStartupR
             ?? Registry.CurrentUser.CreateSubKey(RunRegistryPath, writable: true);
 
         if (key == null)
-            throw new InvalidOperationException("Unable to open the current user's Windows startup registry key.");
+            throw new InvalidOperationException(AppStrings.Get("Unable to open the current user's Windows startup registry key."));
 
         DeleteKnownStartupEntries(key);
         DeleteKnownStartupApprovalEntries();
@@ -82,7 +82,7 @@ internal sealed class StoreStartupRegistrationService : apod_wallpaper.IStartupR
             var executablePath = ResolvePortableStartupExecutablePath();
 
             if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
-                throw new InvalidOperationException("Unable to resolve the current executable path for Windows startup registration.");
+                throw new InvalidOperationException(AppStrings.Get("Unable to resolve the current executable path for Windows startup registration."));
 
             key.SetValue(PortableAppName, "\"" + executablePath + "\"", RegistryValueKind.String);
         }
