@@ -10,19 +10,22 @@ Website: https://apod_wallpaper.p4kon.com
 
 - Browse APOD entries by date.
 - Preview APOD images and explanation text.
+- Copy APOD explanation text.
+- Open APOD explanation text in Google Translate with a selectable target language.
 - Download images locally.
 - Apply wallpapers using Smart, Fill, Fit, Stretch, Center, Tile, or Span modes.
 - Automatically check for the latest APOD image.
 - Skip video/unsupported APOD days.
 - Run from the system tray.
 - Store an optional NASA API key locally.
+- Switch the UI between English and Russian.
 
 ## Requirements
 
 - Windows 10 version 2004 or newer, or Windows 11.
 - x64 Windows.
-- .NET 8 Desktop Runtime x64.
-- Windows App Runtime / Windows App SDK runtime.
+- The setup installer bundles Windows App Runtime 2.0.1.
+- The portable build includes the .NET desktop runtime files used by the app, but still needs Windows App Runtime on the machine.
 
 ## Status
 
@@ -39,7 +42,7 @@ MSIX packaging is kept as a technical path, but it is not the primary public dis
 .\scripts\publish-portable.ps1 -Clean
 ```
 
-By default the release script creates a framework-dependent build. This keeps the public zip and installer much smaller, but a clean Windows machine may need the .NET 8 Desktop Runtime and Windows App Runtime installed first.
+By default the release script creates the public portable package and setup installer. The portable package includes the .NET desktop runtime files used by the app, while the setup installer also bundles Windows App Runtime 2.0.1 for clean machines.
 
 For offline testing only, you can create a larger self-contained build:
 
