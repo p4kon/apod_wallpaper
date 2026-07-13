@@ -28,15 +28,20 @@ namespace apod_wallpaper
         public static string Normalize(string language)
         {
             if (string.IsNullOrWhiteSpace(language))
-                return string.Empty;
+                return Russian;
 
             var normalized = language.Trim().ToLowerInvariant();
-            return SupportedLanguages.Contains(normalized) ? normalized : string.Empty;
+            return SupportedLanguages.Contains(normalized) ? normalized : Russian;
         }
 
         public static bool IsSupported(string language)
         {
-            return !string.IsNullOrEmpty(Normalize(language));
+            return !string.IsNullOrWhiteSpace(language) && SupportedLanguages.Contains(language.Trim().ToLowerInvariant());
+        }
+
+        public static string GetDisplayCode(string language)
+        {
+            return Normalize(language);
         }
 
         public static string BuildGoogleTranslateUrl(string targetLanguage, string explanationText, bool includeText)

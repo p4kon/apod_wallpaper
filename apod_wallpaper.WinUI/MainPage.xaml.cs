@@ -49,15 +49,13 @@ public sealed partial class MainPage : Page
 
     private sealed class TranslationTargetLanguageOption
     {
-        public TranslationTargetLanguageOption(string code, string displayKey, string nameKey)
+        public TranslationTargetLanguageOption(string code, string nameKey)
         {
             Code = code;
-            DisplayKey = displayKey;
             NameKey = nameKey;
         }
 
         public string Code { get; }
-        public string DisplayKey { get; }
         public string NameKey { get; }
     }
 
@@ -86,13 +84,13 @@ public sealed partial class MainPage : Page
     };
     private static readonly TranslationTargetLanguageOption[] TranslationTargetLanguages =
     {
-        new(apod_wallpaper.TranslationTargetLanguage.Russian, "TranslationTargetDisplayRu", "Russian"),
-        new(apod_wallpaper.TranslationTargetLanguage.Spanish, "TranslationTargetDisplayEs", "Spanish"),
-        new(apod_wallpaper.TranslationTargetLanguage.German, "TranslationTargetDisplayDe", "German"),
-        new(apod_wallpaper.TranslationTargetLanguage.French, "TranslationTargetDisplayFr", "French"),
-        new(apod_wallpaper.TranslationTargetLanguage.Italian, "TranslationTargetDisplayIt", "Italian"),
-        new(apod_wallpaper.TranslationTargetLanguage.Portuguese, "TranslationTargetDisplayPt", "Portuguese"),
-        new(apod_wallpaper.TranslationTargetLanguage.Japanese, "TranslationTargetDisplayJa", "Japanese"),
+        new(apod_wallpaper.TranslationTargetLanguage.Russian, "Russian"),
+        new(apod_wallpaper.TranslationTargetLanguage.Spanish, "Spanish"),
+        new(apod_wallpaper.TranslationTargetLanguage.German, "German"),
+        new(apod_wallpaper.TranslationTargetLanguage.French, "French"),
+        new(apod_wallpaper.TranslationTargetLanguage.Italian, "Italian"),
+        new(apod_wallpaper.TranslationTargetLanguage.Portuguese, "Portuguese"),
+        new(apod_wallpaper.TranslationTargetLanguage.Japanese, "Japanese"),
     };
 
     private BackendHost? _backendHost;
@@ -1325,13 +1323,13 @@ public sealed partial class MainPage : Page
                 : AppStrings.Get("No text to translate");
         ToolTipService.SetToolTip(TranslateExplanationButton, translateTooltip);
 
-        ToolTipService.SetToolTip(TranslationTargetLanguageButton, AppStrings.Get("Select translation language"));
+        ToolTipService.SetToolTip(TranslationTargetLanguageButton, BuildTranslationTargetLanguageTooltip(selectedTargetLanguage));
         AutomationProperties.SetName(CopyExplanationButton, AppStrings.Get("Copy"));
         AutomationProperties.SetHelpText(CopyExplanationButton, hasDisplayedExplanationText ? AppStrings.Get("Copy") : AppStrings.Get("No text to copy"));
         AutomationProperties.SetName(TranslateExplanationButton, AppStrings.Get("Translate"));
         AutomationProperties.SetHelpText(TranslateExplanationButton, translateTooltip);
         AutomationProperties.SetName(TranslationTargetLanguageButton, AppStrings.Get("Translation language"));
-        AutomationProperties.SetHelpText(TranslationTargetLanguageButton, AppStrings.Get("Select translation language"));
+        AutomationProperties.SetHelpText(TranslationTargetLanguageButton, BuildTranslationTargetLanguageTooltip(selectedTargetLanguage));
     }
 
     private void RebuildTranslationTargetLanguageFlyout()
@@ -1341,9 +1339,12 @@ public sealed partial class MainPage : Page
         {
             var item = new MenuFlyoutItem
             {
-                Text = AppStrings.Get(option.DisplayKey) + " - " + AppStrings.Get(option.NameKey),
+                Text = option.Code,
                 Tag = option.Code,
             };
+            ToolTipService.SetToolTip(item, AppStrings.Get(option.NameKey));
+            AutomationProperties.SetName(item, option.Code);
+            AutomationProperties.SetHelpText(item, AppStrings.Get(option.NameKey));
             item.Click += TranslationTargetLanguageMenuItem_Click;
             TranslationTargetLanguageFlyout.Items.Add(item);
         }
@@ -1353,9 +1354,7 @@ public sealed partial class MainPage : Page
     {
         var selectedLanguage = GetSelectedTranslationTargetLanguage();
         var selectedOption = ResolveTranslationTargetLanguageOption(selectedLanguage);
-        TranslationTargetLanguageButton.Content = selectedOption != null
-            ? AppStrings.Get(selectedOption.DisplayKey)
-            : AppStrings.Get("TranslationTargetPlaceholder");
+        TranslationTargetLanguageButton.Content = selectedOption?.Code ?? apod_wallpaper.TranslationTargetLanguage.Russian;
     }
 
     private string GetSelectedTranslationTargetLanguage()
@@ -1372,6 +1371,15 @@ public sealed partial class MainPage : Page
         }
 
         return null;
+    }
+
+    private static string BuildTranslationTargetLanguageTooltip(string language)
+    {
+        var selectedOption = ResolveTranslationTargetLanguageOption(language);
+        var languageName = selectedOption != null
+            ? AppStrings.Get(selectedOption.NameKey)
+            : AppStrings.Get("Russian");
+        return AppStrings.Format("{0}: {1}", AppStrings.Get("Translation language"), languageName);
     }
 
     private bool TryCopyTextToClipboard(string text)
