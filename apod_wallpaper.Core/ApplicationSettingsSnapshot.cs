@@ -14,6 +14,7 @@ namespace apod_wallpaper
         public string NasaApiKey { get; set; }
         public string NasaApiKeyValidationState { get; set; }
         public string ImagesDirectoryPath { get; set; }
+        public string TranslationTargetLanguage { get; set; }
         public string LastAutoRefreshRunDate { get; set; }
         public string LastAutoRefreshAppliedDate { get; set; }
         public string LastAppliedWallpaperImagePath { get; set; }
@@ -31,6 +32,7 @@ namespace apod_wallpaper
                 NasaApiKey = NasaApiKey,
                 NasaApiKeyValidationState = NasaApiKeyValidationState,
                 ImagesDirectoryPath = ImagesDirectoryPath,
+                TranslationTargetLanguage = NormalizeTranslationTargetLanguage(TranslationTargetLanguage),
                 LastAutoRefreshRunDate = LastAutoRefreshRunDate,
                 LastAutoRefreshAppliedDate = LastAutoRefreshAppliedDate,
                 LastAppliedWallpaperImagePath = LastAppliedWallpaperImagePath,
@@ -49,6 +51,11 @@ namespace apod_wallpaper
                 return LanguageRussian;
 
             return LanguageEnglish;
+        }
+
+        public static string NormalizeTranslationTargetLanguage(string language)
+        {
+            return apod_wallpaper.TranslationTargetLanguage.Normalize(language);
         }
     }
 }

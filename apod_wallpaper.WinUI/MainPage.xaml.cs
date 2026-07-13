@@ -11,12 +11,14 @@ using System.Threading.Tasks;
 using Microsoft.UI;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.Foundation;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Streams;
 using Windows.System;
@@ -45,6 +47,20 @@ public sealed partial class MainPage : Page
         public string? LastVisualSignature { get; set; }
     }
 
+    private sealed class TranslationTargetLanguageOption
+    {
+        public TranslationTargetLanguageOption(string code, string displayKey, string nameKey)
+        {
+            Code = code;
+            DisplayKey = displayKey;
+            NameKey = nameKey;
+        }
+
+        public string Code { get; }
+        public string DisplayKey { get; }
+        public string NameKey { get; }
+    }
+
     private static readonly SolidColorBrush CalendarGreenBrush = new(ColorHelper.FromArgb(0xFF, 0x3D, 0x8C, 0x63));
     private static readonly SolidColorBrush CalendarBlueBrush = new(ColorHelper.FromArgb(0xFF, 0x2F, 0x79, 0xD9));
     private static readonly SolidColorBrush CalendarRedBrush = new(ColorHelper.FromArgb(0xFF, 0xC4, 0x5A, 0x5A));
@@ -67,6 +83,16 @@ public sealed partial class MainPage : Page
         apod_wallpaper.WallpaperStyle.Tile,
         apod_wallpaper.WallpaperStyle.Center,
         apod_wallpaper.WallpaperStyle.Span,
+    };
+    private static readonly TranslationTargetLanguageOption[] TranslationTargetLanguages =
+    {
+        new(apod_wallpaper.TranslationTargetLanguage.Russian, "TranslationTargetDisplayRu", "Russian"),
+        new(apod_wallpaper.TranslationTargetLanguage.Spanish, "TranslationTargetDisplayEs", "Spanish"),
+        new(apod_wallpaper.TranslationTargetLanguage.German, "TranslationTargetDisplayDe", "German"),
+        new(apod_wallpaper.TranslationTargetLanguage.French, "TranslationTargetDisplayFr", "French"),
+        new(apod_wallpaper.TranslationTargetLanguage.Italian, "TranslationTargetDisplayIt", "Italian"),
+        new(apod_wallpaper.TranslationTargetLanguage.Portuguese, "TranslationTargetDisplayPt", "Portuguese"),
+        new(apod_wallpaper.TranslationTargetLanguage.Japanese, "TranslationTargetDisplayJa", "Japanese"),
     };
 
     private BackendHost? _backendHost;
@@ -108,6 +134,10 @@ public sealed partial class MainPage : Page
     private static readonly SolidColorBrush AutoRefreshEnabledBrush = new(ColorHelper.FromArgb(0xFF, 0x1F, 0xB5, 0x7A));
     private static readonly SolidColorBrush AutoRefreshDisabledBrush = new(ColorHelper.FromArgb(0xFF, 0xC4, 0x5A, 0x5A));
     private static readonly SolidColorBrush AutoRefreshForegroundBrush = new(Colors.White);
+    private const int GoogleTranslateMaxUrlLength = 7800;
+    private string _originalExplanationText = string.Empty;
+    private string _displayedExplanationText = string.Empty;
+    private bool _isExplanationTranslated;
 
     public MainPage()
     {
@@ -117,6 +147,9 @@ public sealed partial class MainPage : Page
         WallpaperStyleComboBox.ItemsSource = WallpaperStyleDisplayOrder;
         EnsureCalendarGridDefinitions();
         VisibleMonthText.Text = FormatVisibleMonth(_visibleMonth);
+        RebuildTranslationTargetLanguageFlyout();
+        UpdateTranslationTargetLanguageSelector();
+        UpdateExplanationActionState();
         RefreshSelectedDateText();
         EnsureCalendarMonthBuilt(_visibleMonth);
         UpdateActionAvailability();
@@ -180,6 +213,9 @@ public sealed partial class MainPage : Page
         VisibleMonthText.Text = FormatVisibleMonth(_visibleMonth);
         RefreshSelectedDateText();
         UpdateAutoRefreshToggleVisual();
+        RebuildTranslationTargetLanguageFlyout();
+        UpdateTranslationTargetLanguageSelector();
+        UpdateExplanationActionState();
         UpdateActionAvailability();
         UpdateCalendarSelectionOnly();
         RefreshTrayStatus();
@@ -240,6 +276,83 @@ public sealed partial class MainPage : Page
         }
 
         await Launcher.LaunchUriAsync(new Uri(postUrlResult.Value));
+    }
+
+    private void CopyExplanationButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_displayedExplanationText))
+            return;
+
+        if (TryCopyTextToClipboard(_displayedExplanationText))
+        {
+            ActionStatusBar.Severity = InfoBarSeverity.Success;
+            ActionStatusBar.Title = AppStrings.Get("Copied");
+            ActionStatusBar.Message = string.Empty;
+        }
+    }
+
+    private async void TranslateExplanationButton_Click(object sender, RoutedEventArgs e)
+    {
+        var targetLanguage = GetSelectedTranslationTargetLanguage();
+        if (string.IsNullOrEmpty(targetLanguage) || string.IsNullOrWhiteSpace(_originalExplanationText))
+            return;
+
+        try
+        {
+            var urlWithText = apod_wallpaper.TranslationTargetLanguage.BuildGoogleTranslateUrl(
+                targetLanguage,
+                _originalExplanationText,
+                includeText: true);
+            var useLongUrlFallback = urlWithText.Length > GoogleTranslateMaxUrlLength;
+            var url = useLongUrlFallback
+                ? apod_wallpaper.TranslationTargetLanguage.BuildGoogleTranslateUrl(targetLanguage, string.Empty, includeText: false)
+                : urlWithText;
+
+            if (useLongUrlFallback)
+            {
+                if (!TryCopyTextToClipboard(_originalExplanationText))
+                    return;
+
+                ActionStatusBar.Severity = InfoBarSeverity.Informational;
+                ActionStatusBar.Title = AppStrings.Get("Text copied. Paste it into Google Translate.");
+                ActionStatusBar.Message = string.Empty;
+            }
+
+            var launched = await Launcher.LaunchUriAsync(new Uri(url));
+            if (!launched)
+                ShowTranslateOpenFailed();
+        }
+        catch
+        {
+            ShowTranslateOpenFailed();
+        }
+    }
+
+    private async void TranslationTargetLanguageMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem item || item.Tag is not string language || _backendHost == null || _currentSettingsSnapshot == null)
+            return;
+
+        var normalizedLanguage = apod_wallpaper.ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(language);
+        if (string.Equals(GetSelectedTranslationTargetLanguage(), normalizedLanguage, StringComparison.Ordinal))
+            return;
+
+        var updatedSnapshot = await GetFreshSettingsSnapshotAsync();
+        updatedSnapshot.TranslationTargetLanguage = normalizedLanguage;
+
+        var saveResult = await _backendHost.Backend.SaveSettingsAsync(updatedSnapshot);
+        if (!saveResult.Succeeded || saveResult.Value == null)
+        {
+            ActionStatusBar.Severity = InfoBarSeverity.Error;
+            ActionStatusBar.Title = AppStrings.Get("Settings were not saved");
+            ActionStatusBar.Message = AppStrings.GetBackendMessageOrDefault(saveResult.Error?.Message, "Unknown backend error while saving settings.");
+            return;
+        }
+
+        ApplySavedSettingsSnapshot(saveResult.Value);
+        ActionStatusBar.Severity = InfoBarSeverity.Success;
+        ActionStatusBar.Title = AppStrings.Get("Settings saved");
+        ActionStatusBar.Message = AppStrings.Get("Translation language preference saved.");
     }
 
     private async void PreviousMonthButton_Click(object sender, RoutedEventArgs e)
@@ -874,7 +987,7 @@ public sealed partial class MainPage : Page
         PreviewProgressRing.IsActive = true;
         PreviewProgressRing.Visibility = Visibility.Visible;
         PreviewTitleText.Text = AppStrings.Get("Explanation");
-        PreviewBodyText.Text = AppStrings.Get("Loading APOD preview...");
+        SetPreviewFallbackBody(AppStrings.Get("Loading APOD preview..."));
         ResetPreviewFrame();
     }
 
@@ -902,7 +1015,11 @@ public sealed partial class MainPage : Page
             ? AppStrings.Get("Success")
             : AppStrings.Get(workflow.Message);
         PreviewTitleText.Text = AppStrings.Get("Explanation");
-        PreviewBodyText.Text = ResolvePreviewBody(workflow);
+        var originalExplanation = ResolveOriginalExplanationText(workflow);
+        if (string.IsNullOrWhiteSpace(originalExplanation))
+            SetPreviewFallbackBody(ResolvePreviewBody(workflow));
+        else
+            SetExplanationBody(originalExplanation, originalExplanation);
         UpdateActionAvailability();
 
         if (preserveRenderedPreview)
@@ -954,7 +1071,7 @@ public sealed partial class MainPage : Page
         PreviewLocationText.Text = AppStrings.Get("No preview image");
         PreviewMessageText.Text = AppStrings.GetBackendMessageOrDefault(workflow.Message, "Unavailable");
         PreviewTitleText.Text = AppStrings.Get("Explanation");
-        PreviewBodyText.Text = ResolveUnavailablePreviewBody(workflow);
+        SetPreviewFallbackBody(ResolveUnavailablePreviewBody(workflow));
         UpdateActionAvailability();
 
         PreviewPlaceholderTitleText.Text = AppStrings.Get("No image preview");
@@ -981,7 +1098,7 @@ public sealed partial class MainPage : Page
         PreviewLocationText.Text = AppStrings.Get("No preview image");
         PreviewMessageText.Text = message;
         PreviewTitleText.Text = AppStrings.Get("Explanation");
-        PreviewBodyText.Text = AppStrings.Get("We couldn't load this preview right now.");
+        SetPreviewFallbackBody(AppStrings.Get("We couldn't load this preview right now."));
         UpdateActionAvailability();
 
         PreviewPlaceholderTitleText.Text = AppStrings.Get("Preview failed");
@@ -1165,6 +1282,122 @@ public sealed partial class MainPage : Page
 
         if (!hasSuccessfulPreview && !_isApplyingWallpaperAction)
             WallpaperStyleComboBox.IsEnabled = hasBackend && _currentSettingsSnapshot != null;
+
+        UpdateExplanationActionState();
+    }
+
+    private void SetExplanationBody(string displayedText, string originalText, bool isTranslated = false)
+    {
+        _originalExplanationText = (originalText ?? string.Empty).Trim();
+        _displayedExplanationText = (displayedText ?? string.Empty).Trim();
+        _isExplanationTranslated = isTranslated && !string.IsNullOrWhiteSpace(_displayedExplanationText);
+        PreviewBodyText.Text = _displayedExplanationText;
+        UpdateExplanationActionState();
+    }
+
+    private void SetPreviewFallbackBody(string text)
+    {
+        _originalExplanationText = string.Empty;
+        _displayedExplanationText = string.Empty;
+        _isExplanationTranslated = false;
+        PreviewBodyText.Text = text;
+        UpdateExplanationActionState();
+    }
+
+    private void UpdateExplanationActionState()
+    {
+        var hasDisplayedExplanationText = !string.IsNullOrWhiteSpace(_displayedExplanationText);
+        var hasOriginalExplanationText = !string.IsNullOrWhiteSpace(_originalExplanationText);
+        var selectedTargetLanguage = GetSelectedTranslationTargetLanguage();
+        var hasSelectedTargetLanguage = !string.IsNullOrEmpty(selectedTargetLanguage);
+
+        CopyExplanationButton.IsEnabled = hasDisplayedExplanationText;
+        TranslateExplanationButton.IsEnabled = hasOriginalExplanationText && hasSelectedTargetLanguage;
+
+        ToolTipService.SetToolTip(
+            CopyExplanationButton,
+            hasDisplayedExplanationText ? AppStrings.Get("Copy") : AppStrings.Get("No text to copy"));
+
+        var translateTooltip = !hasSelectedTargetLanguage
+            ? AppStrings.Get("Select a translation language first")
+            : hasOriginalExplanationText
+                ? AppStrings.Get("Open in Google Translate")
+                : AppStrings.Get("No text to translate");
+        ToolTipService.SetToolTip(TranslateExplanationButton, translateTooltip);
+
+        ToolTipService.SetToolTip(TranslationTargetLanguageButton, AppStrings.Get("Select translation language"));
+        AutomationProperties.SetName(CopyExplanationButton, AppStrings.Get("Copy"));
+        AutomationProperties.SetHelpText(CopyExplanationButton, hasDisplayedExplanationText ? AppStrings.Get("Copy") : AppStrings.Get("No text to copy"));
+        AutomationProperties.SetName(TranslateExplanationButton, AppStrings.Get("Translate"));
+        AutomationProperties.SetHelpText(TranslateExplanationButton, translateTooltip);
+        AutomationProperties.SetName(TranslationTargetLanguageButton, AppStrings.Get("Translation language"));
+        AutomationProperties.SetHelpText(TranslationTargetLanguageButton, AppStrings.Get("Select translation language"));
+    }
+
+    private void RebuildTranslationTargetLanguageFlyout()
+    {
+        TranslationTargetLanguageFlyout.Items.Clear();
+        foreach (var option in TranslationTargetLanguages)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = AppStrings.Get(option.DisplayKey) + " - " + AppStrings.Get(option.NameKey),
+                Tag = option.Code,
+            };
+            item.Click += TranslationTargetLanguageMenuItem_Click;
+            TranslationTargetLanguageFlyout.Items.Add(item);
+        }
+    }
+
+    private void UpdateTranslationTargetLanguageSelector()
+    {
+        var selectedLanguage = GetSelectedTranslationTargetLanguage();
+        var selectedOption = ResolveTranslationTargetLanguageOption(selectedLanguage);
+        TranslationTargetLanguageButton.Content = selectedOption != null
+            ? AppStrings.Get(selectedOption.DisplayKey)
+            : AppStrings.Get("TranslationTargetPlaceholder");
+    }
+
+    private string GetSelectedTranslationTargetLanguage()
+    {
+        return apod_wallpaper.ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(_currentSettingsSnapshot?.TranslationTargetLanguage);
+    }
+
+    private static TranslationTargetLanguageOption? ResolveTranslationTargetLanguageOption(string language)
+    {
+        foreach (var option in TranslationTargetLanguages)
+        {
+            if (string.Equals(option.Code, language, StringComparison.Ordinal))
+                return option;
+        }
+
+        return null;
+    }
+
+    private bool TryCopyTextToClipboard(string text)
+    {
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(text);
+            Clipboard.SetContent(package);
+            Clipboard.Flush();
+            return true;
+        }
+        catch
+        {
+            ActionStatusBar.Severity = InfoBarSeverity.Error;
+            ActionStatusBar.Title = AppStrings.Get("CopyFailed");
+            ActionStatusBar.Message = string.Empty;
+            return false;
+        }
+    }
+
+    private void ShowTranslateOpenFailed()
+    {
+        ActionStatusBar.Severity = InfoBarSeverity.Error;
+        ActionStatusBar.Title = AppStrings.Get("Could not open Google Translate");
+        ActionStatusBar.Message = string.Empty;
     }
 
     private async Task ExecuteWallpaperActionAsync(
@@ -1302,6 +1535,7 @@ public sealed partial class MainPage : Page
             _initialStateSnapshot.Settings = savedSettings.Clone();
 
         SetAutoRefreshToggleState(savedSettings.AutoRefreshEnabled);
+        UpdateTranslationTargetLanguageSelector();
         UpdateActionAvailability();
     }
 
@@ -1854,10 +2088,18 @@ public sealed partial class MainPage : Page
 
     private static string ResolvePreviewBody(apod_wallpaper.ApodWorkflowResult workflow)
     {
-        if (workflow.Entry != null && !string.IsNullOrWhiteSpace(workflow.Entry.Explanation))
-            return workflow.Entry.Explanation.Trim();
+        var explanation = ResolveOriginalExplanationText(workflow);
+        if (!string.IsNullOrWhiteSpace(explanation))
+            return explanation;
 
         return AppStrings.Get("Preview ready.");
+    }
+
+    private static string ResolveOriginalExplanationText(apod_wallpaper.ApodWorkflowResult workflow)
+    {
+        return workflow.Entry != null && !string.IsNullOrWhiteSpace(workflow.Entry.Explanation)
+            ? workflow.Entry.Explanation.Trim()
+            : string.Empty;
     }
 
     private static string ResolveUnavailablePreviewBody(apod_wallpaper.ApodWorkflowResult workflow)
