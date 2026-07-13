@@ -1354,7 +1354,7 @@ public sealed partial class MainPage : Page
     {
         var selectedLanguage = GetSelectedTranslationTargetLanguage();
         var selectedOption = ResolveTranslationTargetLanguageOption(selectedLanguage);
-        TranslationTargetLanguageButton.Content = selectedOption?.Code ?? apod_wallpaper.TranslationTargetLanguage.Russian;
+        TranslationTargetLanguageText.Text = selectedOption?.Code ?? apod_wallpaper.TranslationTargetLanguage.Russian;
     }
 
     private string GetSelectedTranslationTargetLanguage()

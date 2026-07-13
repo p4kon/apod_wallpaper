@@ -306,6 +306,7 @@
                                     Padding="6,0"
                                     AutomationProperties.Name="Translation language"
                                     ToolTipService.ToolTip="Select translation language">
+                                    <TextBlock x:Name="TranslationTargetLanguageText" />
                                     <Button.Flyout>
                                         <MenuFlyout x:Name="TranslationTargetLanguageFlyout" />
                                     </Button.Flyout>
