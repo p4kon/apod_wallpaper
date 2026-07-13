@@ -26,9 +26,9 @@ The target translation language is independent from the application UI language.
 
 ## Behavioral Requirements
 
-- Default target translation language is empty.
+- Default target translation language is `ru`.
 - Supported target languages: `ru`, `es`, `de`, `fr`, `it`, `pt`, `ja`.
-- Invalid saved target language is normalized to empty.
+- Invalid saved target language is normalized to `ru`.
 - Translation source language is always `en`.
 - The original APOD explanation remains the master text.
 - The displayed explanation text is separate from the original text for future internal translation.

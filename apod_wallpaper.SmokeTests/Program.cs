@@ -915,10 +915,16 @@ Bright clusters mark newborn stars.
             Assert(!appStringsSource.Contains("LanguageSystem"), "AppStrings must not use the removed System language.");
             Assert(!appStringsSource.Contains("CultureInfo.CurrentUICulture.TwoLetterISOLanguageName"), "AppStrings must not choose UI language from CurrentUICulture.");
             Assert(appStringKeys.Contains("CopyFailed"), "AppStrings must contain CopyFailed.");
-            Assert(appStringKeys.Contains("TranslationTargetPlaceholder"), "AppStrings must contain TranslationTargetPlaceholder.");
+            Assert(appStringKeys.Contains("Translation language"), "AppStrings must contain the translation language tooltip prefix.");
+            foreach (var languageName in new[] { "Russian", "Spanish", "German", "French", "Italian", "Portuguese", "Japanese" })
+                Assert(appStringKeys.Contains(languageName), "AppStrings must contain language name: " + languageName);
 
             foreach (var xamlPath in Directory.GetFiles(winUiDirectory, "*.xaml"))
                 AssertXamlLiteralsHaveKeys(xamlPath, appStringKeys);
+
+            var mainPageSource = File.ReadAllText(Path.Combine(winUiDirectory, "MainPage.xaml.cs"));
+            Assert(!mainPageSource.Contains("TranslationTargetDisplay"), "Translation target display must not use internal localization keys.");
+            Assert(!mainPageSource.Contains("TranslationTargetPlaceholder"), "Translation target placeholder key must not appear in MainPage UI code.");
 
             foreach (var path in Directory.GetFiles(winUiDirectory, "*.cs").Concat(Directory.GetFiles(winUiDirectory, "*.xaml")))
             {
@@ -944,12 +950,15 @@ Bright clusters mark newborn stars.
 
         private static void TranslationTargetLanguageNormalizesValues()
         {
-            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize(null) == string.Empty, "Expected null target language to normalize to empty.");
-            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize(string.Empty) == string.Empty, "Expected empty target language to normalize to empty.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize(null) == apod_wallpaper.TranslationTargetLanguage.Russian, "Expected null target language to normalize to ru.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize(string.Empty) == apod_wallpaper.TranslationTargetLanguage.Russian, "Expected empty target language to normalize to ru.");
             Assert(apod_wallpaper.TranslationTargetLanguage.Normalize(" RU ") == apod_wallpaper.TranslationTargetLanguage.Russian, "Expected RU to normalize to ru.");
             Assert(apod_wallpaper.TranslationTargetLanguage.Normalize("es") == apod_wallpaper.TranslationTargetLanguage.Spanish, "Expected es to remain valid.");
-            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize("en") == string.Empty, "Expected English target language to be unsupported.");
-            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize("unknown") == string.Empty, "Expected unknown target language to normalize to empty.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize("en") == apod_wallpaper.TranslationTargetLanguage.Russian, "Expected English target language to normalize to ru.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize("unknown") == apod_wallpaper.TranslationTargetLanguage.Russian, "Expected unknown target language to normalize to ru.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.GetDisplayCode("ru") == "ru", "Expected ru display code.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.GetDisplayCode("es") == "es", "Expected es display code.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.GetDisplayCode("ja") == "ja", "Expected ja display code.");
         }
 
         private static void GoogleTranslateUrlBuilderEncodesExplanation()
@@ -1081,7 +1090,7 @@ Bright clusters mark newborn stars.
                 NasaApiKey = "DEMO_KEY",
                 NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Unknown.ToString(),
                 ImagesDirectoryPath = string.Empty,
-                TranslationTargetLanguage = string.Empty,
+                TranslationTargetLanguage = apod_wallpaper.TranslationTargetLanguage.Russian,
                 LastAutoRefreshRunDate = string.Empty,
                 LastAutoRefreshAppliedDate = string.Empty,
             };

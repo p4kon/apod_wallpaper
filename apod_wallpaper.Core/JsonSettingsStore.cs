@@ -87,7 +87,7 @@ namespace apod_wallpaper
                 StartWithWindows = true,
                 MinimizeToTrayOnClose = true,
                 Language = ApplicationSettingsSnapshot.LanguageEnglish,
-                TranslationTargetLanguage = string.Empty,
+                TranslationTargetLanguage = apod_wallpaper.TranslationTargetLanguage.Russian,
                 NasaApiKeyValidationState = ApiKeyValidationState.Unknown.ToString(),
                 ImagesDirectoryPath = string.Empty,
                 LastAutoRefreshRunDate = string.Empty,
