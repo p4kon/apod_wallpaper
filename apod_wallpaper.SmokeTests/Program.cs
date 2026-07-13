@@ -63,6 +63,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("Backend facade does not expose diagnostics contract", BackendFacadeDoesNotExposeDiagnosticsContract);
                 Run("WallpaperApplied subscription disposes cleanly", WallpaperAppliedSubscriptionDisposesCleanly);
                 Run("WinUI localization literals are covered", WinUiLocalizationLiteralsAreCovered);
+                Run("Translation target language normalizes values", TranslationTargetLanguageNormalizesValues);
+                Run("Google Translate URL builder encodes explanation", GoogleTranslateUrlBuilderEncodesExplanation);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -664,6 +666,7 @@ Bright clusters mark newborn stars.
                     StartWithWindows = false,
                     NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Valid.ToString(),
                     ImagesDirectoryPath = @"C:\temp\images",
+                    TranslationTargetLanguage = apod_wallpaper.TranslationTargetLanguage.Russian,
                     LastAutoRefreshRunDate = "2026-04-29",
                     LastAutoRefreshAppliedDate = "2026-04-28",
                 };
@@ -682,6 +685,7 @@ Bright clusters mark newborn stars.
                 Assert(loaded.AutoRefreshEnabled, "Expected auto-refresh flag to round-trip through settings.json.");
                 Assert(!loaded.StartWithWindows, "Expected start-with-Windows flag to round-trip through settings.json.");
                 Assert(loaded.ImagesDirectoryPath == @"C:\temp\images", "Expected images directory to round-trip through settings.json.");
+                Assert(loaded.TranslationTargetLanguage == apod_wallpaper.TranslationTargetLanguage.Russian, "Expected translation target language to round-trip through settings.json.");
             }
             finally
             {
@@ -910,6 +914,8 @@ Bright clusters mark newborn stars.
 
             Assert(!appStringsSource.Contains("LanguageSystem"), "AppStrings must not use the removed System language.");
             Assert(!appStringsSource.Contains("CultureInfo.CurrentUICulture.TwoLetterISOLanguageName"), "AppStrings must not choose UI language from CurrentUICulture.");
+            Assert(appStringKeys.Contains("CopyFailed"), "AppStrings must contain CopyFailed.");
+            Assert(appStringKeys.Contains("TranslationTargetPlaceholder"), "AppStrings must contain TranslationTargetPlaceholder.");
 
             foreach (var xamlPath in Directory.GetFiles(winUiDirectory, "*.xaml"))
                 AssertXamlLiteralsHaveKeys(xamlPath, appStringKeys);
@@ -934,6 +940,36 @@ Bright clusters mark newborn stars.
 
                 AssertNoDirectUserVisibleAssignments(path, text);
             }
+        }
+
+        private static void TranslationTargetLanguageNormalizesValues()
+        {
+            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize(null) == string.Empty, "Expected null target language to normalize to empty.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize(string.Empty) == string.Empty, "Expected empty target language to normalize to empty.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize(" RU ") == apod_wallpaper.TranslationTargetLanguage.Russian, "Expected RU to normalize to ru.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize("es") == apod_wallpaper.TranslationTargetLanguage.Spanish, "Expected es to remain valid.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize("en") == string.Empty, "Expected English target language to be unsupported.");
+            Assert(apod_wallpaper.TranslationTargetLanguage.Normalize("unknown") == string.Empty, "Expected unknown target language to normalize to empty.");
+        }
+
+        private static void GoogleTranslateUrlBuilderEncodesExplanation()
+        {
+            var text = "Stars & \"dust\"" + Environment.NewLine + "Unicode: Привет";
+            var url = apod_wallpaper.TranslationTargetLanguage.BuildGoogleTranslateUrl(
+                apod_wallpaper.TranslationTargetLanguage.Russian,
+                text,
+                includeText: true);
+
+            Assert(url.StartsWith("https://translate.google.com/?sl=en&tl=ru&text=", StringComparison.Ordinal), "Expected Google Translate URL to use en source and ru target.");
+            Assert(url.EndsWith("&op=translate", StringComparison.Ordinal), "Expected Google Translate URL to use translate mode.");
+            Assert(url.Contains("Stars%20%26%20%22dust%22"), "Expected spaces, ampersands, and quotes to be URL encoded.");
+            Assert(url.Contains("%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"), "Expected Unicode text to be URL encoded.");
+
+            var urlWithoutText = apod_wallpaper.TranslationTargetLanguage.BuildGoogleTranslateUrl(
+                apod_wallpaper.TranslationTargetLanguage.Japanese,
+                text,
+                includeText: false);
+            Assert(urlWithoutText == "https://translate.google.com/?sl=en&tl=ja&op=translate", "Expected fallback URL without text payload.");
         }
 
         private static string ResolveRepositoryRoot()
@@ -1045,6 +1081,7 @@ Bright clusters mark newborn stars.
                 NasaApiKey = "DEMO_KEY",
                 NasaApiKeyValidationState = apod_wallpaper.ApiKeyValidationState.Unknown.ToString(),
                 ImagesDirectoryPath = string.Empty,
+                TranslationTargetLanguage = string.Empty,
                 LastAutoRefreshRunDate = string.Empty,
                 LastAutoRefreshAppliedDate = string.Empty,
             };

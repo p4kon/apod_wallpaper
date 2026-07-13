@@ -44,6 +44,7 @@ namespace apod_wallpaper
                         snapshot.MinimizeToTrayOnClose = true;
 
                     snapshot.Language = ApplicationSettingsSnapshot.NormalizeLanguage(snapshot.Language);
+                    snapshot.TranslationTargetLanguage = ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(snapshot.TranslationTargetLanguage);
 
                     return snapshot;
                 }
@@ -86,6 +87,7 @@ namespace apod_wallpaper
                 StartWithWindows = true,
                 MinimizeToTrayOnClose = true,
                 Language = ApplicationSettingsSnapshot.LanguageEnglish,
+                TranslationTargetLanguage = string.Empty,
                 NasaApiKeyValidationState = ApiKeyValidationState.Unknown.ToString(),
                 ImagesDirectoryPath = string.Empty,
                 LastAutoRefreshRunDate = string.Empty,

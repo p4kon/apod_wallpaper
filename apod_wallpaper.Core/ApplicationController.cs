@@ -370,6 +370,7 @@ namespace apod_wallpaper
             settings.NasaApiKey = GetStoredApiKeyForDisplay();
             settings.NasaApiKeyValidationState = NormalizeValidationState(settings.NasaApiKeyValidationState);
             settings.Language = ApplicationSettingsSnapshot.NormalizeLanguage(settings.Language);
+            settings.TranslationTargetLanguage = ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(settings.TranslationTargetLanguage);
             settings.ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath);
             settings.LastAutoRefreshRunDate = Normalize(settings.LastAutoRefreshRunDate);
             settings.LastAutoRefreshAppliedDate = Normalize(settings.LastAutoRefreshAppliedDate);
@@ -402,6 +403,7 @@ namespace apod_wallpaper
                 StartWithWindows = settings.StartWithWindows,
                 MinimizeToTrayOnClose = settings.MinimizeToTrayOnClose,
                 Language = ApplicationSettingsSnapshot.NormalizeLanguage(settings.Language),
+                TranslationTargetLanguage = ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(settings.TranslationTargetLanguage),
                 NasaApiKeyValidationState = effectiveValidationState,
                 ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath),
                 LastAutoRefreshRunDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
