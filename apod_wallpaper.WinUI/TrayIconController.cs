@@ -85,6 +85,7 @@ internal sealed class TrayIconController : IDisposable
         ShowWindow(_windowHandle, SwRestore);
         SetForegroundWindow(_windowHandle);
         _status.MarkWindowRestored(reason);
+        _owner.NotifyRestoredFromTray();
     }
 
     public void AllowClose()

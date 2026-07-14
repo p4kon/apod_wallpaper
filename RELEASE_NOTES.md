@@ -1,3 +1,35 @@
+# APOD Wallpaper 1.2.1
+
+This release adds a responsive APOD availability check for the calendar.
+
+## What's changed
+
+- Added a quick read-only check for today's NASA APOD HTML page when Calendar/MainPage is opened, restored, or reactivated.
+- If today's APOD page is already published, the calendar can unlock today as `unchecked` without waiting for the normal background refresh path.
+- The probe does not download images, apply wallpaper, save settings, or run scheduler/apply/download logic.
+- Scheduler and wallpaper automation behavior is unchanged.
+- Updated application version to `1.2.1.0`.
+
+## Downloads
+
+- `APODWallpaper-1.2.1.0-win-x64-setup.exe`
+  Recommended for most users. Installs APOD Wallpaper, creates shortcuts, bundles Windows App Runtime 2.0.1, and supports upgrading over previous installations.
+
+- `APODWallpaper-1.2.1.0-win-x64-portable.zip`
+  Portable version. Extract the whole archive first, then run `APODWallpaper.exe`.
+
+- `APODWallpaper-1.2.1.0-win-x64-portable.zip.sha256`
+  SHA256 checksum for the portable zip.
+
+## Notes
+
+- Windows 10/11 x64.
+- Setup installer is the safest choice for clean PCs and upgrades.
+- Portable builds keep app binaries in `app`, user data in `data`, and downloaded images in `images`.
+- Portable builds include the .NET desktop runtime files needed by the app, but WinUI 3 still requires Windows App Runtime on the target machine.
+- The build is unsigned; Windows SmartScreen may show a warning until a trusted signing certificate is available.
+- APOD Wallpaper is an independent app and is not affiliated with, endorsed by, or sponsored by NASA.
+
 # APOD Wallpaper 1.2.0
 
 This release adds full English / Russian localization, improves the APOD explanation workflow, and makes installer upgrades safer when APOD Wallpaper is already running.

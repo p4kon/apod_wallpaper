@@ -133,9 +133,14 @@ public sealed partial class MainPage : Page
     private static readonly SolidColorBrush AutoRefreshDisabledBrush = new(ColorHelper.FromArgb(0xFF, 0xC4, 0x5A, 0x5A));
     private static readonly SolidColorBrush AutoRefreshForegroundBrush = new(Colors.White);
     private const int GoogleTranslateMaxUrlLength = 7800;
+    private static readonly TimeSpan TodayAvailabilityProbeThrottle = TimeSpan.FromMinutes(5);
     private string _originalExplanationText = string.Empty;
     private string _displayedExplanationText = string.Empty;
     private bool _isExplanationTranslated;
+    private DateTime? _transientAvailableApodDate;
+    private DateTime? _lastTodayAvailabilityProbeDate;
+    private DateTime _lastTodayAvailabilityProbeUtc = DateTime.MinValue;
+    private Task? _todayAvailabilityProbeTask;
 
     public MainPage()
     {
@@ -176,6 +181,7 @@ public sealed partial class MainPage : Page
         if (_initialStateSnapshot != null)
         {
             await RefreshSettingsSnapshotPreservingCalendarAsync();
+            QueueTodayAvailabilityProbe();
             return;
         }
 
@@ -187,6 +193,7 @@ public sealed partial class MainPage : Page
 
         await EnsureWallpaperAppliedSubscriptionAsync();
         await RefreshStateAsync();
+        QueueTodayAvailabilityProbe();
     }
 
     private void MainPage_ActualThemeChanged(FrameworkElement sender, object args)
@@ -203,6 +210,12 @@ public sealed partial class MainPage : Page
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
         RefreshLocalizedText();
+        QueueTodayAvailabilityProbe();
+    }
+
+    internal void NotifyHostReturnedToCalendar()
+    {
+        QueueTodayAvailabilityProbe();
     }
 
     private void RefreshLocalizedText()
@@ -395,6 +408,7 @@ public sealed partial class MainPage : Page
         await Task.WhenAll(
             LoadVisibleMonthAsync(),
             LoadPreviewForSelectedDateAsync());
+        QueueTodayAvailabilityProbe();
     }
 
     private void ApplyInitialState(apod_wallpaper.ApplicationInitialStateSnapshot snapshot)
@@ -566,6 +580,7 @@ public sealed partial class MainPage : Page
         RefreshSelectedDateText();
 
         var monthStart = monthState.Month;
+        var effectiveLatestPublishedDate = ResolveEffectiveLatestPublishedDate(monthState.LatestPublishedDate);
         var daysInMonth = DateTime.DaysInMonth(monthStart.Year, monthStart.Month);
         var changedVisuals = new List<(CalendarDayVisual Visual, apod_wallpaper.ApodCalendarDayState? DayState)>();
 
@@ -576,7 +591,7 @@ public sealed partial class MainPage : Page
 
             if (_calendarDayVisuals.TryGetValue(date.Date, out var visual))
             {
-                if (NeedsCalendarDayUpdate(visual, dayState, monthState.LatestPublishedDate, isLoading: false))
+                if (NeedsCalendarDayUpdate(visual, dayState, effectiveLatestPublishedDate, isLoading: false))
                     changedVisuals.Add((visual, dayState));
             }
         }
@@ -584,7 +599,7 @@ public sealed partial class MainPage : Page
         if (!progressive || changedVisuals.Count <= 1)
         {
             foreach (var changedVisual in changedVisuals)
-                UpdateCalendarDayVisual(changedVisual.Visual, changedVisual.Visual.Date, changedVisual.DayState, monthState.LatestPublishedDate, isLoading: false);
+                UpdateCalendarDayVisual(changedVisual.Visual, changedVisual.Visual.Date, changedVisual.DayState, effectiveLatestPublishedDate, isLoading: false);
 
             return;
         }
@@ -594,7 +609,7 @@ public sealed partial class MainPage : Page
             if (requestVersion != _monthRequestVersion)
                 return;
 
-            UpdateCalendarDayVisual(changedVisual.Visual, changedVisual.Visual.Date, changedVisual.DayState, monthState.LatestPublishedDate, isLoading: false);
+            UpdateCalendarDayVisual(changedVisual.Visual, changedVisual.Visual.Date, changedVisual.DayState, effectiveLatestPublishedDate, isLoading: false);
             await Task.Delay(WarmupVisualStepDelayMs);
         }
     }
@@ -705,6 +720,71 @@ public sealed partial class MainPage : Page
             isLoading && !isFuture
                 ? date.ToString("dddd, dd MMMM yyyy", AppStrings.DateCulture) + Environment.NewLine + AppStrings.Get("Loading calendar state")
                 : BuildDayTooltip(date, isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown));
+    }
+
+    private void QueueTodayAvailabilityProbe()
+    {
+        if (_backendHost == null)
+            return;
+
+        var today = DateTime.Today;
+        if (!IsCurrentMonth(_visibleMonth))
+            return;
+
+        var existingTask = _todayAvailabilityProbeTask;
+        if (existingTask != null && !existingTask.IsCompleted)
+            return;
+
+        if (apod_wallpaper.ApodCalendarAvailability.ShouldThrottleProbe(
+            today,
+            _lastTodayAvailabilityProbeDate,
+            _lastTodayAvailabilityProbeUtc,
+            DateTime.UtcNow,
+            TodayAvailabilityProbeThrottle))
+            return;
+
+        _todayAvailabilityProbeTask = MaybeProbeTodayAvailabilityAsync();
+    }
+
+    private async Task MaybeProbeTodayAvailabilityAsync()
+    {
+        try
+        {
+            await ProbeTodayAvailabilityCoreAsync();
+        }
+        catch
+        {
+            // Best-effort UI responsiveness probe only. Scheduler/download/apply paths own real work.
+        }
+    }
+
+    private async Task ProbeTodayAvailabilityCoreAsync()
+    {
+        if (_backendHost == null)
+            return;
+
+        var today = DateTime.Today;
+        _lastTodayAvailabilityProbeDate = today;
+        _lastTodayAvailabilityProbeUtc = DateTime.UtcNow;
+        var result = await _backendHost.Backend.ProbeApodPageAvailabilityAsync(today);
+        if (!result.Succeeded || result.Value == null || !result.Value.IsAvailable)
+            return;
+
+        var previousTransientDate = _transientAvailableApodDate;
+        _transientAvailableApodDate = today;
+        if (previousTransientDate.HasValue && previousTransientDate.Value.Date >= today)
+            return;
+
+        await RefreshCalendarAfterAvailabilityProbeAsync(today);
+    }
+
+    private async Task RefreshCalendarAfterAvailabilityProbeAsync(DateTime availableDate)
+    {
+        var availableMonth = new DateTime(availableDate.Year, availableDate.Month, 1);
+        if (_currentMonthState != null && _currentMonthState.Month.Date == availableMonth.Date)
+            await ApplyCalendarMonthStateAsync(_currentMonthState, progressive: false, _monthRequestVersion);
+        else if (_visibleMonth.Date == availableMonth.Date)
+            UpdateCalendarSelectionOnly();
     }
 
     private static SolidColorBrush ResolveCalendarUnknownBrush(bool isLightTheme)
@@ -2179,7 +2259,7 @@ public sealed partial class MainPage : Page
 
     private void SetCalendarToLoadingState(DateTime month)
     {
-        var latestPublishedDate = GetLoadingLatestPublishedDate(month);
+        var latestPublishedDate = ResolveEffectiveLatestPublishedDate(GetLoadingLatestPublishedDate(month));
         foreach (var visual in _calendarDayVisuals.Values)
         {
             UpdateCalendarDayVisual(visual, visual.Date, dayState: null, latestPublishedDate, isLoading: true);
@@ -2190,11 +2270,17 @@ public sealed partial class MainPage : Page
     {
         foreach (var visual in _calendarDayVisuals.Values)
         {
-            if (!NeedsCalendarDayUpdate(visual, visual.CurrentDayState, visual.LatestPublishedDate, visual.IsLoading))
+            var latestPublishedDate = ResolveEffectiveLatestPublishedDate(visual.LatestPublishedDate);
+            if (!NeedsCalendarDayUpdate(visual, visual.CurrentDayState, latestPublishedDate, visual.IsLoading))
                 continue;
 
-            UpdateCalendarDayVisual(visual, visual.Date, visual.CurrentDayState, visual.LatestPublishedDate, visual.IsLoading);
+            UpdateCalendarDayVisual(visual, visual.Date, visual.CurrentDayState, latestPublishedDate, visual.IsLoading);
         }
+    }
+
+    private DateTime ResolveEffectiveLatestPublishedDate(DateTime latestPublishedDate)
+    {
+        return apod_wallpaper.ApodCalendarAvailability.ResolveEffectiveLatestPublishedDate(latestPublishedDate, _transientAvailableApodDate);
     }
 
     private bool NeedsCalendarDayUpdate(

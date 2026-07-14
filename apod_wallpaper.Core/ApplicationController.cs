@@ -14,6 +14,7 @@ namespace apod_wallpaper
         private readonly Scheduler _scheduler;
         private readonly ApodWorkflowService _workflowService;
         private readonly ApodCalendarStateService _calendarStateService;
+        private readonly ApodPageAvailabilityProbe _pageAvailabilityProbe;
         private readonly object _apiKeyValidationSync = new object();
         private int _scheduledUpdateInProgress;
         private bool _isInitialized;
@@ -32,6 +33,7 @@ namespace apod_wallpaper
             _scheduler = new Scheduler();
             _workflowService = new ApodWorkflowService();
             _calendarStateService = new ApodCalendarStateService(_workflowService);
+            _pageAvailabilityProbe = new ApodPageAvailabilityProbe();
         }
 
         internal Scheduler Scheduler
@@ -325,6 +327,14 @@ namespace apod_wallpaper
                 () => Task.Run(() => _calendarStateService.GetMonthState(month, refreshMissingDates, refreshMode)),
                 OperationErrorCode.WorkflowFailed,
                 "Unable to build calendar month state.");
+        }
+
+        public Task<OperationResult<ApodPageAvailabilityProbeResult>> ProbeApodPageAvailabilityAsync(DateTime date)
+        {
+            return ExecuteOperationAsync(
+                () => _pageAvailabilityProbe.ProbeAsync(date.Date, TimeSpan.FromSeconds(2)),
+                OperationErrorCode.WorkflowFailed,
+                "Unable to probe the NASA APOD page availability.");
         }
 
         public Task<OperationResult> RefreshLocalImageIndexAsync()
