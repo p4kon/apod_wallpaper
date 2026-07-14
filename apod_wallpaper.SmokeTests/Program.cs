@@ -65,6 +65,12 @@ namespace apod_wallpaper.SmokeTests
                 Run("WinUI localization literals are covered", WinUiLocalizationLiteralsAreCovered);
                 Run("Translation target language normalizes values", TranslationTargetLanguageNormalizesValues);
                 Run("Google Translate URL builder encodes explanation", GoogleTranslateUrlBuilderEncodesExplanation);
+                Run("APOD page URL builder is deterministic", ApodPageUrlBuilderIsDeterministic);
+                Run("APOD availability probe evaluates redirects", ApodAvailabilityProbeEvaluatesRedirects);
+                Run("APOD availability probe retries forbidden HEAD with GET", ApodAvailabilityProbeRetriesForbiddenHeadWithGet);
+                Run("Calendar availability transient override unlocks today only", CalendarAvailabilityTransientOverrideUnlocksTodayOnly);
+                Run("Calendar availability throttle resets when today changes", CalendarAvailabilityThrottleResetsWhenTodayChanges);
+                Run("APOD availability probe source avoids workflow side effects", ApodAvailabilityProbeSourceAvoidsWorkflowSideEffects);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -119,6 +125,112 @@ namespace apod_wallpaper.SmokeTests
 
                 if (!secondRun.Wait(TimeSpan.FromSeconds(2)))
                     throw new InvalidOperationException("Scheduler did not restart after stopping inside the callback.");
+            }
+        }
+
+        private static void ApodPageUrlBuilderIsDeterministic()
+        {
+            var url = apod_wallpaper.ApodPageUrl.BuildUrl(new DateTime(2026, 7, 14));
+            Assert(url == "https://apod.nasa.gov/apod/ap260714.html", "Expected APOD HTML URL to use apYYMMDD.html.");
+
+            var firstApodUrl = apod_wallpaper.ApodPageUrl.BuildUrl(new DateTime(1995, 6, 16));
+            Assert(firstApodUrl == "https://apod.nasa.gov/apod/ap950616.html", "Expected APOD HTML URL to preserve two-digit year formatting.");
+        }
+
+        private static void ApodAvailabilityProbeEvaluatesRedirects()
+        {
+            var requestedDate = new DateTime(2026, 7, 15);
+            var expectedUrl = apod_wallpaper.ApodPageUrl.BuildUrl(requestedDate);
+
+            var available = apod_wallpaper.ApodPageAvailabilityProbe.EvaluateResponse(
+                requestedDate,
+                expectedUrl,
+                System.Net.HttpStatusCode.OK,
+                "HEAD",
+                null,
+                new Uri(expectedUrl));
+            Assert(available.IsAvailable, "Expected exact 200 response to be available.");
+
+            var redirected = apod_wallpaper.ApodPageAvailabilityProbe.EvaluateResponse(
+                requestedDate,
+                expectedUrl,
+                System.Net.HttpStatusCode.Redirect,
+                "HEAD",
+                new Uri("/apod/ap260714.html", UriKind.Relative),
+                new Uri(expectedUrl));
+            Assert(redirected.IsUnavailable, "Expected redirect to another APOD date to be unavailable.");
+            Assert(!redirected.IsAvailable, "Redirect to another date must not unlock today.");
+            Assert(!apod_wallpaper.ApodPageAvailabilityProbe.ShouldRetryWithGet(redirected), "Redirect responses must not retry as GET.");
+        }
+
+        private static void ApodAvailabilityProbeRetriesForbiddenHeadWithGet()
+        {
+            var requestedDate = new DateTime(2026, 7, 15);
+            var expectedUrl = apod_wallpaper.ApodPageUrl.BuildUrl(requestedDate);
+
+            var forbiddenHead = apod_wallpaper.ApodPageAvailabilityProbe.EvaluateResponse(
+                requestedDate,
+                expectedUrl,
+                System.Net.HttpStatusCode.Forbidden,
+                "HEAD",
+                null,
+                new Uri(expectedUrl));
+            Assert(apod_wallpaper.ApodPageAvailabilityProbe.ShouldRetryWithGet(forbiddenHead), "Expected HEAD 403 to retry with GET.");
+
+            var notFoundHead = apod_wallpaper.ApodPageAvailabilityProbe.EvaluateResponse(
+                requestedDate,
+                expectedUrl,
+                System.Net.HttpStatusCode.NotFound,
+                "HEAD",
+                null,
+                new Uri(expectedUrl));
+            Assert(!apod_wallpaper.ApodPageAvailabilityProbe.ShouldRetryWithGet(notFoundHead), "HEAD 404 must not retry with GET.");
+        }
+
+        private static void CalendarAvailabilityTransientOverrideUnlocksTodayOnly()
+        {
+            var yesterday = new DateTime(2026, 7, 14);
+            var today = new DateTime(2026, 7, 15);
+            var tomorrow = new DateTime(2026, 7, 16);
+
+            var effectiveLatest = apod_wallpaper.ApodCalendarAvailability.ResolveEffectiveLatestPublishedDate(yesterday, today);
+            Assert(effectiveLatest == today, "Expected transient available date to advance effective latest published date.");
+            Assert(tomorrow > effectiveLatest, "Expected tomorrow to remain future.");
+        }
+
+        private static void CalendarAvailabilityThrottleResetsWhenTodayChanges()
+        {
+            var previousDay = new DateTime(2026, 7, 14);
+            var currentDay = new DateTime(2026, 7, 15);
+            var lastProbeUtc = new DateTime(2026, 7, 14, 20, 59, 0, DateTimeKind.Utc);
+            var nowUtc = new DateTime(2026, 7, 14, 21, 1, 0, DateTimeKind.Utc);
+            var throttle = TimeSpan.FromMinutes(5);
+
+            Assert(!apod_wallpaper.ApodCalendarAvailability.ShouldThrottleProbe(currentDay, previousDay, lastProbeUtc, nowUtc, throttle),
+                "Expected new APOD date to bypass throttle.");
+            Assert(apod_wallpaper.ApodCalendarAvailability.ShouldThrottleProbe(previousDay, previousDay, lastProbeUtc, nowUtc, throttle),
+                "Expected same APOD date to remain throttled within the throttle window.");
+            Assert(!apod_wallpaper.ApodCalendarAvailability.ShouldThrottleProbe(previousDay, null, lastProbeUtc, nowUtc, throttle),
+                "Expected missing last probe date to skip throttle.");
+        }
+
+        private static void ApodAvailabilityProbeSourceAvoidsWorkflowSideEffects()
+        {
+            var probeSourcePath = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.Core", "ApodPageAvailabilityProbe.cs");
+            var source = File.ReadAllText(probeSourcePath);
+            var forbiddenTokens = new[]
+            {
+                "ApplyDay",
+                "ApplyLatest",
+                "DownloadDay",
+                "LoadDay",
+                "ApodWorkflowService",
+                "Scheduler",
+            };
+
+            foreach (var token in forbiddenTokens)
+            {
+                Assert(!source.Contains(token), "Availability probe must not call workflow side-effect path: " + token);
             }
         }
 
@@ -1129,6 +1241,20 @@ Bright clusters mark newborn stars.
         {
             if (!condition)
                 throw new InvalidOperationException(message);
+        }
+
+        private static string GetRepositoryRoot()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory != null)
+            {
+                if (File.Exists(Path.Combine(directory.FullName, "apod_wallpaper.sln")))
+                    return directory.FullName;
+
+                directory = directory.Parent;
+            }
+
+            throw new DirectoryNotFoundException("Unable to locate repository root from " + AppContext.BaseDirectory);
         }
 
         private static apod_wallpaper.ApodEntry CreateVideoEntry(DateTime date)

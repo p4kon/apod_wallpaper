@@ -71,6 +71,17 @@ public sealed partial class ShellPage : Page
 
         SetActiveButton(PreviewButton);
         ContentFrame.Navigate(typeof(MainPage), _arguments.CreateMainPageArguments());
+        NotifyCalendarHostReturned();
+    }
+
+    internal void NotifyWindowActivated()
+    {
+        NotifyCalendarHostReturned();
+    }
+
+    internal void NotifyRestoredFromTray()
+    {
+        NotifyCalendarHostReturned();
     }
 
     private void NavigateToSettings()
@@ -115,5 +126,11 @@ public sealed partial class ShellPage : Page
         var localizedText = AppStrings.Get(text);
         ToolTipService.SetToolTip(button, localizedText);
         AutomationProperties.SetName(button, localizedText);
+    }
+
+    private void NotifyCalendarHostReturned()
+    {
+        if (ContentFrame.Content is MainPage mainPage)
+            mainPage.NotifyHostReturnedToCalendar();
     }
 }

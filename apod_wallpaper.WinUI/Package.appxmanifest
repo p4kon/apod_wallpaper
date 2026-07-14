@@ -12,7 +12,7 @@
   <Identity
     Name="p4kon.APODWallpaper"
     Publisher="CN=0E57DF5B-1784-409E-997B-8B7C5133CB08"
-    Version="1.2.0.0" />
+    Version="1.2.1.0" />
 
   <mp:PhoneIdentity PhoneProductId="dfe22bbe-fa49-4dc5-af46-94a9de0893ad" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 

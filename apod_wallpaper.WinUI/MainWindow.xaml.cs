@@ -46,6 +46,7 @@ public sealed partial class MainWindow : Window
             SetCloseBehavior(initialization.Value.MinimizeToTrayOnClose);
         _trayIconController.Initialize();
         Closed += MainWindow_Closed;
+        Activated += MainWindow_Activated;
 
         RootFrame.Navigate(typeof(ShellPage), new ShellPageArguments(
             backendHost,
@@ -59,6 +60,11 @@ public sealed partial class MainWindow : Window
     internal void HideToTray()
     {
         _trayIconController.HideToTray();
+    }
+
+    internal void NotifyRestoredFromTray()
+    {
+        NotifyShellWindowActivated(restoredFromTray: true);
     }
 
     internal async System.Threading.Tasks.Task ExitApplicationAsync()
@@ -81,6 +87,25 @@ public sealed partial class MainWindow : Window
     {
         _trayIconController.Dispose();
         _backendHost.Dispose();
+    }
+
+    private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
+    {
+        if (args.WindowActivationState == WindowActivationState.Deactivated)
+            return;
+
+        NotifyShellWindowActivated(restoredFromTray: false);
+    }
+
+    private void NotifyShellWindowActivated(bool restoredFromTray)
+    {
+        if (RootFrame.Content is ShellPage shellPage)
+        {
+            if (restoredFromTray)
+                shellPage.NotifyRestoredFromTray();
+            else
+                shellPage.NotifyWindowActivated();
+        }
     }
 
     private SizeInt32 ResolveFixedWindowSize()

@@ -20,13 +20,18 @@ namespace apod_wallpaper
 
         public static string GetUrl(DateTime date)
         {
-            SetDate(date);
-            return GetUrl();
+            return BuildUrl(date);
         }
 
         public static string GetUrl()
         {
             return ApodBaseUrl + ApodFilePrefix + _currentDateCode + HtmlExtension;
+        }
+
+        public static string BuildUrl(DateTime date)
+        {
+            var dateCode = date.Date.ToString("yyMMdd", EnglishCulture);
+            return ApodBaseUrl + ApodFilePrefix + dateCode + HtmlExtension;
         }
 
         public static string GetName(DateTime date)
