@@ -280,6 +280,16 @@
                                 Orientation="Horizontal"
                                 Spacing="4">
                                 <Button
+                                    x:Name="FavoriteButton"
+                                    Width="28"
+                                    Height="28"
+                                    Padding="0"
+                                    AutomationProperties.Name="Add to favorites"
+                                    Click="FavoriteButton_Click"
+                                    ToolTipService.ToolTip="Add to favorites">
+                                    <FontIcon x:Name="FavoriteButtonIcon" FontSize="12" Glyph="&#xE734;" />
+                                </Button>
+                                <Button
                                     x:Name="CopyExplanationButton"
                                     Width="28"
                                     Height="28"

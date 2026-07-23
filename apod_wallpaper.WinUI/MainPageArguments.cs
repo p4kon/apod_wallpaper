@@ -7,13 +7,15 @@ internal sealed class MainPageArguments
         apod_wallpaper.OperationResult<apod_wallpaper.ApplicationSettingsSnapshot> initialization,
         TraySpikeStatus trayStatus,
         Action hideWindowToTray,
-        Func<System.Threading.Tasks.Task> exitApplicationAsync)
+        Func<System.Threading.Tasks.Task> exitApplicationAsync,
+        System.DateTime? selectedDate = null)
     {
         BackendHost = backendHost;
         Initialization = initialization;
         TrayStatus = trayStatus;
         HideWindowToTray = hideWindowToTray;
         ExitApplicationAsync = exitApplicationAsync;
+        SelectedDate = selectedDate;
     }
 
     public BackendHost BackendHost { get; }
@@ -25,4 +27,6 @@ internal sealed class MainPageArguments
     public Action HideWindowToTray { get; }
 
     public Func<System.Threading.Tasks.Task> ExitApplicationAsync { get; }
+
+    public System.DateTime? SelectedDate { get; }
 }

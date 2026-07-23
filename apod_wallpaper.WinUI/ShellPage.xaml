@@ -53,6 +53,17 @@
                             </Button>
 
                             <Button
+                                x:Name="FavoritesButton"
+                                Width="36"
+                                Height="36"
+                                Padding="0"
+                                Click="FavoritesButton_Click"
+                                Background="Transparent"
+                                BorderBrush="Transparent">
+                                <FontIcon FontSize="16" Glyph="&#xE734;" />
+                            </Button>
+
+                            <Button
                                 x:Name="AboutButton"
                                 Width="36"
                                 Height="36"

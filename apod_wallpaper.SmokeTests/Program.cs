@@ -71,6 +71,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Calendar availability transient override unlocks today only", CalendarAvailabilityTransientOverrideUnlocksTodayOnly);
                 Run("Calendar availability throttle resets when today changes", CalendarAvailabilityThrottleResetsWhenTodayChanges);
                 Run("APOD availability probe source avoids workflow side effects", ApodAvailabilityProbeSourceAvoidsWorkflowSideEffects);
+                Run("Favorite APOD store persists normalized dates", FavoriteApodStorePersistsNormalizedDates);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -125,6 +126,33 @@ namespace apod_wallpaper.SmokeTests
 
                 if (!secondRun.Wait(TimeSpan.FromSeconds(2)))
                     throw new InvalidOperationException("Scheduler did not restart after stopping inside the callback.");
+            }
+        }
+
+        private static void FavoriteApodStorePersistsNormalizedDates()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_favorites_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var path = Path.Combine(directory, "favorites.json");
+                var store = new apod_wallpaper.FavoriteApodStore(path);
+                var date = new DateTime(2026, 7, 14);
+
+                Assert(store.SetFavorite(date, true), "Initial favorite add should change state.");
+                Assert(!store.SetFavorite(date, true), "Duplicate favorite add should not change state.");
+                Assert(store.IsFavorite(date), "Favorite date should be present.");
+
+                var reloaded = new apod_wallpaper.FavoriteApodStore(path);
+                var dates = reloaded.GetDates();
+                Assert(dates.Count == 1 && dates[0] == date.Date, "Favorite date should survive reload once.");
+
+                Assert(reloaded.SetFavorite(date, false), "Favorite remove should change state.");
+                Assert(!reloaded.IsFavorite(date), "Favorite date should be removed.");
+            }
+            finally
+            {
+                TryDeleteDirectory(directory);
             }
         }
 

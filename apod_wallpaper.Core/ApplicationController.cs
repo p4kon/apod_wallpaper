@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,6 +17,7 @@ namespace apod_wallpaper
         private readonly ApodWorkflowService _workflowService;
         private readonly ApodCalendarStateService _calendarStateService;
         private readonly ApodPageAvailabilityProbe _pageAvailabilityProbe;
+        private readonly FavoriteApodStore _favoriteStore;
         private readonly object _apiKeyValidationSync = new object();
         private int _scheduledUpdateInProgress;
         private bool _isInitialized;
@@ -34,6 +37,7 @@ namespace apod_wallpaper
             _workflowService = new ApodWorkflowService();
             _calendarStateService = new ApodCalendarStateService(_workflowService);
             _pageAvailabilityProbe = new ApodPageAvailabilityProbe();
+            _favoriteStore = new FavoriteApodStore();
         }
 
         internal Scheduler Scheduler
@@ -327,6 +331,63 @@ namespace apod_wallpaper
                 () => Task.Run(() => _calendarStateService.GetMonthState(month, refreshMissingDates, refreshMode)),
                 OperationErrorCode.WorkflowFailed,
                 "Unable to build calendar month state.");
+        }
+
+        public Task<OperationResult<IReadOnlyList<DateTime>>> GetFavoriteDatesAsync()
+        {
+            return ExecuteOperationAsync(async () =>
+            {
+                await _workflowService.RefreshLocalImageIndexAsync().ConfigureAwait(false);
+                var dates = _favoriteStore
+                    .GetDates()
+                    .Where(date => _workflowService.HasUsableLocalImage(date))
+                    .OrderByDescending(date => date)
+                    .ToList();
+
+                return (IReadOnlyList<DateTime>)dates;
+            }, OperationErrorCode.StorageFailed, "Unable to load favorite APOD dates.");
+        }
+
+        public Task<OperationResult<IReadOnlyList<FavoriteApodItem>>> GetFavoriteApodsAsync()
+        {
+            return ExecuteOperationAsync(async () =>
+            {
+                await _workflowService.RefreshLocalImageIndexAsync().ConfigureAwait(false);
+                var items = _favoriteStore
+                    .GetDates()
+                    .Select(date => new FavoriteApodItem
+                    {
+                        Date = date.Date,
+                        ImagePath = _workflowService.GetLocalImagePath(date),
+                        Title = "APOD " + date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    })
+                    .Where(item => !string.IsNullOrWhiteSpace(item.ImagePath))
+                    .OrderByDescending(item => item.Date)
+                    .ToList();
+
+                return (IReadOnlyList<FavoriteApodItem>)items;
+            }, OperationErrorCode.StorageFailed, "Unable to load favorite APOD images.");
+        }
+
+        public Task<OperationResult<bool>> IsFavoriteAsync(DateTime date)
+        {
+            return ExecuteOperationAsync(async () =>
+            {
+                await _workflowService.RefreshLocalImageIndexAsync().ConfigureAwait(false);
+                return _favoriteStore.IsFavorite(date.Date) && _workflowService.HasUsableLocalImage(date.Date);
+            }, OperationErrorCode.StorageFailed, "Unable to read favorite APOD state.");
+        }
+
+        public Task<OperationResult<bool>> SetFavoriteAsync(DateTime date, bool isFavorite)
+        {
+            return ExecuteOperationAsync(async () =>
+            {
+                await _workflowService.RefreshLocalImageIndexAsync().ConfigureAwait(false);
+                if (isFavorite && !_workflowService.HasUsableLocalImage(date.Date))
+                    throw new InvalidOperationException("Only locally downloaded APOD images can be added to favorites.");
+
+                return _favoriteStore.SetFavorite(date.Date, isFavorite);
+            }, OperationErrorCode.StorageFailed, isFavorite ? "Unable to add APOD image to favorites." : "Unable to remove APOD image from favorites.");
         }
 
         public Task<OperationResult<ApodPageAvailabilityProbeResult>> ProbeApodPageAvailabilityAsync(DateTime date)
