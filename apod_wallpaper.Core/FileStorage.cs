@@ -201,36 +201,6 @@ namespace apod_wallpaper
                 .ToList();
         }
 
-        public static IReadOnlyList<DateTime> GetDownloadedImageDates()
-        {
-            var imagesDirectory = ImagesDirectory;
-            if (string.IsNullOrWhiteSpace(imagesDirectory) || !Directory.Exists(imagesDirectory))
-                return Array.Empty<DateTime>();
-
-            var dates = new HashSet<DateTime>();
-            foreach (var path in Directory.GetFiles(imagesDirectory))
-            {
-                var extension = NormalizeImageExtension(Path.GetExtension(path));
-                if (!IsSupportedImageExtension(extension))
-                    continue;
-                if (!LocalImageValidator.IsUsableImageFile(path))
-                    continue;
-
-                DateTime parsedDate;
-                if (DateTime.TryParseExact(
-                    Path.GetFileNameWithoutExtension(path),
-                    "yyyy-MM-dd",
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.None,
-                    out parsedDate))
-                {
-                    dates.Add(parsedDate.Date);
-                }
-            }
-
-            return dates.OrderBy(date => date).ToList();
-        }
-
         public static string NormalizeImageExtension(string extension)
         {
             return ImageFormatCatalog.NormalizeImageExtension(extension);
