@@ -610,6 +610,12 @@ namespace apod_wallpaper
             _cache.SyncLocalImagePaths();
         }
 
+        public IReadOnlyList<DateTime> GetDownloadedImageDates()
+        {
+            _cache.SyncLocalImagePaths();
+            return FileStorage.GetDownloadedImageDates();
+        }
+
         public Task RefreshLocalImageIndexAsync()
         {
             return Task.Run((Action)RefreshLocalImageIndex);

@@ -15,6 +15,8 @@ namespace apod_wallpaper
         public string NasaApiKeyValidationState { get; set; }
         public string ImagesDirectoryPath { get; set; }
         public string TranslationTargetLanguage { get; set; }
+        public string RandomApodSource { get; set; }
+        public bool RandomApodIncludeDeepArchive { get; set; }
         public string LastAutoRefreshRunDate { get; set; }
         public string LastAutoRefreshAppliedDate { get; set; }
         public string LastAppliedWallpaperImagePath { get; set; }
@@ -36,6 +38,8 @@ namespace apod_wallpaper
                 NasaApiKeyValidationState = NasaApiKeyValidationState,
                 ImagesDirectoryPath = ImagesDirectoryPath,
                 TranslationTargetLanguage = NormalizeTranslationTargetLanguage(TranslationTargetLanguage),
+                RandomApodSource = NormalizeRandomApodSource(RandomApodSource),
+                RandomApodIncludeDeepArchive = RandomApodIncludeDeepArchive,
                 LastAutoRefreshRunDate = LastAutoRefreshRunDate,
                 LastAutoRefreshAppliedDate = LastAutoRefreshAppliedDate,
                 LastAppliedWallpaperImagePath = LastAppliedWallpaperImagePath,
@@ -62,6 +66,11 @@ namespace apod_wallpaper
         public static string NormalizeTranslationTargetLanguage(string language)
         {
             return apod_wallpaper.TranslationTargetLanguage.Normalize(language);
+        }
+
+        public static string NormalizeRandomApodSource(string source)
+        {
+            return apod_wallpaper.RandomApodSource.Normalize(source);
         }
     }
 }

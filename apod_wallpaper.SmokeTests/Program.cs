@@ -75,6 +75,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("Favorite APOD store persists normalized dates", FavoriteApodStorePersistsNormalizedDates);
                 Run("Update check compares release versions", UpdateCheckComparesReleaseVersions);
                 Run("Update check defaults to automatic checks enabled", UpdateCheckDefaultsToAutomaticChecksEnabled);
+                Run("Random APOD settings and sources normalize", RandomApodSettingsAndSourcesNormalize);
+                Run("Downloaded APOD date scan ignores smart artifacts", DownloadedApodDateScanIgnoresSmartArtifacts);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -190,6 +192,48 @@ namespace apod_wallpaper.SmokeTests
             }
             finally
             {
+                TryDeleteDirectory(directory);
+            }
+        }
+
+        private static void RandomApodSettingsAndSourcesNormalize()
+        {
+            Assert(apod_wallpaper.RandomApodSource.Normalize(null) == apod_wallpaper.RandomApodSource.Global, "Expected null random source to normalize to global.");
+            Assert(apod_wallpaper.RandomApodSource.Normalize(string.Empty) == apod_wallpaper.RandomApodSource.Global, "Expected empty random source to normalize to global.");
+            Assert(apod_wallpaper.RandomApodSource.Normalize("local") == apod_wallpaper.RandomApodSource.Downloaded, "Expected local alias to normalize to downloaded.");
+            Assert(apod_wallpaper.RandomApodSource.Normalize("favorite") == apod_wallpaper.RandomApodSource.Favorites, "Expected favorite alias to normalize to favorites.");
+            Assert(apod_wallpaper.RandomApodService.ResolveGlobalStartDate(false) == new DateTime(2015, 1, 1), "Expected default global random range to start in 2015.");
+            Assert(apod_wallpaper.RandomApodService.ResolveGlobalStartDate(true) == new DateTime(1995, 6, 16), "Expected deep archive random range to start at first APOD page.");
+
+            var defaults = apod_wallpaper.JsonSettingsStore.CreateDefaultSnapshot();
+            Assert(defaults.RandomApodSource == apod_wallpaper.RandomApodSource.Global, "Expected default random source to be global.");
+            Assert(!defaults.RandomApodIncludeDeepArchive, "Expected deep archive random mode to be off by default.");
+        }
+
+        private static void DownloadedApodDateScanIgnoresSmartArtifacts()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_downloaded_dates_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            Directory.CreateDirectory(Path.Combine(directory, "smart"));
+            var snapshot = CaptureSettings();
+            try
+            {
+                var localDate = new DateTime(2026, 7, 14);
+                using (var bitmap = new Bitmap(4, 4))
+                {
+                    bitmap.Save(Path.Combine(directory, "2026-07-14.jpg"), System.Drawing.Imaging.ImageFormat.Jpeg);
+                }
+
+                File.WriteAllText(Path.Combine(directory, "notes.txt"), "ignore");
+                File.WriteAllText(Path.Combine(directory, "smart", "2026-07-15.jpg"), "ignore");
+
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(directory);
+                var dates = apod_wallpaper.FileStorage.GetDownloadedImageDates();
+                Assert(dates.Count == 1 && dates[0] == localDate, "Expected only top-level APOD image filename dates.");
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
                 TryDeleteDirectory(directory);
             }
         }

@@ -307,6 +307,11 @@ namespace apod_wallpaper
             return _wallpaperService.RefreshLocalImageIndexAsync();
         }
 
+        public IReadOnlyList<DateTime> GetDownloadedImageDates()
+        {
+            return _wallpaperService.GetDownloadedImageDates();
+        }
+
         public bool HasUsableLocalImage(DateTime date)
         {
             return _wallpaperService.HasUsableLocalImage(date);

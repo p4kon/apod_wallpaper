@@ -47,6 +47,7 @@ namespace apod_wallpaper
 
                     snapshot.Language = ApplicationSettingsSnapshot.NormalizeLanguage(snapshot.Language);
                     snapshot.TranslationTargetLanguage = ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(snapshot.TranslationTargetLanguage);
+                    snapshot.RandomApodSource = ApplicationSettingsSnapshot.NormalizeRandomApodSource(snapshot.RandomApodSource);
 
                     return snapshot;
                 }
@@ -90,6 +91,8 @@ namespace apod_wallpaper
                 MinimizeToTrayOnClose = true,
                 Language = ApplicationSettingsSnapshot.LanguageEnglish,
                 TranslationTargetLanguage = apod_wallpaper.TranslationTargetLanguage.Russian,
+                RandomApodSource = apod_wallpaper.RandomApodSource.Global,
+                RandomApodIncludeDeepArchive = false,
                 NasaApiKeyValidationState = ApiKeyValidationState.Unknown.ToString(),
                 ImagesDirectoryPath = string.Empty,
                 LastAutoRefreshRunDate = string.Empty,
