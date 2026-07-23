@@ -41,6 +41,7 @@ public sealed partial class MainPage : Page
         public required Button Button { get; init; }
         public required TextBlock DayNumberText { get; init; }
         public required TextBlock StatusText { get; init; }
+        public required FontIcon FavoriteIcon { get; init; }
         public bool IsLoading { get; set; }
         public apod_wallpaper.ApodCalendarDayState? CurrentDayState { get; set; }
         public DateTime LatestPublishedDate { get; set; }
@@ -72,6 +73,7 @@ public sealed partial class MainPage : Page
     private static readonly SolidColorBrush CalendarDarkFutureForegroundBrush = new(ColorHelper.FromArgb(0xFF, 0xAA, 0xAA, 0xAA));
     private static readonly SolidColorBrush CalendarSelectedLightBorderBrush = new(ColorHelper.FromArgb(0xFF, 0x25, 0x63, 0xEB));
     private static readonly SolidColorBrush CalendarSelectedDarkBorderBrush = new(ColorHelper.FromArgb(0xFF, 0xF1, 0xF5, 0xF9));
+    private static readonly SolidColorBrush CalendarFavoriteBrush = new(ColorHelper.FromArgb(0xFF, 0xF5, 0xC5, 0x42));
     private static readonly apod_wallpaper.WallpaperStyle[] WallpaperStyleDisplayOrder =
     {
         apod_wallpaper.WallpaperStyle.Smart,
@@ -103,6 +105,7 @@ public sealed partial class MainPage : Page
     private int _previewRequestVersion;
     private int _monthRequestVersion;
     private readonly HashSet<DateTime> _warmedMonths = new();
+    private readonly HashSet<DateTime> _favoriteDates = new();
     private readonly Dictionary<DateTime, MonthCacheEntry> _hotMonthCache = new();
     private readonly HashSet<DateTime> _monthsInFlight = new();
     private readonly Dictionary<DateTime, CalendarDayVisual> _calendarDayVisuals = new();
@@ -123,6 +126,7 @@ public sealed partial class MainPage : Page
     private readonly Dictionary<string, Task<string?>> _previewAssetTasks = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _previewAssetSyncRoot = new();
     private bool _isApplyingWallpaperAction;
+    private bool _isFavoriteActionInProgress;
     private bool _suppressWallpaperStyleSelectionChanged;
     private bool _suppressAutoRefreshToggleChanged;
     private apod_wallpaper.IEventSubscription? _wallpaperAppliedSubscription;
@@ -181,6 +185,9 @@ public sealed partial class MainPage : Page
         if (_initialStateSnapshot != null)
         {
             await RefreshSettingsSnapshotPreservingCalendarAsync();
+            await RefreshFavoriteDatesAsync();
+            if (arguments.SelectedDate.HasValue)
+                await SelectDateFromHostAsync(arguments.SelectedDate.Value.Date);
             QueueTodayAvailabilityProbe();
             return;
         }
@@ -193,6 +200,8 @@ public sealed partial class MainPage : Page
 
         await EnsureWallpaperAppliedSubscriptionAsync();
         await RefreshStateAsync();
+        if (arguments.SelectedDate.HasValue)
+            await SelectDateFromHostAsync(arguments.SelectedDate.Value.Date);
         QueueTodayAvailabilityProbe();
     }
 
@@ -227,6 +236,7 @@ public sealed partial class MainPage : Page
         RebuildTranslationTargetLanguageFlyout();
         UpdateTranslationTargetLanguageSelector();
         UpdateExplanationActionState();
+        UpdateFavoriteActionState();
         UpdateActionAvailability();
         UpdateCalendarSelectionOnly();
         RefreshTrayStatus();
@@ -252,6 +262,11 @@ public sealed partial class MainPage : Page
             AppStrings.Format("Downloading and applying APOD for {0}.", _selectedDate.ToString("yyyy-MM-dd")),
             () => _backendHost!.Backend.ApplyDayAsync(_selectedDate, GetSelectedWallpaperStyle()),
             disableAutoRefreshOnSuccess: true);
+    }
+
+    private async void FavoriteButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ToggleFavoriteForSelectedDateAsync();
     }
 
     private async void AutoRefreshToggleButton_Checked(object sender, RoutedEventArgs e)
@@ -406,6 +421,7 @@ public sealed partial class MainPage : Page
         StatusBar.Message = AppStrings.Get("The WinUI host created ApplicationController and loaded the initial snapshot in one backend call.");
 
         await Task.WhenAll(
+            RefreshFavoriteDatesAsync(),
             LoadVisibleMonthAsync(),
             LoadPreviewForSelectedDateAsync());
         QueueTodayAvailabilityProbe();
@@ -628,6 +644,17 @@ public sealed partial class MainPage : Page
             Opacity = 0.92,
         };
 
+        var favoriteIcon = new FontIcon
+        {
+            Glyph = "\uE735",
+            FontSize = 11,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Foreground = CalendarFavoriteBrush,
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false,
+        };
+
         var content = new StackPanel
         {
             Spacing = 1,
@@ -637,9 +664,13 @@ public sealed partial class MainPage : Page
         content.Children.Add(dayNumberText);
         content.Children.Add(statusText);
 
+        var contentHost = new Grid();
+        contentHost.Children.Add(content);
+        contentHost.Children.Add(favoriteIcon);
+
         var button = new Button
         {
-            Content = content,
+            Content = contentHost,
             Padding = new Thickness(4),
             MinHeight = 44,
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -656,6 +687,7 @@ public sealed partial class MainPage : Page
             Button = button,
             DayNumberText = dayNumberText,
             StatusText = statusText,
+            FavoriteIcon = favoriteIcon,
             IsLoading = true,
         };
     }
@@ -673,6 +705,7 @@ public sealed partial class MainPage : Page
         var isUnsupported = dayState?.IsKnown == true && !dayState.HasImage;
         var isUnknown = !hasLocalImage && !hasRemoteImage && !isUnsupported;
         var isSelected = _selectedDate.Date == date.Date;
+        var isFavorite = hasLocalImage && _favoriteDates.Contains(date.Date);
 
         var isLightTheme = ActualTheme == ElementTheme.Light;
         var background = ResolveCalendarUnknownBrush(isLightTheme);
@@ -703,6 +736,7 @@ public sealed partial class MainPage : Page
         visual.StatusText.Text = isLoading
             ? AppStrings.Get(isFuture ? "future" : "loading")
             : BuildMiniStatusLabel(isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown);
+        visual.FavoriteIcon.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
 
         visual.Button.Background = background;
         visual.Button.Foreground = foreground;
@@ -719,7 +753,7 @@ public sealed partial class MainPage : Page
             visual.Button,
             isLoading && !isFuture
                 ? date.ToString("dddd, dd MMMM yyyy", AppStrings.DateCulture) + Environment.NewLine + AppStrings.Get("Loading calendar state")
-                : BuildDayTooltip(date, isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown));
+                : BuildDayTooltip(date, isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown, isFavorite));
     }
 
     private void QueueTodayAvailabilityProbe()
@@ -872,6 +906,14 @@ public sealed partial class MainPage : Page
 
         if (_selectedDate.Month == _visibleMonth.Month && _selectedDate.Year == _visibleMonth.Year)
             await RefreshVisibleMonthFromCacheAsync();
+    }
+
+    internal async Task SelectDateFromHostAsync(DateTime date)
+    {
+        _selectedDate = date.Date;
+        _visibleMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
+        await LoadVisibleMonthAsync();
+        await LoadPreviewForSelectedDateAsync();
     }
 
     private async Task RefreshVisibleMonthFromCacheAsync()
@@ -1348,20 +1390,152 @@ public sealed partial class MainPage : Page
     {
         var hasBackend = _backendHost != null;
         var hasSuccessfulPreview = _lastPreviewWorkflow?.Status == apod_wallpaper.ApodWorkflowStatus.Success;
+        var isBusy = _isApplyingWallpaperAction || _isFavoriteActionInProgress;
 
-        ReloadPreviewButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
-        OpenNasaPageButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
-        NasaPageButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
-        WallpaperStyleComboBox.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
-        DownloadOnlyButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
-        DownloadAndApplyButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
-        AutoRefreshToggleButton.IsEnabled = hasBackend && _currentSettingsSnapshot != null && !_isApplyingWallpaperAction;
-        ApplyLatestButton.IsEnabled = hasBackend && !_isApplyingWallpaperAction;
+        ReloadPreviewButton.IsEnabled = hasBackend && !isBusy;
+        OpenNasaPageButton.IsEnabled = hasBackend && !isBusy;
+        NasaPageButton.IsEnabled = hasBackend && !isBusy;
+        WallpaperStyleComboBox.IsEnabled = hasBackend && !isBusy;
+        DownloadOnlyButton.IsEnabled = hasBackend && !isBusy;
+        DownloadAndApplyButton.IsEnabled = hasBackend && !isBusy;
+        AutoRefreshToggleButton.IsEnabled = hasBackend && _currentSettingsSnapshot != null && !isBusy;
+        ApplyLatestButton.IsEnabled = hasBackend && !isBusy;
 
-        if (!hasSuccessfulPreview && !_isApplyingWallpaperAction)
+        if (!hasSuccessfulPreview && !isBusy)
             WallpaperStyleComboBox.IsEnabled = hasBackend && _currentSettingsSnapshot != null;
 
         UpdateExplanationActionState();
+        UpdateFavoriteActionState();
+    }
+
+    private async Task RefreshFavoriteDatesAsync()
+    {
+        if (_backendHost == null)
+            return;
+
+        var result = await _backendHost.Backend.GetFavoriteDatesAsync();
+        if (!result.Succeeded || result.Value == null)
+            return;
+
+        _favoriteDates.Clear();
+        foreach (var date in result.Value)
+            _favoriteDates.Add(date.Date);
+
+        UpdateCalendarSelectionOnly();
+        UpdateFavoriteActionState();
+    }
+
+    private async Task ToggleFavoriteForSelectedDateAsync()
+    {
+        if (_backendHost == null || _isFavoriteActionInProgress || _isApplyingWallpaperAction)
+            return;
+
+        var selectedDate = _selectedDate.Date;
+        var isFavorite = _favoriteDates.Contains(selectedDate);
+        _isFavoriteActionInProgress = true;
+        ActionProgressRing.IsActive = true;
+        ActionProgressRing.Opacity = 1;
+        UpdateActionAvailability();
+
+        try
+        {
+            if (isFavorite)
+            {
+                await SetFavoriteAsync(selectedDate, false);
+                return;
+            }
+
+            if (!CanFavoriteCurrentPreview())
+            {
+                ActionStatusBar.Severity = InfoBarSeverity.Warning;
+                ActionStatusBar.Title = AppStrings.Get("Favorite unavailable");
+                ActionStatusBar.Message = AppStrings.Get("This date cannot be added to favorites.");
+                return;
+            }
+
+            if (_lastPreviewWorkflow?.IsLocalFile != true)
+            {
+                ActionStatusBar.Severity = InfoBarSeverity.Informational;
+                ActionStatusBar.Title = AppStrings.Get("Downloading favorite image");
+                ActionStatusBar.Message = AppStrings.Format("Downloading APOD image for {0}.", selectedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+
+                var downloadResult = await _backendHost.Backend.DownloadDayAsync(selectedDate);
+                if (!downloadResult.Succeeded || downloadResult.Value == null || downloadResult.Value.Status != apod_wallpaper.ApodWorkflowStatus.Success)
+                {
+                    ActionStatusBar.Severity = InfoBarSeverity.Error;
+                    ActionStatusBar.Title = AppStrings.Get("Favorite download failed");
+                    ActionStatusBar.Message = AppStrings.GetBackendMessageOrDefault(downloadResult.Error?.Message ?? downloadResult.Value?.Message, "Unable to download favorite image.");
+                    return;
+                }
+
+                _lastPreviewWorkflow = downloadResult.Value;
+                await SetPreviewSuccessAsync(downloadResult.Value, preserveRenderedPreview: true);
+                await RefreshMonthStateAfterWorkflowAsync(downloadResult.Value);
+            }
+
+            await SetFavoriteAsync(selectedDate, true);
+        }
+        finally
+        {
+            ActionProgressRing.IsActive = false;
+            ActionProgressRing.Opacity = 0;
+            _isFavoriteActionInProgress = false;
+            UpdateActionAvailability();
+        }
+    }
+
+    private bool CanFavoriteCurrentPreview()
+    {
+        return _lastPreviewWorkflow?.Status == apod_wallpaper.ApodWorkflowStatus.Success &&
+            _lastPreviewWorkflow.Entry?.HasImage == true &&
+            _selectedDate.Date <= DateTime.Today;
+    }
+
+    private async Task SetFavoriteAsync(DateTime date, bool isFavorite)
+    {
+        if (_backendHost == null)
+            return;
+
+        ActionStatusBar.Severity = InfoBarSeverity.Informational;
+        ActionStatusBar.Title = AppStrings.Get(isFavorite ? "Adding favorite" : "Removing favorite");
+        ActionStatusBar.Message = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        var result = await _backendHost.Backend.SetFavoriteAsync(date.Date, isFavorite);
+        if (!result.Succeeded)
+        {
+            ActionStatusBar.Severity = InfoBarSeverity.Error;
+            ActionStatusBar.Title = AppStrings.Get(isFavorite ? "Favorite was not saved" : "Favorite was not removed");
+            ActionStatusBar.Message = AppStrings.GetBackendMessageOrDefault(result.Error?.Message, isFavorite ? "Unable to add favorite." : "Unable to remove favorite.");
+            return;
+        }
+
+        await RefreshFavoriteDatesAsync();
+        if (_currentMonthState != null)
+            await ApplyCalendarMonthStateAsync(_currentMonthState, progressive: false, _monthRequestVersion);
+
+        ActionStatusBar.Severity = InfoBarSeverity.Success;
+        ActionStatusBar.Title = AppStrings.Get(isFavorite ? "Favorite saved" : "Favorite removed");
+        ActionStatusBar.Message = AppStrings.Get(isFavorite ? "APOD image added to favorites." : "APOD image removed from favorites.");
+    }
+
+    private void UpdateFavoriteActionState()
+    {
+        if (FavoriteButton == null)
+            return;
+
+        var isFavorite = _favoriteDates.Contains(_selectedDate.Date);
+        var canFavorite = _backendHost != null && !_isApplyingWallpaperAction && !_isFavoriteActionInProgress && CanFavoriteCurrentPreview();
+        FavoriteButton.IsEnabled = canFavorite || (_backendHost != null && !_isApplyingWallpaperAction && !_isFavoriteActionInProgress && isFavorite);
+        FavoriteButtonIcon.Glyph = isFavorite ? "\uE735" : "\uE734";
+
+        var tooltip = isFavorite
+            ? AppStrings.Get("Remove from favorites")
+            : _lastPreviewWorkflow?.IsLocalFile == true
+                ? AppStrings.Get("Add to favorites")
+                : AppStrings.Get("Download and add to favorites");
+        ToolTipService.SetToolTip(FavoriteButton, tooltip);
+        AutomationProperties.SetName(FavoriteButton, tooltip);
+        AutomationProperties.SetHelpText(FavoriteButton, tooltip);
     }
 
     private void SetExplanationBody(string displayedText, string originalText, bool isTranslated = false)
@@ -2147,7 +2321,7 @@ public sealed partial class MainPage : Page
         return string.Empty;
     }
 
-    private string BuildDayTooltip(DateTime date, bool isFuture, bool hasLocalImage, bool hasRemoteImage, bool isUnsupported, bool isUnknown)
+    private string BuildDayTooltip(DateTime date, bool isFuture, bool hasLocalImage, bool hasRemoteImage, bool isUnsupported, bool isUnknown, bool isFavorite)
     {
         var status = isFuture
             ? AppStrings.Get("Future date")
@@ -2171,7 +2345,11 @@ public sealed partial class MainPage : Page
                             ? AppStrings.Get("The day is not verified yet or background month warmup has not reached it.")
                             : AppStrings.Get("Automatic month warmup is limited with DEMO_KEY to avoid spending the shared hourly quota.");
 
-        return date.ToString("dddd, dd MMMM yyyy", AppStrings.DateCulture) + Environment.NewLine + status + Environment.NewLine + detail;
+        var favorite = isFavorite
+            ? Environment.NewLine + AppStrings.Get("Favorite")
+            : string.Empty;
+
+        return date.ToString("dddd, dd MMMM yyyy", AppStrings.DateCulture) + Environment.NewLine + status + favorite + Environment.NewLine + detail;
     }
 
     private static string ResolvePreviewBody(apod_wallpaper.ApodWorkflowResult workflow)
@@ -2304,6 +2482,7 @@ public sealed partial class MainPage : Page
         var hasRemoteImage = dayState?.IsKnown == true && dayState.HasImage && !hasLocalImage;
         var isUnsupported = dayState?.IsKnown == true && !dayState.HasImage;
         var isSelected = _selectedDate.Date == date.Date;
+        var isFavorite = hasLocalImage && _favoriteDates.Contains(date.Date);
 
         return string.Join(
             "|",
@@ -2312,6 +2491,7 @@ public sealed partial class MainPage : Page
             hasRemoteImage ? "remote" : "no-remote",
             isUnsupported ? "unsupported" : "supported",
             isLoading ? "loading" : "ready",
+            isFavorite ? "favorite" : "not-favorite",
             AppStrings.CurrentLanguage,
             isSelected ? "selected" : "idle",
             ActualTheme.ToString());

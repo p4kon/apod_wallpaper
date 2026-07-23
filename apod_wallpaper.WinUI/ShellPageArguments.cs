@@ -33,14 +33,15 @@ internal sealed class ShellPageArguments
 
     public Action<bool> UpdateCloseBehavior { get; }
 
-    public MainPageArguments CreateMainPageArguments()
+    public MainPageArguments CreateMainPageArguments(DateTime? selectedDate = null)
     {
         return new MainPageArguments(
             BackendHost,
             Initialization,
             TrayStatus,
             HideWindowToTray,
-            ExitApplicationAsync);
+            ExitApplicationAsync,
+            selectedDate);
     }
 
     public SettingsPageArguments CreateSettingsPageArguments()
@@ -49,5 +50,12 @@ internal sealed class ShellPageArguments
             BackendHost,
             Initialization,
             UpdateCloseBehavior);
+    }
+
+    public FavoritesPageArguments CreateFavoritesPageArguments(Action<DateTime> openFavoriteDate)
+    {
+        return new FavoritesPageArguments(
+            BackendHost,
+            openFavoriteDate);
     }
 }

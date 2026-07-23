@@ -1,3 +1,4 @@
+using System;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -40,6 +41,11 @@ public sealed partial class ShellPage : Page
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
         NavigateToSettings();
+    }
+
+    private void FavoritesButton_Click(object sender, RoutedEventArgs e)
+    {
+        NavigateToFavorites();
     }
 
     private void AboutButton_Click(object sender, RoutedEventArgs e)
@@ -93,6 +99,25 @@ public sealed partial class ShellPage : Page
         ContentFrame.Navigate(typeof(SettingsPage), _arguments.CreateSettingsPageArguments());
     }
 
+    private void NavigateToFavorites()
+    {
+        if (_arguments == null)
+            return;
+
+        SetActiveButton(FavoritesButton);
+        ContentFrame.Navigate(typeof(FavoritesPage), _arguments.CreateFavoritesPageArguments(OpenFavoriteDate));
+    }
+
+    private void OpenFavoriteDate(DateTime date)
+    {
+        if (_arguments == null)
+            return;
+
+        SetActiveButton(PreviewButton);
+        ContentFrame.Navigate(typeof(MainPage), _arguments.CreateMainPageArguments(date.Date));
+        NotifyCalendarHostReturned();
+    }
+
     private void NavigateToAbout()
     {
         SetActiveButton(AboutButton);
@@ -103,6 +128,7 @@ public sealed partial class ShellPage : Page
     {
         SetButtonState(PreviewButton, activeButton == PreviewButton);
         SetButtonState(SettingsButton, activeButton == SettingsButton);
+        SetButtonState(FavoritesButton, activeButton == FavoritesButton);
         SetButtonState(AboutButton, activeButton == AboutButton);
     }
 
@@ -118,6 +144,7 @@ public sealed partial class ShellPage : Page
     {
         ApplyButtonLabel(PreviewButton, "Calendar");
         ApplyButtonLabel(SettingsButton, "Settings");
+        ApplyButtonLabel(FavoritesButton, "Favorites");
         ApplyButtonLabel(AboutButton, "About");
     }
 

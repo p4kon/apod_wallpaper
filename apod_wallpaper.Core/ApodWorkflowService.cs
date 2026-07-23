@@ -312,6 +312,11 @@ namespace apod_wallpaper
             return _wallpaperService.HasUsableLocalImage(date);
         }
 
+        public string GetLocalImagePath(DateTime date)
+        {
+            return _wallpaperService.GetCachedLocalImagePath(date);
+        }
+
         private static ApodWorkflowResult Execute(DateTime requestedDate, Func<ApodWorkflowResult> action)
         {
             try
