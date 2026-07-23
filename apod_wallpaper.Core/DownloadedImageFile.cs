@@ -55,6 +55,11 @@ namespace apod_wallpaper
             bitmap = await Network.DownloadBitmapAsync(image_url).ConfigureAwait(false);
         }
 
+        public async Task DownloadImageAsync(IProgress<DownloadProgressSnapshot> progress)
+        {
+            bitmap = await Network.DownloadBitmapAsync(image_url, progress).ConfigureAwait(false);
+        }
+
         private static string ResolveExtension(string imageUrl)
         {
             Uri uri;

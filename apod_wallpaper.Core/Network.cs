@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Net;
@@ -67,11 +68,16 @@ namespace apod_wallpaper
 
         public static Task<Bitmap> DownloadBitmapAsync(string url)
         {
+            return DownloadBitmapAsync(url, null);
+        }
+
+        public static Task<Bitmap> DownloadBitmapAsync(string url, IProgress<DownloadProgressSnapshot> progress)
+        {
             return ExecuteWithRetryAsync(
                 "bitmap",
                 url,
                 NetworkRetryProfile.Default,
-                async () => await DownloadBitmapWithHttpClientAsync(SharedHttpClient.Value, url).ConfigureAwait(false),
+                async () => await DownloadBitmapWithHttpClientAsync(SharedHttpClient.Value, url, progress).ConfigureAwait(false),
                 async requestUrl => await Task.Run(() => DownloadBitmapWithWebRequest(requestUrl)).ConfigureAwait(false));
         }
 
@@ -234,15 +240,60 @@ namespace apod_wallpaper
 
         private static async Task<Bitmap> DownloadBitmapWithHttpClientAsync(HttpClient client, string url)
         {
+            return await DownloadBitmapWithHttpClientAsync(client, url, null).ConfigureAwait(false);
+        }
+
+        private static async Task<Bitmap> DownloadBitmapWithHttpClientAsync(HttpClient client, string url, IProgress<DownloadProgressSnapshot> progress)
+        {
             using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
             {
                 AppLogger.Web("transport=httpclient kind=bitmap stage=response status=" + (int)response.StatusCode + " url=" + url);
                 EnsureSuccessfulStatusCode(response.StatusCode, url);
 
                 using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
-                using (var bitmap = new Bitmap(stream))
+                using (var memoryStream = new MemoryStream())
                 {
-                    return new Bitmap(bitmap);
+                    var totalBytes = response.Content.Headers.ContentLength;
+                    var buffer = new byte[81920];
+                    var bytesReceived = 0L;
+                    var stopwatch = Stopwatch.StartNew();
+                    progress?.Report(new DownloadProgressSnapshot
+                    {
+                        BytesReceived = 0,
+                        TotalBytes = totalBytes,
+                        BytesPerSecond = 0,
+                    });
+
+                    while (true)
+                    {
+                        var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                        if (bytesRead == 0)
+                            break;
+
+                        await memoryStream.WriteAsync(buffer, 0, bytesRead).ConfigureAwait(false);
+                        bytesReceived += bytesRead;
+
+                        var elapsedSeconds = Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001);
+                        progress?.Report(new DownloadProgressSnapshot
+                        {
+                            BytesReceived = bytesReceived,
+                            TotalBytes = totalBytes,
+                            BytesPerSecond = bytesReceived / elapsedSeconds,
+                        });
+                    }
+
+                    memoryStream.Position = 0;
+                    using (var bitmap = new Bitmap(memoryStream))
+                    {
+                        progress?.Report(new DownloadProgressSnapshot
+                        {
+                            BytesReceived = bytesReceived,
+                            TotalBytes = totalBytes,
+                            BytesPerSecond = bytesReceived / Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001),
+                        });
+
+                        return new Bitmap(bitmap);
+                    }
                 }
             }
         }

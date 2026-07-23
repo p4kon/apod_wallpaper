@@ -119,13 +119,18 @@ namespace apod_wallpaper
 
         public Task<ApodWorkflowResult> DownloadDayAsync(DateTime date, bool forceRefresh = false)
         {
+            return DownloadDayAsync(date, forceRefresh, null);
+        }
+
+        public Task<ApodWorkflowResult> DownloadDayAsync(DateTime date, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress)
+        {
             var futureDateResult = CreateFutureDateUnavailableResult(date);
             if (futureDateResult != null)
                 return Task.FromResult(futureDateResult);
 
             return ExecuteAsync(date, async () =>
             {
-                var download = await _wallpaperService.DownloadImageByDateAsync(date, forceRefresh).ConfigureAwait(false);
+                var download = await _wallpaperService.DownloadImageByDateAsync(date, forceRefresh, progress).ConfigureAwait(false);
                 return new ApodWorkflowResult
                 {
                     Status = ApodWorkflowStatus.Success,

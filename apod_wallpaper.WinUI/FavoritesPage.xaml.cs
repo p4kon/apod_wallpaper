@@ -122,7 +122,7 @@ public sealed partial class FavoritesPage : Page
             Child = new Image
             {
                 Source = CreateImageSource(item.ImagePath),
-                Stretch = Stretch.UniformToFill,
+                Stretch = Stretch.Uniform,
             },
         };
         root.Children.Add(thumbnail);
@@ -168,12 +168,15 @@ public sealed partial class FavoritesPage : Page
             },
         };
         removeButton.Click += RemoveFavoriteButton_Click;
+        removeButton.Tapped += (_, args) => args.Handled = true;
+        removeButton.PointerPressed += (_, args) => args.Handled = true;
         AutomationProperties.SetName(removeButton, AppStrings.Get("Remove from favorites"));
         ToolTipService.SetToolTip(removeButton, AppStrings.Get("Remove from favorites"));
         root.Children.Add(removeButton);
 
         root.PointerEntered += (_, _) => AnimateOpacity(removeButton, 1);
         root.PointerExited += (_, _) => AnimateOpacity(removeButton, 0);
+        root.Tapped += FavoriteTile_Tapped;
 
         return root;
     }
@@ -200,8 +203,24 @@ public sealed partial class FavoritesPage : Page
 
     private void FavoritesGridView_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is GridViewItem { Tag: DateTime date })
+        TryOpenFavoriteFromItem(e.ClickedItem);
+    }
+
+    private void FavoriteTile_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (TryOpenFavoriteFromItem(sender))
+            e.Handled = true;
+    }
+
+    private bool TryOpenFavoriteFromItem(object? item)
+    {
+        if (item is FrameworkElement { Tag: DateTime date })
+        {
             _arguments?.OpenFavoriteDate(date.Date);
+            return true;
+        }
+
+        return false;
     }
 
     private async void RemoveFavoriteButton_Click(object sender, RoutedEventArgs e)

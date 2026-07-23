@@ -391,6 +391,12 @@ namespace apod_wallpaper
             return await EnsureImageDownloadedAsync(entry, date).ConfigureAwait(false);
         }
 
+        public async Task<ApodDownloadResult> DownloadImageByDateAsync(DateTime date, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress)
+        {
+            var entry = await GetEntryByDateAsync(date, forceRefresh).ConfigureAwait(false);
+            return await EnsureImageDownloadedAsync(entry, date, progress).ConfigureAwait(false);
+        }
+
         public ApodApplyResult Apply(DateTime date, WallpaperStyle style, bool forceRefresh = false)
         {
             return ApplyWallpaperByDate(date, style, forceRefresh);
@@ -550,6 +556,11 @@ namespace apod_wallpaper
 
         public async Task<ApodDownloadResult> EnsureImageDownloadedAsync(ApodEntry entry, DateTime date)
         {
+            return await EnsureImageDownloadedAsync(entry, date, null).ConfigureAwait(false);
+        }
+
+        public async Task<ApodDownloadResult> EnsureImageDownloadedAsync(ApodEntry entry, DateTime date, IProgress<DownloadProgressSnapshot> progress)
+        {
             if (entry == null)
                 throw new ArgumentNullException(nameof(entry));
 
@@ -582,7 +593,7 @@ namespace apod_wallpaper
             var downloadedNow = false;
             if (!File.Exists(image.FullPath))
             {
-                await image.DownloadImageAsync().ConfigureAwait(false);
+                await image.DownloadImageAsync(progress).ConfigureAwait(false);
                 image.SaveImage();
                 downloadedNow = true;
             }

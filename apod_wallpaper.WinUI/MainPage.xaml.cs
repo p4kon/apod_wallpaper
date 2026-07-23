@@ -1875,8 +1875,10 @@ public sealed partial class MainPage : Page
                 ActionStatusBar.Severity = InfoBarSeverity.Informational;
                 ActionStatusBar.Title = AppStrings.Get("Downloading favorite image");
                 ActionStatusBar.Message = AppStrings.Format("Downloading APOD image for {0}.", selectedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+                ShowFavoriteDownloadProgress(null);
+                var progress = new Progress<apod_wallpaper.DownloadProgressSnapshot>(ShowFavoriteDownloadProgress);
 
-                var downloadResult = await _backendHost.Backend.DownloadDayAsync(selectedDate);
+                var downloadResult = await _backendHost.Backend.DownloadDayAsync(selectedDate, false, progress);
                 if (!downloadResult.Succeeded || downloadResult.Value == null || downloadResult.Value.Status != apod_wallpaper.ApodWorkflowStatus.Success)
                 {
                     ActionStatusBar.Severity = InfoBarSeverity.Error;
@@ -1896,9 +1898,55 @@ public sealed partial class MainPage : Page
         {
             ActionProgressRing.IsActive = false;
             ActionProgressRing.Opacity = 0;
+            HideFavoriteDownloadProgress();
             _isFavoriteActionInProgress = false;
             UpdateActionAvailability();
         }
+    }
+
+    private void ShowFavoriteDownloadProgress(apod_wallpaper.DownloadProgressSnapshot? snapshot)
+    {
+        FavoriteDownloadProgressPanel.Visibility = Visibility.Visible;
+
+        if (snapshot != null && snapshot.TotalBytes.HasValue && snapshot.TotalBytes.Value > 0)
+        {
+            FavoriteDownloadProgressBar.IsIndeterminate = false;
+            var percent = Math.Min(100d, Math.Max(0d, snapshot.BytesReceived * 100d / snapshot.TotalBytes.Value));
+            FavoriteDownloadProgressBar.Value = percent;
+            FavoriteDownloadProgressText.Text = AppStrings.Format(
+                "Downloading image: {0} of {1} ({2}/s)",
+                FormatBytes(snapshot.BytesReceived),
+                FormatBytes(snapshot.TotalBytes.Value),
+                FormatBytes((long)Math.Max(0, snapshot.BytesPerSecond)));
+            return;
+        }
+
+        FavoriteDownloadProgressBar.IsIndeterminate = true;
+        FavoriteDownloadProgressText.Text = AppStrings.Get("Downloading image...");
+    }
+
+    private void HideFavoriteDownloadProgress()
+    {
+        FavoriteDownloadProgressBar.IsIndeterminate = false;
+        FavoriteDownloadProgressBar.Value = 0;
+        FavoriteDownloadProgressPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024)
+            return bytes.ToString(CultureInfo.InvariantCulture) + " B";
+
+        var value = bytes / 1024d;
+        var units = new[] { "KB", "MB", "GB", "TB" };
+        var unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.Length - 1)
+        {
+            value /= 1024d;
+            unitIndex++;
+        }
+
+        return value.ToString(value >= 10 ? "0.#" : "0.##", CultureInfo.InvariantCulture) + " " + units[unitIndex];
     }
 
     private bool CanFavoriteCurrentPreview()

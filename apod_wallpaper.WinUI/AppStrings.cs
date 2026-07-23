@@ -99,6 +99,8 @@ internal static class AppStrings
         ["Downloading and applying APOD for {0}."] = "Скачивание и установка APOD за {0}.",
         ["Downloading favorite image"] = "Скачивание изображения для избранного",
         ["Downloading image"] = "Скачивание изображения",
+        ["Downloading image..."] = "Скачивание изображения...",
+        ["Downloading image: {0} of {1} ({2}/s)"] = "Скачивание изображения: {0} из {1} ({2}/с)",
         ["Enabled"] = "Включено",
         ["Error"] = "Ошибка",
         ["Exit"] = "Выход",

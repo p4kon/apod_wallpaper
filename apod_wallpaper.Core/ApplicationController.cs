@@ -286,10 +286,15 @@ namespace apod_wallpaper
 
         public Task<OperationResult<ApodWorkflowResult>> DownloadDayAsync(DateTime date, bool forceRefresh = false)
         {
+            return DownloadDayAsync(date, forceRefresh, null);
+        }
+
+        public Task<OperationResult<ApodWorkflowResult>> DownloadDayAsync(DateTime date, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress)
+        {
             return ExecuteOperationAsync(async () =>
             {
                 await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
-                var result = await _workflowService.DownloadDayAsync(date, forceRefresh).ConfigureAwait(false);
+                var result = await _workflowService.DownloadDayAsync(date, forceRefresh, progress).ConfigureAwait(false);
                 _calendarStateService.Clear();
                 return EnsureWorkflowResultSucceeded(result, "Unable to download the requested APOD image.");
             }, OperationErrorCode.WorkflowFailed, "Unable to download the requested APOD image.");

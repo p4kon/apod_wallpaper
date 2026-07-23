@@ -66,10 +66,7 @@ public sealed partial class LibraryPage : Page
         if (_arguments == null)
             return;
 
-        LibraryStatusBar.Visibility = Visibility.Visible;
-        LibraryStatusBar.Severity = InfoBarSeverity.Informational;
-        LibraryStatusBar.Title = AppStrings.Get("Loading library summary");
-        LibraryStatusBar.Message = string.Empty;
+        LibraryStatusBar.Visibility = Visibility.Collapsed;
         SetActionButtonsEnabled(false);
 
         var result = await _arguments.BackendHost.Backend.GetStorageSummaryAsync();
@@ -86,9 +83,7 @@ public sealed partial class LibraryPage : Page
 
         _summary = result.Value;
         RebuildSummary();
-        LibraryStatusBar.Severity = InfoBarSeverity.Success;
-        LibraryStatusBar.Title = AppStrings.Get("Library summary loaded");
-        LibraryStatusBar.Message = AppStrings.Get("No files were changed.");
+        LibraryStatusBar.Visibility = Visibility.Collapsed;
         SetActionButtonsEnabled(true);
     }
 
@@ -138,14 +133,19 @@ public sealed partial class LibraryPage : Page
 
     private FrameworkElement BuildMetricRow(string titleKey, string value, string? path)
     {
-        var root = new Border
+        var root = new Button
         {
             Padding = new Thickness(14, 10, 14, 10),
             Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
             BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Tag = path,
         };
+        root.Click += SummaryRow_Click;
+        ToolTipService.SetToolTip(root, string.IsNullOrWhiteSpace(path) ? AppStrings.Get("Folder path is not available.") : path);
 
         var grid = new Grid
         {
@@ -180,8 +180,14 @@ public sealed partial class LibraryPage : Page
         Grid.SetColumn(details, 1);
         grid.Children.Add(details);
 
-        root.Child = grid;
+        root.Content = grid;
         return root;
+    }
+
+    private async void SummaryRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string path })
+            await OpenFolderAsync(path, "Unable to open folder");
     }
 
     private async Task OpenFolderAsync(string? path, string errorTitleKey)

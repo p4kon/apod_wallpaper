@@ -417,6 +417,10 @@
                 Margin="0,6,0,0"
                 HorizontalAlignment="Center"
                 ColumnSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="88" />
                     <ColumnDefinition Width="206" />
@@ -468,6 +472,29 @@
                     VerticalAlignment="Center"
                     IsActive="False"
                     Opacity="0" />
+
+                <StackPanel
+                    x:Name="FavoriteDownloadProgressPanel"
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Grid.ColumnSpan="2"
+                    Margin="0,8,0,0"
+                    Spacing="4"
+                    Visibility="Collapsed">
+                    <ProgressBar
+                        x:Name="FavoriteDownloadProgressBar"
+                        Height="3"
+                        Minimum="0"
+                        Maximum="100"
+                        Value="0" />
+                    <TextBlock
+                        x:Name="FavoriteDownloadProgressText"
+                        HorizontalAlignment="Center"
+                        FontSize="11"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        IsTextScaleFactorEnabled="False"
+                        Text="Downloading image..." />
+                </StackPanel>
             </Grid>
         </Grid>
 
