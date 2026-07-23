@@ -94,6 +94,7 @@ public sealed partial class SettingsPage : Page
         {
             ApiKeyTextBox.Text = settings.NasaApiKey ?? string.Empty;
             AutoCheckToggle.IsOn = settings.AutoRefreshEnabled;
+            AutoWallpaperSourceComboBox.SelectedIndex = ResolveAutoWallpaperSourceSelectedIndex(settings.AutoWallpaperSource);
             UpdateCheckToggle.IsOn = settings.AutoCheckUpdatesEnabled;
             StartWithWindowsToggle.IsOn = settings.StartWithWindows;
             CloseToTrayToggle.IsOn = settings.MinimizeToTrayOnClose;
@@ -136,6 +137,20 @@ public sealed partial class SettingsPage : Page
         return apod_wallpaper.ApplicationSettingsSnapshot.LanguageEnglish;
     }
 
+    private static int ResolveAutoWallpaperSourceSelectedIndex(string? source)
+    {
+        var normalized = apod_wallpaper.ApplicationSettingsSnapshot.NormalizeAutoWallpaperSource(source);
+        return normalized == apod_wallpaper.AutoWallpaperSource.Favorites ? 1 : 0;
+    }
+
+    private string ResolveAutoWallpaperSourceFromSelection()
+    {
+        if (AutoWallpaperSourceComboBox.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            return apod_wallpaper.ApplicationSettingsSnapshot.NormalizeAutoWallpaperSource(tag);
+
+        return apod_wallpaper.AutoWallpaperSource.Latest;
+    }
+
     private void RefreshLocalizedText()
     {
         LocalizationHelper.ApplyTo(this);
@@ -151,6 +166,16 @@ public sealed partial class SettingsPage : Page
     private async void AutoCheckToggle_Toggled(object sender, RoutedEventArgs e)
     {
         await SaveSettingsAsync(snapshot => snapshot.AutoRefreshEnabled = AutoCheckToggle.IsOn, "Auto-check preference saved.");
+    }
+
+    private async void AutoWallpaperSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isHydratingControls || AutoWallpaperSourceComboBox.SelectedIndex < 0)
+            return;
+
+        await SaveSettingsAsync(
+            snapshot => snapshot.AutoWallpaperSource = ResolveAutoWallpaperSourceFromSelection(),
+            "Wallpaper source preference saved.");
     }
 
     private async void UpdateCheckToggle_Toggled(object sender, RoutedEventArgs e)

@@ -8,6 +8,7 @@ namespace apod_wallpaper
         public bool TrayDoubleClickAction { get; set; }
         public int WallpaperStyleIndex { get; set; }
         public bool AutoRefreshEnabled { get; set; }
+        public string AutoWallpaperSource { get; set; }
         public bool StartWithWindows { get; set; }
         public bool MinimizeToTrayOnClose { get; set; }
         public string Language { get; set; }
@@ -19,6 +20,7 @@ namespace apod_wallpaper
         public bool RandomApodIncludeDeepArchive { get; set; }
         public string LastAutoRefreshRunDate { get; set; }
         public string LastAutoRefreshAppliedDate { get; set; }
+        public string LastFavoriteWallpaperDate { get; set; }
         public string LastAppliedWallpaperImagePath { get; set; }
         public bool AutoCheckUpdatesEnabled { get; set; }
         public bool SuppressAutomaticUpdateReminder { get; set; }
@@ -31,6 +33,7 @@ namespace apod_wallpaper
                 TrayDoubleClickAction = TrayDoubleClickAction,
                 WallpaperStyleIndex = WallpaperStyleIndex,
                 AutoRefreshEnabled = AutoRefreshEnabled,
+                AutoWallpaperSource = NormalizeAutoWallpaperSource(AutoWallpaperSource),
                 StartWithWindows = StartWithWindows,
                 MinimizeToTrayOnClose = MinimizeToTrayOnClose,
                 Language = NormalizeLanguage(Language),
@@ -42,6 +45,7 @@ namespace apod_wallpaper
                 RandomApodIncludeDeepArchive = RandomApodIncludeDeepArchive,
                 LastAutoRefreshRunDate = LastAutoRefreshRunDate,
                 LastAutoRefreshAppliedDate = LastAutoRefreshAppliedDate,
+                LastFavoriteWallpaperDate = LastFavoriteWallpaperDate,
                 LastAppliedWallpaperImagePath = LastAppliedWallpaperImagePath,
                 AutoCheckUpdatesEnabled = AutoCheckUpdatesEnabled,
                 SuppressAutomaticUpdateReminder = SuppressAutomaticUpdateReminder,
@@ -71,6 +75,11 @@ namespace apod_wallpaper
         public static string NormalizeRandomApodSource(string source)
         {
             return apod_wallpaper.RandomApodSource.Normalize(source);
+        }
+
+        public static string NormalizeAutoWallpaperSource(string source)
+        {
+            return apod_wallpaper.AutoWallpaperSource.Normalize(source);
         }
     }
 }
