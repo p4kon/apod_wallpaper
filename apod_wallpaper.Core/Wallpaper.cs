@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
@@ -289,6 +290,34 @@ namespace apod_wallpaper
                         ? (string)key.GetValue("BackgroundHistoryPath0")
                         : null;
                 }
+            }
+            finally
+            {
+                if (desktopWallpaper != null && Marshal.IsComObject(desktopWallpaper))
+                    Marshal.ReleaseComObject(desktopWallpaper);
+            }
+        }
+
+        public static DisplayTopologySnapshot GetDisplayTopologySnapshot()
+        {
+            IDesktopWallpaper desktopWallpaper = null;
+            try
+            {
+                desktopWallpaper = (IDesktopWallpaper)new DesktopWallpaperComObject();
+                var monitorCount = desktopWallpaper.GetMonitorDevicePathCount();
+                var monitors = new List<DisplayMonitorInfo>((int)monitorCount);
+                for (uint monitorIndex = 0; monitorIndex < monitorCount; monitorIndex++)
+                {
+                    desktopWallpaper.GetMonitorDevicePathAt(monitorIndex, out var monitorId);
+                    desktopWallpaper.GetMonitorRECT(monitorId, out var rect);
+                    monitors.Add(new DisplayMonitorInfo(monitorId, rect.Left, rect.Top, rect.Right, rect.Bottom));
+                }
+
+                return new DisplayTopologySnapshot(monitors);
+            }
+            catch (Exception ex)
+            {
+                return new DisplayTopologySnapshot(Array.Empty<DisplayMonitorInfo>(), ex.Message);
             }
             finally
             {
