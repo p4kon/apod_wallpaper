@@ -75,6 +75,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Favorite APOD store persists normalized dates", FavoriteApodStorePersistsNormalizedDates);
                 Run("Update check compares release versions", UpdateCheckComparesReleaseVersions);
                 Run("Update check defaults to automatic checks enabled", UpdateCheckDefaultsToAutomaticChecksEnabled);
+                Run("Display topology snapshot is read only", DisplayTopologySnapshotIsReadOnly);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -192,6 +193,31 @@ namespace apod_wallpaper.SmokeTests
             {
                 TryDeleteDirectory(directory);
             }
+        }
+
+        private static void DisplayTopologySnapshotIsReadOnly()
+        {
+            var sourcePath = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.Core", "DisplayTopologySnapshot.cs");
+            var source = File.ReadAllText(sourcePath);
+            var forbiddenTokens = new[]
+            {
+                "SetWallpaper",
+                "SystemParametersInfo",
+                "ApplyDay",
+                "DownloadDay",
+                "Save(",
+            };
+
+            foreach (var token in forbiddenTokens)
+                Assert(!source.Contains(token), "Display topology spike must remain read-only: " + token);
+
+            var snapshot = new apod_wallpaper.DisplayTopologySnapshot(new[]
+            {
+                new apod_wallpaper.DisplayMonitorInfo("secondary", -1920, 0, 0, 1080),
+                new apod_wallpaper.DisplayMonitorInfo("primary", 0, 0, 2560, 1440),
+            });
+            Assert(snapshot.IsMultiMonitor, "Expected two monitors to be detected as multi-monitor topology.");
+            Assert(snapshot.Monitors[0].DevicePath == "secondary", "Expected monitors to be sorted by desktop position.");
         }
 
         private static void ApodPageUrlBuilderIsDeterministic()
