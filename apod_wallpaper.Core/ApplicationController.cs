@@ -15,6 +15,7 @@ namespace apod_wallpaper
         private readonly IStartupRegistrationService _startupRegistrationService;
         private readonly Scheduler _scheduler;
         private readonly ApodWorkflowService _workflowService;
+        private readonly StorageSummaryService _storageSummaryService;
         private readonly ApodCalendarStateService _calendarStateService;
         private readonly ApodPageAvailabilityProbe _pageAvailabilityProbe;
         private readonly FavoriteApodStore _favoriteStore;
@@ -36,6 +37,7 @@ namespace apod_wallpaper
             _startupRegistrationService = startupRegistrationService ?? throw new ArgumentNullException(nameof(startupRegistrationService));
             _scheduler = new Scheduler();
             _workflowService = new ApodWorkflowService();
+            _storageSummaryService = new StorageSummaryService();
             _calendarStateService = new ApodCalendarStateService(_workflowService);
             _pageAvailabilityProbe = new ApodPageAvailabilityProbe();
             _favoriteStore = new FavoriteApodStore();
@@ -143,6 +145,14 @@ namespace apod_wallpaper
         public Task<OperationResult<ApplicationStoragePaths>> EnsureStorageLayoutAsync()
         {
             return Task.FromResult(ExecuteOperation(FileStorage.EnsureStorageLayout, OperationErrorCode.StorageFailed, "Unable to prepare the application storage layout."));
+        }
+
+        public Task<OperationResult<StorageSummary>> GetStorageSummaryAsync()
+        {
+            return ExecuteOperationAsync(
+                _storageSummaryService.GetStorageSummaryAsync,
+                OperationErrorCode.StorageFailed,
+                "Unable to summarize the local APOD library.");
         }
 
         public Task<OperationResult<string>> GetUserFriendlyErrorMessageAsync(Exception exception, string fallbackMessage = null)

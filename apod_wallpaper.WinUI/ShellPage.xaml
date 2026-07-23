@@ -64,6 +64,17 @@
                             </Button>
 
                             <Button
+                                x:Name="LibraryButton"
+                                Width="36"
+                                Height="36"
+                                Padding="0"
+                                Click="LibraryButton_Click"
+                                Background="Transparent"
+                                BorderBrush="Transparent">
+                                <SymbolIcon Symbol="Folder" />
+                            </Button>
+
+                            <Button
                                 x:Name="AboutButton"
                                 Width="36"
                                 Height="36"
