@@ -2,12 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -17,6 +21,7 @@ public sealed partial class FavoritesPage : Page
 {
     private FavoritesPageArguments? _arguments;
     private IReadOnlyList<apod_wallpaper.FavoriteApodItem> _favoriteItems = Array.Empty<apod_wallpaper.FavoriteApodItem>();
+    private int _loadVersion;
 
     public FavoritesPage()
     {
@@ -44,6 +49,7 @@ public sealed partial class FavoritesPage : Page
     private void AppStrings_LanguageChanged(object? sender, EventArgs e)
     {
         LocalizationHelper.ApplyTo(this);
+        FavoritesLoadingText.Text = AppStrings.Get("Loading favorite images");
         RebuildFavoritesList();
     }
 
@@ -52,62 +58,66 @@ public sealed partial class FavoritesPage : Page
         if (_arguments == null)
             return;
 
-        FavoritesStatusBar.Visibility = Visibility.Visible;
-        FavoritesStatusBar.Severity = InfoBarSeverity.Informational;
-        FavoritesStatusBar.Title = AppStrings.Get("Loading favorite images");
-        FavoritesStatusBar.Message = string.Empty;
+        var loadVersion = Interlocked.Increment(ref _loadVersion);
+        FavoritesLoadingText.Text = AppStrings.Get("Loading favorite images");
+        FavoritesLoadingPanel.Visibility = Visibility.Visible;
+        FavoritesGridView.Visibility = Visibility.Collapsed;
+        EmptyFavoritesPanel.Visibility = Visibility.Collapsed;
 
         var result = await _arguments.BackendHost.Backend.GetFavoriteApodsAsync();
+        if (loadVersion != _loadVersion)
+            return;
+
+        FavoritesLoadingPanel.Visibility = Visibility.Collapsed;
         if (!result.Succeeded || result.Value == null)
         {
             _favoriteItems = Array.Empty<apod_wallpaper.FavoriteApodItem>();
             RebuildFavoritesList();
-            FavoritesStatusBar.Severity = InfoBarSeverity.Error;
-            FavoritesStatusBar.Title = AppStrings.Get("Unable to load favorite images.");
-            FavoritesStatusBar.Message = AppStrings.GetBackendMessageOrDefault(result.Error?.Message, "Unable to load favorite images.");
             return;
         }
 
         _favoriteItems = result.Value;
         RebuildFavoritesList();
-        FavoritesStatusBar.Severity = InfoBarSeverity.Success;
-        FavoritesStatusBar.Title = AppStrings.Get("Favorite images loaded");
-        FavoritesStatusBar.Message = AppStrings.Format("{0} favorite images.", _favoriteItems.Count.ToString(CultureInfo.InvariantCulture));
     }
 
     private void RebuildFavoritesList()
     {
-        FavoritesListView.Items.Clear();
+        FavoritesGridView.Items.Clear();
         var hasItems = _favoriteItems.Count > 0;
-        FavoritesListView.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
+        FavoritesGridView.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
         EmptyFavoritesPanel.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
 
         foreach (var item in _favoriteItems)
         {
-            FavoritesListView.Items.Add(new ListViewItem
+            FavoritesGridView.Items.Add(new GridViewItem
             {
-                Content = BuildFavoriteItem(item),
+                Content = BuildFavoriteTile(item),
                 Padding = new Thickness(0),
+                Margin = new Thickness(0, 0, 10, 12),
+                Width = 128,
+                Height = 132,
+                Tag = item.Date.Date,
             });
         }
     }
 
-    private FrameworkElement BuildFavoriteItem(apod_wallpaper.FavoriteApodItem item)
+    private FrameworkElement BuildFavoriteTile(apod_wallpaper.FavoriteApodItem item)
     {
         var root = new Grid
         {
-            Padding = new Thickness(0, 8, 0, 8),
-            ColumnSpacing = 12,
+            Width = 128,
+            Height = 132,
+            Tag = item.Date.Date,
         };
-        root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        ToolTipService.SetToolTip(root, AppStrings.Get("Open favorite in Calendar"));
+        AutomationProperties.SetName(root, AppStrings.Get("Open favorite in Calendar"));
 
         var thumbnail = new Border
         {
-            Width = 112,
-            Height = 68,
-            CornerRadius = new CornerRadius(10),
+            Width = 128,
+            Height = 92,
+            VerticalAlignment = VerticalAlignment.Top,
+            CornerRadius = new CornerRadius(8),
             Background = (Brush)Application.Current.Resources["ControlFillColorSecondaryBrush"],
             Child = new Image
             {
@@ -115,61 +125,69 @@ public sealed partial class FavoritesPage : Page
                 Stretch = Stretch.UniformToFill,
             },
         };
-        Grid.SetColumn(thumbnail, 0);
         root.Children.Add(thumbnail);
 
-        var textPanel = new StackPanel
+        var dateText = new TextBlock
         {
-            VerticalAlignment = VerticalAlignment.Center,
-            Spacing = 2,
-        };
-        textPanel.Children.Add(new TextBlock
-        {
-            Text = item.Date.ToString("dddd, dd MMMM yyyy", AppStrings.DateCulture),
+            Margin = new Thickness(2, 98, 2, 0),
+            FontSize = 12,
             FontWeight = FontWeights.SemiBold,
-        });
-        textPanel.Children.Add(new TextBlock
-        {
-            Text = string.IsNullOrWhiteSpace(item.Title) ? AppStrings.Get("APOD image") : item.Title,
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Text = item.Date.ToString("dd MMM yyyy", AppStrings.DateCulture),
+            TextAlignment = TextAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
-        });
-        Grid.SetColumn(textPanel, 1);
-        root.Children.Add(textPanel);
-
-        var actions = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-            Spacing = 6,
+            TextWrapping = TextWrapping.NoWrap,
         };
+        root.Children.Add(dateText);
 
-        var openButton = new Button
+        var titleText = new TextBlock
         {
-            Content = AppStrings.Get("Open"),
-            Tag = item.Date,
-            MinWidth = 74,
+            Margin = new Thickness(2, 116, 2, 0),
+            FontSize = 11,
+            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Text = BuildTileTitle(item),
+            TextAlignment = TextAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = TextWrapping.NoWrap,
         };
-        openButton.Click += OpenFavoriteButton_Click;
-        AutomationProperties.SetName(openButton, AppStrings.Get("Open"));
-        ToolTipService.SetToolTip(openButton, AppStrings.Get("Open favorite in Calendar"));
-        actions.Children.Add(openButton);
+        root.Children.Add(titleText);
 
         var removeButton = new Button
         {
-            Content = AppStrings.Get("Remove"),
-            Tag = item.Date,
-            MinWidth = 74,
+            Width = 28,
+            Height = 28,
+            Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 6, 6, 0),
+            Opacity = 0,
+            Tag = item.Date.Date,
+            Content = new FontIcon
+            {
+                Glyph = "\uE711",
+                FontSize = 11,
+            },
         };
         removeButton.Click += RemoveFavoriteButton_Click;
         AutomationProperties.SetName(removeButton, AppStrings.Get("Remove from favorites"));
         ToolTipService.SetToolTip(removeButton, AppStrings.Get("Remove from favorites"));
-        actions.Children.Add(removeButton);
+        root.Children.Add(removeButton);
 
-        Grid.SetColumn(actions, 2);
-        root.Children.Add(actions);
+        root.PointerEntered += (_, _) => AnimateOpacity(removeButton, 1);
+        root.PointerExited += (_, _) => AnimateOpacity(removeButton, 0);
 
         return root;
+    }
+
+    private static string BuildTileTitle(apod_wallpaper.FavoriteApodItem item)
+    {
+        var fallbackTitle = "APOD " + item.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (string.IsNullOrWhiteSpace(item.Title) ||
+            string.Equals(item.Title.Trim(), fallbackTitle, StringComparison.OrdinalIgnoreCase))
+        {
+            return AppStrings.Get("APOD image");
+        }
+
+        return item.Title.Trim();
     }
 
     private static ImageSource? CreateImageSource(string? imagePath)
@@ -180,9 +198,9 @@ public sealed partial class FavoritesPage : Page
         return new BitmapImage(new Uri(imagePath, UriKind.Absolute));
     }
 
-    private void OpenFavoriteButton_Click(object sender, RoutedEventArgs e)
+    private void FavoritesGridView_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (sender is Button { Tag: DateTime date })
+        if (e.ClickedItem is GridViewItem { Tag: DateTime date })
             _arguments?.OpenFavoriteDate(date.Date);
     }
 
@@ -191,21 +209,74 @@ public sealed partial class FavoritesPage : Page
         if (_arguments == null || sender is not Button { Tag: DateTime date })
             return;
 
-        FavoritesStatusBar.Visibility = Visibility.Visible;
-        FavoritesStatusBar.Severity = InfoBarSeverity.Informational;
-        FavoritesStatusBar.Title = AppStrings.Get("Removing favorite");
-        FavoritesStatusBar.Message = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var removeButton = (Button)sender;
+        removeButton.IsEnabled = false;
 
         var result = await _arguments.BackendHost.Backend.SetFavoriteAsync(date.Date, false);
         if (!result.Succeeded)
         {
-            FavoritesStatusBar.Severity = InfoBarSeverity.Error;
-            FavoritesStatusBar.Title = AppStrings.Get("Favorite was not removed");
-            FavoritesStatusBar.Message = AppStrings.GetBackendMessageOrDefault(result.Error?.Message, "Unable to remove favorite.");
+            removeButton.IsEnabled = true;
             return;
         }
 
-        await LoadFavoritesAsync();
+        await FadeOutFavoriteItemAsync(date.Date);
+        _favoriteItems = _favoriteItems.Where(item => item.Date.Date != date.Date).ToList();
+        RemoveFavoriteGridItem(date.Date);
+        EmptyFavoritesPanel.Visibility = _favoriteItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        FavoritesGridView.Visibility = _favoriteItems.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private Task FadeOutFavoriteItemAsync(DateTime date)
+    {
+        foreach (var item in FavoritesGridView.Items)
+        {
+            if (item is GridViewItem { Tag: DateTime itemDate } gridItem && itemDate == date)
+                return AnimateOpacityAsync(gridItem, 0);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void RemoveFavoriteGridItem(DateTime date)
+    {
+        for (var i = FavoritesGridView.Items.Count - 1; i >= 0; i--)
+        {
+            if (FavoritesGridView.Items[i] is GridViewItem { Tag: DateTime itemDate } && itemDate == date)
+                FavoritesGridView.Items.RemoveAt(i);
+        }
+    }
+
+    private static void AnimateOpacity(UIElement target, double to)
+    {
+        var animation = new DoubleAnimation
+        {
+            To = to,
+            Duration = new Duration(TimeSpan.FromMilliseconds(140)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, "Opacity");
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(animation);
+        storyboard.Begin();
+    }
+
+    private static Task AnimateOpacityAsync(UIElement target, double to)
+    {
+        var completion = new TaskCompletionSource<bool>();
+        var animation = new DoubleAnimation
+        {
+            To = to,
+            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, "Opacity");
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(animation);
+        storyboard.Completed += (_, _) => completion.TrySetResult(true);
+        storyboard.Begin();
+        return completion.Task;
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)

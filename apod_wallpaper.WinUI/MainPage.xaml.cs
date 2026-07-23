@@ -873,6 +873,7 @@ public sealed partial class MainPage : Page
         {
             Text = date.Day.ToString(CultureInfo.InvariantCulture),
             FontSize = 10,
+            IsTextScaleFactorEnabled = false,
             FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -882,8 +883,11 @@ public sealed partial class MainPage : Page
         {
             Glyph = "\uE735",
             FontSize = 8,
+            Width = 14,
+            Height = 14,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, -2, -2, 0),
             Foreground = CalendarFavoriteBrush,
             Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed,
             IsHitTestVisible = false,
@@ -1025,21 +1029,26 @@ public sealed partial class MainPage : Page
         var dayNumberText = new TextBlock
         {
             HorizontalAlignment = HorizontalAlignment.Center,
+            IsTextScaleFactorEnabled = false,
         };
 
         var statusText = new TextBlock
         {
             HorizontalAlignment = HorizontalAlignment.Center,
             FontSize = 9,
+            IsTextScaleFactorEnabled = false,
             Opacity = 0.92,
         };
 
         var favoriteIcon = new FontIcon
         {
             Glyph = "\uE735",
-            FontSize = 11,
+            FontSize = 10,
+            Width = 16,
+            Height = 16,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, -2, -2, 0),
             Foreground = CalendarFavoriteBrush,
             Visibility = Visibility.Collapsed,
             IsHitTestVisible = false,
@@ -1065,6 +1074,8 @@ public sealed partial class MainPage : Page
             MinHeight = 44,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Stretch,
             CornerRadius = new CornerRadius(10),
             Tag = date,
         };

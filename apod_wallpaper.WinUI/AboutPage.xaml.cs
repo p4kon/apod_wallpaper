@@ -1,6 +1,7 @@
 using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
 namespace apod_wallpaper.WinUI;
@@ -15,6 +16,7 @@ public sealed partial class AboutPage : Page
     private static readonly Uri ThirdPartyNoticesUri = new("https://github.com/p4kon/apod_wallpaper/blob/main/THIRD_PARTY_NOTICES.md");
     private static readonly Uri NasaApodUri = new("https://apod.nasa.gov/apod/");
     private static readonly Uri NasaApiUri = new("https://api.nasa.gov/");
+    private readonly DispatcherTimer _statusDismissTimer = new();
     private AboutPageArguments? _arguments;
 
     public AboutPage()
@@ -22,6 +24,8 @@ public sealed partial class AboutPage : Page
         InitializeComponent();
         LocalizationHelper.ApplyTo(this);
         PopulateAppInfo();
+        _statusDismissTimer.Interval = TimeSpan.FromSeconds(5);
+        _statusDismissTimer.Tick += StatusDismissTimer_Tick;
         AppStrings.LanguageChanged += AppStrings_LanguageChanged;
         Loaded += AboutPage_Loaded;
         Unloaded += AboutPage_Unloaded;
@@ -42,6 +46,8 @@ public sealed partial class AboutPage : Page
     private void AboutPage_Unloaded(object sender, RoutedEventArgs e)
     {
         AppStrings.LanguageChanged -= AppStrings_LanguageChanged;
+        _statusDismissTimer.Stop();
+        _statusDismissTimer.Tick -= StatusDismissTimer_Tick;
         Loaded -= AboutPage_Loaded;
         Unloaded -= AboutPage_Unloaded;
     }
@@ -102,9 +108,11 @@ public sealed partial class AboutPage : Page
             return;
 
         CheckUpdatesButton.IsEnabled = false;
-        AboutStatusBar.Severity = InfoBarSeverity.Informational;
-        AboutStatusBar.Title = AppStrings.Get("Checking for updates");
-        AboutStatusBar.Message = AppStrings.Get("Checking GitHub Releases for the latest APOD Wallpaper version.");
+        ShowAboutStatus(
+            InfoBarSeverity.Informational,
+            AppStrings.Get("Checking for updates"),
+            AppStrings.Get("Checking GitHub Releases for the latest APOD Wallpaper version."),
+            autoDismiss: false);
 
         try
         {
@@ -112,9 +120,11 @@ public sealed partial class AboutPage : Page
             var result = await _arguments.BackendHost.Backend.CheckForUpdatesAsync(currentVersion, forceCheck: true, automatic: false);
             if (!result.Succeeded || result.Value == null)
             {
-                AboutStatusBar.Severity = InfoBarSeverity.Error;
-                AboutStatusBar.Title = AppStrings.Get("Could not check for updates");
-                AboutStatusBar.Message = AppStrings.GetBackendMessageOrDefault(result.Error?.Message, "Could not check for updates.");
+                ShowAboutStatus(
+                    InfoBarSeverity.Error,
+                    AppStrings.Get("Could not check for updates"),
+                    AppStrings.GetBackendMessageOrDefault(result.Error?.Message, "Could not check for updates."),
+                    autoDismiss: true);
                 return;
             }
 
@@ -130,9 +140,11 @@ public sealed partial class AboutPage : Page
     {
         if (result.Status == apod_wallpaper.UpdateCheckStatus.UpdateAvailable)
         {
-            AboutStatusBar.Severity = InfoBarSeverity.Warning;
-            AboutStatusBar.Title = AppStrings.Get("Update available");
-            AboutStatusBar.Message = AppStrings.Format("Version {0} is available.", result.LatestVersion);
+            ShowAboutStatus(
+                InfoBarSeverity.Warning,
+                AppStrings.Get("Update available"),
+                AppStrings.Format("Version {0} is available.", result.LatestVersion),
+                autoDismiss: false);
 
             var choice = await UpdateNotificationDialog.ShowAsync(XamlRoot, result, includeDoNotRemind: false);
             if (choice == UpdateDialogChoice.OpenRelease)
@@ -143,15 +155,47 @@ public sealed partial class AboutPage : Page
 
         if (result.Status == apod_wallpaper.UpdateCheckStatus.UpToDate)
         {
-            AboutStatusBar.Severity = InfoBarSeverity.Success;
-            AboutStatusBar.Title = AppStrings.Get("APOD Wallpaper is up to date");
-            AboutStatusBar.Message = AppStrings.Format("You are running version {0}.", result.CurrentVersion);
+            ShowAboutStatus(
+                InfoBarSeverity.Success,
+                AppStrings.Get("APOD Wallpaper is up to date"),
+                AppStrings.Format("You are running version {0}.", result.CurrentVersion),
+                autoDismiss: true);
             return;
         }
 
-        AboutStatusBar.Severity = InfoBarSeverity.Warning;
-        AboutStatusBar.Title = AppStrings.Get("Could not check for updates");
-        AboutStatusBar.Message = AppStrings.GetBackendMessageOrDefault(result.Message, "Could not check for updates.");
+        ShowAboutStatus(
+            InfoBarSeverity.Warning,
+            AppStrings.Get("Could not check for updates"),
+            AppStrings.GetBackendMessageOrDefault(result.Message, "Could not check for updates."),
+            autoDismiss: true);
+    }
+
+    private void ShowAboutStatus(InfoBarSeverity severity, string title, string message, bool autoDismiss)
+    {
+        _statusDismissTimer.Stop();
+        AboutStatusBar.Severity = severity;
+        AboutStatusBar.Title = title;
+        AboutStatusBar.Message = message;
+        AboutStatusBar.Visibility = Visibility.Visible;
+        if (autoDismiss)
+            _statusDismissTimer.Start();
+    }
+
+    private void HideAboutStatus()
+    {
+        _statusDismissTimer.Stop();
+        AboutStatusBar.Visibility = Visibility.Collapsed;
+    }
+
+    private void StatusDismissTimer_Tick(object? sender, object e)
+    {
+        HideAboutStatus();
+    }
+
+    private void AboutRoot_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (AboutStatusBar.Visibility == Visibility.Visible)
+            HideAboutStatus();
     }
 
     private static async System.Threading.Tasks.Task OpenReleaseAsync(apod_wallpaper.UpdateCheckResult result)

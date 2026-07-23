@@ -22,18 +22,40 @@
                 TextWrapping="Wrap" />
         </StackPanel>
 
-        <InfoBar
-            x:Name="FavoritesStatusBar"
+        <Grid
+            x:Name="FavoritesLoadingPanel"
             Grid.Row="1"
-            IsClosable="False"
-            IsOpen="True"
-            Severity="Informational"
-            Title="Loading favorite images"
-            Visibility="Collapsed" />
+            Margin="0,0,0,14"
+            Visibility="Collapsed">
+            <StackPanel
+                HorizontalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="12">
+                <Grid Width="34" Height="34">
+                    <ProgressRing
+                        Width="34"
+                        Height="34"
+                        IsActive="True" />
+                    <FontIcon
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Glyph="&#xE735;"
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                </Grid>
+                <TextBlock
+                    x:Name="FavoritesLoadingText"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="Loading favorite images" />
+            </StackPanel>
+        </Grid>
 
         <Grid Grid.Row="2">
-            <ListView
-                x:Name="FavoritesListView"
+            <GridView
+                x:Name="FavoritesGridView"
+                IsItemClickEnabled="True"
+                ItemClick="FavoritesGridView_ItemClick"
                 SelectionMode="None"
                 Visibility="Collapsed" />
 
