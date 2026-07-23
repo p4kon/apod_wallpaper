@@ -18,6 +18,9 @@ namespace apod_wallpaper
         public string LastAutoRefreshRunDate { get; set; }
         public string LastAutoRefreshAppliedDate { get; set; }
         public string LastAppliedWallpaperImagePath { get; set; }
+        public bool AutoCheckUpdatesEnabled { get; set; }
+        public bool SuppressAutomaticUpdateReminder { get; set; }
+        public string LastUpdateCheckUtc { get; set; }
 
         public ApplicationSettingsSnapshot Clone()
         {
@@ -36,6 +39,9 @@ namespace apod_wallpaper
                 LastAutoRefreshRunDate = LastAutoRefreshRunDate,
                 LastAutoRefreshAppliedDate = LastAutoRefreshAppliedDate,
                 LastAppliedWallpaperImagePath = LastAppliedWallpaperImagePath,
+                AutoCheckUpdatesEnabled = AutoCheckUpdatesEnabled,
+                SuppressAutomaticUpdateReminder = SuppressAutomaticUpdateReminder,
+                LastUpdateCheckUtc = LastUpdateCheckUtc,
             };
         }
 

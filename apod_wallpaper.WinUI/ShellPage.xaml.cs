@@ -4,12 +4,14 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.System;
 
 namespace apod_wallpaper.WinUI;
 
 public sealed partial class ShellPage : Page
 {
     private ShellPageArguments? _arguments;
+    private bool _automaticUpdateCheckStarted;
     private static readonly SolidColorBrush ActiveNavBrush = new(Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x00, 0x78, 0xD4));
     private static readonly SolidColorBrush InactiveNavBrush = new(Microsoft.UI.Colors.Transparent);
 
@@ -64,10 +66,11 @@ public sealed partial class ShellPage : Page
         ApplyNavigationLabels();
     }
 
-    private void ShellPage_Loaded(object sender, RoutedEventArgs e)
+    private async void ShellPage_Loaded(object sender, RoutedEventArgs e)
     {
         LocalizationHelper.ApplyTo(this);
         ApplyNavigationLabels();
+        await TryRunAutomaticUpdateCheckAsync();
     }
 
     private void NavigateToPreview()
@@ -121,7 +124,62 @@ public sealed partial class ShellPage : Page
     private void NavigateToAbout()
     {
         SetActiveButton(AboutButton);
-        ContentFrame.Navigate(typeof(AboutPage));
+        ContentFrame.Navigate(typeof(AboutPage), _arguments?.CreateAboutPageArguments());
+    }
+
+    private async System.Threading.Tasks.Task TryRunAutomaticUpdateCheckAsync()
+    {
+        if (_automaticUpdateCheckStarted || _arguments == null)
+            return;
+
+        _automaticUpdateCheckStarted = true;
+        var settingsResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
+        if (!settingsResult.Succeeded || settingsResult.Value == null)
+            return;
+
+        var settings = settingsResult.Value;
+        if (!settings.AutoCheckUpdatesEnabled)
+            return;
+
+        var currentVersion = AppVersionResolver.ResolveCurrentVersionText();
+        var checkResult = await _arguments.BackendHost.Backend.CheckForUpdatesAsync(currentVersion, forceCheck: false, automatic: true);
+        if (!checkResult.Succeeded || checkResult.Value == null || checkResult.Value.Status != apod_wallpaper.UpdateCheckStatus.UpdateAvailable)
+            return;
+
+        if (settings.SuppressAutomaticUpdateReminder)
+            return;
+
+        var choice = await UpdateNotificationDialog.ShowAsync(XamlRoot, checkResult.Value, includeDoNotRemind: true);
+        if (choice == UpdateDialogChoice.OpenRelease)
+        {
+            await OpenReleaseAsync(checkResult.Value);
+            return;
+        }
+
+        if (choice == UpdateDialogChoice.DoNotRemind)
+            await SuppressAutomaticUpdateReminderAsync();
+    }
+
+    private async System.Threading.Tasks.Task SuppressAutomaticUpdateReminderAsync()
+    {
+        if (_arguments == null)
+            return;
+
+        var settingsResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
+        if (!settingsResult.Succeeded || settingsResult.Value == null)
+            return;
+
+        var settings = settingsResult.Value.Clone();
+        settings.SuppressAutomaticUpdateReminder = true;
+        await _arguments.BackendHost.Backend.SaveSettingsAsync(settings);
+    }
+
+    private static async System.Threading.Tasks.Task OpenReleaseAsync(apod_wallpaper.UpdateCheckResult result)
+    {
+        if (string.IsNullOrWhiteSpace(result.LatestReleaseUrl))
+            return;
+
+        await Launcher.LaunchUriAsync(new System.Uri(result.LatestReleaseUrl));
     }
 
     private void SetActiveButton(Button activeButton)

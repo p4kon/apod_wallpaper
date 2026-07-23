@@ -58,4 +58,9 @@ internal sealed class ShellPageArguments
             BackendHost,
             openFavoriteDate);
     }
+
+    public AboutPageArguments CreateAboutPageArguments()
+    {
+        return new AboutPageArguments(BackendHost);
+    }
 }

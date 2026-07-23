@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -72,6 +73,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("Calendar availability throttle resets when today changes", CalendarAvailabilityThrottleResetsWhenTodayChanges);
                 Run("APOD availability probe source avoids workflow side effects", ApodAvailabilityProbeSourceAvoidsWorkflowSideEffects);
                 Run("Favorite APOD store persists normalized dates", FavoriteApodStorePersistsNormalizedDates);
+                Run("Update check compares release versions", UpdateCheckComparesReleaseVersions);
+                Run("Update check defaults to automatic checks enabled", UpdateCheckDefaultsToAutomaticChecksEnabled);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -149,6 +152,41 @@ namespace apod_wallpaper.SmokeTests
 
                 Assert(reloaded.SetFavorite(date, false), "Favorite remove should change state.");
                 Assert(!reloaded.IsFavorite(date), "Favorite date should be removed.");
+            }
+            finally
+            {
+                TryDeleteDirectory(directory);
+            }
+        }
+
+        private static void UpdateCheckComparesReleaseVersions()
+        {
+            Assert(apod_wallpaper.UpdateCheckService.NormalizeVersionText("v1.2.1") == "1.2.1", "Expected v-prefix to be ignored.");
+            Assert(apod_wallpaper.UpdateCheckService.CompareReleaseVersions("v1.2.2", "1.2.1") > 0, "Expected newer release to compare higher.");
+            Assert(apod_wallpaper.UpdateCheckService.CompareReleaseVersions("1.2.1", "v1.2.1") == 0, "Expected equal versions to compare equal.");
+            Assert(apod_wallpaper.UpdateCheckService.CompareReleaseVersions("1.2.0", "1.2.1") < 0, "Expected older release to compare lower.");
+        }
+
+        private static void UpdateCheckDefaultsToAutomaticChecksEnabled()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_update_settings_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var store = new apod_wallpaper.JsonSettingsStore(Path.Combine(directory, "settings.json"));
+                var defaults = store.Load();
+                Assert(defaults.AutoCheckUpdatesEnabled, "Fresh settings should enable update auto-checks.");
+                Assert(!defaults.SuppressAutomaticUpdateReminder, "Fresh settings should not suppress update reminders.");
+
+                defaults.AutoCheckUpdatesEnabled = false;
+                defaults.SuppressAutomaticUpdateReminder = true;
+                defaults.LastUpdateCheckUtc = new DateTime(2026, 7, 23, 0, 0, 0, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture);
+                store.Save(defaults);
+
+                var reloaded = store.Load();
+                Assert(!reloaded.AutoCheckUpdatesEnabled, "Saved update auto-check setting should round-trip.");
+                Assert(reloaded.SuppressAutomaticUpdateReminder, "Saved reminder suppression should round-trip.");
+                Assert(!string.IsNullOrWhiteSpace(reloaded.LastUpdateCheckUtc), "Last update check timestamp should round-trip.");
             }
             finally
             {

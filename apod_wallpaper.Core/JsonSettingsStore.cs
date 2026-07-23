@@ -42,6 +42,8 @@ namespace apod_wallpaper
 
                     if (json.IndexOf("MinimizeToTrayOnClose", StringComparison.OrdinalIgnoreCase) < 0)
                         snapshot.MinimizeToTrayOnClose = true;
+                    if (json.IndexOf("AutoCheckUpdatesEnabled", StringComparison.OrdinalIgnoreCase) < 0)
+                        snapshot.AutoCheckUpdatesEnabled = true;
 
                     snapshot.Language = ApplicationSettingsSnapshot.NormalizeLanguage(snapshot.Language);
                     snapshot.TranslationTargetLanguage = ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(snapshot.TranslationTargetLanguage);
@@ -93,6 +95,9 @@ namespace apod_wallpaper
                 LastAutoRefreshRunDate = string.Empty,
                 LastAutoRefreshAppliedDate = string.Empty,
                 LastAppliedWallpaperImagePath = string.Empty,
+                AutoCheckUpdatesEnabled = true,
+                SuppressAutomaticUpdateReminder = false,
+                LastUpdateCheckUtc = string.Empty,
             };
         }
 

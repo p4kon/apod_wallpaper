@@ -48,6 +48,20 @@
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Auto-check for updates" />
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Check GitHub Releases once per day and notify when a new version is available." TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="UpdateCheckToggle" Grid.Column="1" VerticalAlignment="Center" OffContent="Off" OnContent="On" Toggled="UpdateCheckToggle_Toggled" />
+                        </Grid>
+
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="180" />
                             </Grid.ColumnDefinitions>
                             <StackPanel>

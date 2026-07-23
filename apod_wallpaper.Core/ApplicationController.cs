@@ -18,6 +18,7 @@ namespace apod_wallpaper
         private readonly ApodCalendarStateService _calendarStateService;
         private readonly ApodPageAvailabilityProbe _pageAvailabilityProbe;
         private readonly FavoriteApodStore _favoriteStore;
+        private readonly UpdateCheckService _updateCheckService;
         private readonly object _apiKeyValidationSync = new object();
         private int _scheduledUpdateInProgress;
         private bool _isInitialized;
@@ -38,6 +39,7 @@ namespace apod_wallpaper
             _calendarStateService = new ApodCalendarStateService(_workflowService);
             _pageAvailabilityProbe = new ApodPageAvailabilityProbe();
             _favoriteStore = new FavoriteApodStore();
+            _updateCheckService = new UpdateCheckService();
         }
 
         internal Scheduler Scheduler
@@ -398,6 +400,27 @@ namespace apod_wallpaper
                 "Unable to probe the NASA APOD page availability.");
         }
 
+        public Task<OperationResult<UpdateCheckResult>> CheckForUpdatesAsync(string currentVersion, bool forceCheck, bool automatic)
+        {
+            return ExecuteOperationAsync(async () =>
+            {
+                var settings = BuildSettingsSnapshot();
+                if (automatic)
+                {
+                    if (!settings.AutoCheckUpdatesEnabled)
+                        return CreateSkippedUpdateCheckResult(currentVersion, "Automatic update checks are disabled.");
+
+                    var lastCheckUtc = ParseDateTime(settings.LastUpdateCheckUtc);
+                    if (!forceCheck && lastCheckUtc.HasValue && DateTime.UtcNow - lastCheckUtc.Value < TimeSpan.FromDays(1))
+                        return CreateSkippedUpdateCheckResult(currentVersion, "Update check was already completed today.");
+                }
+
+                var result = await _updateCheckService.CheckLatestReleaseAsync(currentVersion).ConfigureAwait(false);
+                PersistLastUpdateCheckUtc(result.CheckedAtUtc);
+                return result;
+            }, OperationErrorCode.WorkflowFailed, "Unable to check GitHub releases for updates.", retryable: true);
+        }
+
         public Task<OperationResult> RefreshLocalImageIndexAsync()
         {
             return ExecuteOperationAsync(async () =>
@@ -446,6 +469,7 @@ namespace apod_wallpaper
             settings.LastAutoRefreshRunDate = Normalize(settings.LastAutoRefreshRunDate);
             settings.LastAutoRefreshAppliedDate = Normalize(settings.LastAutoRefreshAppliedDate);
             settings.LastAppliedWallpaperImagePath = Normalize(settings.LastAppliedWallpaperImagePath);
+            settings.LastUpdateCheckUtc = Normalize(settings.LastUpdateCheckUtc);
             return settings;
         }
 
@@ -484,6 +508,9 @@ namespace apod_wallpaper
                     ? string.Empty
                     : Normalize(settings.LastAutoRefreshAppliedDate),
                 LastAppliedWallpaperImagePath = Normalize(settings.LastAppliedWallpaperImagePath),
+                AutoCheckUpdatesEnabled = settings.AutoCheckUpdatesEnabled,
+                SuppressAutomaticUpdateReminder = settings.SuppressAutomaticUpdateReminder,
+                LastUpdateCheckUtc = Normalize(settings.LastUpdateCheckUtc),
             });
 
             if (apiKeyChanged)
@@ -714,6 +741,33 @@ namespace apod_wallpaper
             return DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedDate)
                 ? parsedDate.Date
                 : (DateTime?)null;
+        }
+
+        private static DateTime? ParseDateTime(string value)
+        {
+            DateTime parsed;
+            if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out parsed))
+                return parsed.ToUniversalTime();
+
+            return null;
+        }
+
+        private static UpdateCheckResult CreateSkippedUpdateCheckResult(string currentVersion, string message)
+        {
+            return new UpdateCheckResult
+            {
+                Status = UpdateCheckStatus.Skipped,
+                CurrentVersion = UpdateCheckService.NormalizeVersionText(currentVersion),
+                CheckedAtUtc = DateTime.UtcNow,
+                Message = message,
+            };
+        }
+
+        private void PersistLastUpdateCheckUtc(DateTime checkedAtUtc)
+        {
+            var snapshot = BuildSettingsSnapshot();
+            snapshot.LastUpdateCheckUtc = checkedAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+            SaveSettingsCore(snapshot);
         }
 
         private static ApiKeyValidationState ParseValidationState(string value)
