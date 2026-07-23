@@ -75,6 +75,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("Favorite APOD store persists normalized dates", FavoriteApodStorePersistsNormalizedDates);
                 Run("Update check compares release versions", UpdateCheckComparesReleaseVersions);
                 Run("Update check defaults to automatic checks enabled", UpdateCheckDefaultsToAutomaticChecksEnabled);
+                Run("Favorite rotation source defaults to latest", FavoriteRotationSourceDefaultsToLatest);
+                Run("Favorite rotation avoids immediate repeat", FavoriteRotationAvoidsImmediateRepeat);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -192,6 +194,27 @@ namespace apod_wallpaper.SmokeTests
             {
                 TryDeleteDirectory(directory);
             }
+        }
+
+        private static void FavoriteRotationSourceDefaultsToLatest()
+        {
+            var defaults = apod_wallpaper.JsonSettingsStore.CreateDefaultSnapshot();
+            Assert(defaults.AutoWallpaperSource == apod_wallpaper.AutoWallpaperSource.Latest, "Expected auto wallpaper source to default to latest APOD.");
+            Assert(apod_wallpaper.ApplicationSettingsSnapshot.NormalizeAutoWallpaperSource(null) == apod_wallpaper.AutoWallpaperSource.Latest, "Expected null source to normalize to latest.");
+            Assert(apod_wallpaper.ApplicationSettingsSnapshot.NormalizeAutoWallpaperSource("favorite") == apod_wallpaper.AutoWallpaperSource.Favorites, "Expected favorite alias to normalize to favorites.");
+        }
+
+        private static void FavoriteRotationAvoidsImmediateRepeat()
+        {
+            var last = new DateTime(2026, 7, 14);
+            var next = apod_wallpaper.ApplicationController.SelectFavoriteRotationDate(
+                new[] { last, new DateTime(2026, 7, 15) },
+                last);
+
+            Assert(next.HasValue && next.Value == new DateTime(2026, 7, 15), "Expected favorite rotation to avoid repeating last date when alternatives exist.");
+
+            var only = apod_wallpaper.ApplicationController.SelectFavoriteRotationDate(new[] { last }, last);
+            Assert(only.HasValue && only.Value == last, "Expected a single favorite to remain selectable.");
         }
 
         private static void ApodPageUrlBuilderIsDeterministic()

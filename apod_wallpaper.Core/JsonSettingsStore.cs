@@ -47,6 +47,7 @@ namespace apod_wallpaper
 
                     snapshot.Language = ApplicationSettingsSnapshot.NormalizeLanguage(snapshot.Language);
                     snapshot.TranslationTargetLanguage = ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(snapshot.TranslationTargetLanguage);
+                    snapshot.AutoWallpaperSource = ApplicationSettingsSnapshot.NormalizeAutoWallpaperSource(snapshot.AutoWallpaperSource);
 
                     return snapshot;
                 }
@@ -86,6 +87,7 @@ namespace apod_wallpaper
                 TrayDoubleClickAction = false,
                 WallpaperStyleIndex = (int)WallpaperStyle.Smart,
                 AutoRefreshEnabled = false,
+                AutoWallpaperSource = apod_wallpaper.AutoWallpaperSource.Latest,
                 StartWithWindows = true,
                 MinimizeToTrayOnClose = true,
                 Language = ApplicationSettingsSnapshot.LanguageEnglish,
@@ -94,6 +96,7 @@ namespace apod_wallpaper
                 ImagesDirectoryPath = string.Empty,
                 LastAutoRefreshRunDate = string.Empty,
                 LastAutoRefreshAppliedDate = string.Empty,
+                LastFavoriteWallpaperDate = string.Empty,
                 LastAppliedWallpaperImagePath = string.Empty,
                 AutoCheckUpdatesEnabled = true,
                 SuppressAutomaticUpdateReminder = false,

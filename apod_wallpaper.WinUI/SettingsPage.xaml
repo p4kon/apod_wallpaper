@@ -122,6 +122,27 @@
 
                         <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="180" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Wallpaper source" />
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Choose what automatic wallpaper rotation applies." TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ComboBox
+                                x:Name="AutoWallpaperSourceComboBox"
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                SelectionChanged="AutoWallpaperSourceComboBox_SelectionChanged">
+                                <ComboBoxItem Content="Latest APOD" Tag="latest" />
+                                <ComboBoxItem Content="Favorites" Tag="favorites" />
+                            </ComboBox>
+                        </Grid>
+
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
                         <StackPanel Spacing="10">
                             <TextBlock FontSize="18" FontWeight="SemiBold" Text="Wallpaper style" />
                             <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Choose how the selected image should fit your screen." TextWrapping="Wrap" />

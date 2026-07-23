@@ -465,9 +465,11 @@ namespace apod_wallpaper
             settings.NasaApiKeyValidationState = NormalizeValidationState(settings.NasaApiKeyValidationState);
             settings.Language = ApplicationSettingsSnapshot.NormalizeLanguage(settings.Language);
             settings.TranslationTargetLanguage = ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(settings.TranslationTargetLanguage);
+            settings.AutoWallpaperSource = ApplicationSettingsSnapshot.NormalizeAutoWallpaperSource(settings.AutoWallpaperSource);
             settings.ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath);
             settings.LastAutoRefreshRunDate = Normalize(settings.LastAutoRefreshRunDate);
             settings.LastAutoRefreshAppliedDate = Normalize(settings.LastAutoRefreshAppliedDate);
+            settings.LastFavoriteWallpaperDate = Normalize(settings.LastFavoriteWallpaperDate);
             settings.LastAppliedWallpaperImagePath = Normalize(settings.LastAppliedWallpaperImagePath);
             settings.LastUpdateCheckUtc = Normalize(settings.LastUpdateCheckUtc);
             return settings;
@@ -495,6 +497,7 @@ namespace apod_wallpaper
                 TrayDoubleClickAction = settings.TrayDoubleClickAction,
                 WallpaperStyleIndex = settings.WallpaperStyleIndex,
                 AutoRefreshEnabled = settings.AutoRefreshEnabled,
+                AutoWallpaperSource = ApplicationSettingsSnapshot.NormalizeAutoWallpaperSource(settings.AutoWallpaperSource),
                 StartWithWindows = settings.StartWithWindows,
                 MinimizeToTrayOnClose = settings.MinimizeToTrayOnClose,
                 Language = ApplicationSettingsSnapshot.NormalizeLanguage(settings.Language),
@@ -507,6 +510,7 @@ namespace apod_wallpaper
                 LastAutoRefreshAppliedDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled
                     ? string.Empty
                     : Normalize(settings.LastAutoRefreshAppliedDate),
+                LastFavoriteWallpaperDate = Normalize(settings.LastFavoriteWallpaperDate),
                 LastAppliedWallpaperImagePath = Normalize(settings.LastAppliedWallpaperImagePath),
                 AutoCheckUpdatesEnabled = settings.AutoCheckUpdatesEnabled,
                 SuppressAutomaticUpdateReminder = settings.SuppressAutomaticUpdateReminder,
@@ -621,6 +625,11 @@ namespace apod_wallpaper
                 var localToday = now.Date;
                 var lastRunDate = ParseDate(settings.LastAutoRefreshRunDate);
                 var lastAppliedDate = ParseDate(settings.LastAutoRefreshAppliedDate);
+                if (ApplicationSettingsSnapshot.NormalizeAutoWallpaperSource(settings.AutoWallpaperSource) == AutoWallpaperSource.Favorites)
+                {
+                    RunScheduledFavoriteWallpaperUpdate(settings, localToday, lastRunDate);
+                    return;
+                }
 
                 // Day-level short circuit: once scheduler has already finished successfully for local "today",
                 // do not burn extra API/HTML checks until the next day.
@@ -693,6 +702,72 @@ namespace apod_wallpaper
             {
                 Interlocked.Exchange(ref _scheduledUpdateInProgress, 0);
             }
+        }
+
+        private void RunScheduledFavoriteWallpaperUpdate(ApplicationSettingsSnapshot settings, DateTime localToday, DateTime? lastRunDate)
+        {
+            if (lastRunDate.HasValue &&
+                lastRunDate.Value == localToday &&
+                IsLastAppliedWallpaperCurrentlyActive(settings))
+            {
+                AppLogger.Info("Scheduler skipped favorite rotation because it already completed today.");
+                return;
+            }
+
+            _workflowService.RefreshLocalImageIndexAsync().GetAwaiter().GetResult();
+            var favoriteDates = _favoriteStore
+                .GetDates()
+                .Where(date => _workflowService.HasUsableLocalImage(date))
+                .OrderBy(date => date)
+                .ToList();
+
+            var selectedDate = SelectFavoriteRotationDate(favoriteDates, ParseDate(settings.LastFavoriteWallpaperDate));
+            if (!selectedDate.HasValue)
+            {
+                AppLogger.Info("Scheduler skipped favorite rotation because no local favorite images are available.");
+                return;
+            }
+
+            var result = _workflowService.ApplyDay(selectedDate.Value, (WallpaperStyle)settings.WallpaperStyleIndex, false);
+            if (!result.IsSuccess)
+                return;
+
+            var resolvedDate = result.ResolvedDate.HasValue
+                ? result.ResolvedDate.Value.Date
+                : selectedDate.Value.Date;
+
+            _calendarStateService.Clear();
+            PersistLastAppliedWallpaperImagePath(result.ImagePath);
+
+            settings.LastFavoriteWallpaperDate = resolvedDate.ToString("yyyy-MM-dd");
+            settings.LastAutoRefreshAppliedDate = resolvedDate.ToString("yyyy-MM-dd");
+            settings.LastAutoRefreshRunDate = localToday.ToString("yyyy-MM-dd");
+            settings.LastAppliedWallpaperImagePath = Normalize(result.ImagePath);
+            _settingsStore.Save(settings);
+            RaiseWallpaperApplied(result, true);
+        }
+
+        internal static DateTime? SelectFavoriteRotationDate(IReadOnlyList<DateTime> favoriteDates, DateTime? lastFavoriteDate)
+        {
+            if (favoriteDates == null || favoriteDates.Count == 0)
+                return null;
+
+            var candidates = favoriteDates
+                .Select(date => date.Date)
+                .Distinct()
+                .OrderBy(date => date)
+                .ToList();
+            if (candidates.Count == 0)
+                return null;
+
+            if (lastFavoriteDate.HasValue && candidates.Count > 1)
+            {
+                candidates = candidates
+                    .Where(date => date != lastFavoriteDate.Value.Date)
+                    .ToList();
+            }
+
+            return candidates[new Random().Next(candidates.Count)];
         }
 
         internal static TimeSpan ResolveSchedulerPollingInterval(ApplicationSettingsSnapshot settings)
