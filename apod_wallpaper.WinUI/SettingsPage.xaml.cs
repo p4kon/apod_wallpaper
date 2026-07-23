@@ -94,6 +94,7 @@ public sealed partial class SettingsPage : Page
         {
             ApiKeyTextBox.Text = settings.NasaApiKey ?? string.Empty;
             AutoCheckToggle.IsOn = settings.AutoRefreshEnabled;
+            UpdateCheckToggle.IsOn = settings.AutoCheckUpdatesEnabled;
             StartWithWindowsToggle.IsOn = settings.StartWithWindows;
             CloseToTrayToggle.IsOn = settings.MinimizeToTrayOnClose;
             ImagesDirectoryTextBox.Text = ResolveDisplayedImagesDirectory(settings);
@@ -150,6 +151,18 @@ public sealed partial class SettingsPage : Page
     private async void AutoCheckToggle_Toggled(object sender, RoutedEventArgs e)
     {
         await SaveSettingsAsync(snapshot => snapshot.AutoRefreshEnabled = AutoCheckToggle.IsOn, "Auto-check preference saved.");
+    }
+
+    private async void UpdateCheckToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        await SaveSettingsAsync(
+            snapshot =>
+            {
+                snapshot.AutoCheckUpdatesEnabled = UpdateCheckToggle.IsOn;
+                if (UpdateCheckToggle.IsOn)
+                    snapshot.SuppressAutomaticUpdateReminder = false;
+            },
+            "Update check preference saved.");
     }
 
     private async void StartWithWindowsToggle_Toggled(object sender, RoutedEventArgs e)
@@ -608,6 +621,7 @@ public sealed partial class SettingsPage : Page
         SettingsStatusBar.Message = message;
         ApiKeyTextBox.IsEnabled = false;
         AutoCheckToggle.IsEnabled = false;
+        UpdateCheckToggle.IsEnabled = false;
         StartWithWindowsToggle.IsEnabled = false;
         LanguageComboBox.IsEnabled = false;
         CloseToTrayToggle.IsEnabled = false;

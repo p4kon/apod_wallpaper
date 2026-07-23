@@ -50,4 +50,9 @@ internal sealed class ShellPageArguments
             Initialization,
             UpdateCloseBehavior);
     }
+
+    public AboutPageArguments CreateAboutPageArguments()
+    {
+        return new AboutPageArguments(BackendHost);
+    }
 }
