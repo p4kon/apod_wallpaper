@@ -7,6 +7,7 @@ namespace apod_wallpaper
         IApodWorkflowFacade,
         IApodCalendarFacade,
         IApodFavoritesFacade,
+        IRandomApodFacade,
         IUpdateCheckFacade
     {
     }

@@ -18,6 +18,7 @@ namespace apod_wallpaper
         private readonly ApodCalendarStateService _calendarStateService;
         private readonly ApodPageAvailabilityProbe _pageAvailabilityProbe;
         private readonly FavoriteApodStore _favoriteStore;
+        private readonly RandomApodService _randomApodService;
         private readonly UpdateCheckService _updateCheckService;
         private readonly object _apiKeyValidationSync = new object();
         private int _scheduledUpdateInProgress;
@@ -39,6 +40,7 @@ namespace apod_wallpaper
             _calendarStateService = new ApodCalendarStateService(_workflowService);
             _pageAvailabilityProbe = new ApodPageAvailabilityProbe();
             _favoriteStore = new FavoriteApodStore();
+            _randomApodService = new RandomApodService(_pageAvailabilityProbe);
             _updateCheckService = new UpdateCheckService();
         }
 
@@ -400,6 +402,29 @@ namespace apod_wallpaper
                 "Unable to probe the NASA APOD page availability.");
         }
 
+        public Task<OperationResult<RandomApodResult>> PickRandomApodDateAsync(string source, bool includeDeepArchive)
+        {
+            return ExecuteOperationAsync(async () =>
+            {
+                var normalizedSource = RandomApodSource.Normalize(source);
+                if (normalizedSource == RandomApodSource.Global)
+                    return await _randomApodService.PickGlobalAsync(includeDeepArchive).ConfigureAwait(false);
+
+                await _workflowService.RefreshLocalImageIndexAsync().ConfigureAwait(false);
+                if (normalizedSource == RandomApodSource.Favorites)
+                {
+                    var favoriteDates = _favoriteStore
+                        .GetDates()
+                        .Where(date => _workflowService.HasUsableLocalImage(date))
+                        .ToList();
+
+                    return _randomApodService.PickFromKnownDates(favoriteDates, normalizedSource, includeDeepArchive);
+                }
+
+                return _randomApodService.PickFromKnownDates(_workflowService.GetDownloadedImageDates(), normalizedSource, includeDeepArchive);
+            }, OperationErrorCode.WorkflowFailed, "Unable to pick a random APOD date.", retryable: true);
+        }
+
         public Task<OperationResult<UpdateCheckResult>> CheckForUpdatesAsync(string currentVersion, bool forceCheck, bool automatic)
         {
             return ExecuteOperationAsync(async () =>
@@ -465,6 +490,7 @@ namespace apod_wallpaper
             settings.NasaApiKeyValidationState = NormalizeValidationState(settings.NasaApiKeyValidationState);
             settings.Language = ApplicationSettingsSnapshot.NormalizeLanguage(settings.Language);
             settings.TranslationTargetLanguage = ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(settings.TranslationTargetLanguage);
+            settings.RandomApodSource = ApplicationSettingsSnapshot.NormalizeRandomApodSource(settings.RandomApodSource);
             settings.ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath);
             settings.LastAutoRefreshRunDate = Normalize(settings.LastAutoRefreshRunDate);
             settings.LastAutoRefreshAppliedDate = Normalize(settings.LastAutoRefreshAppliedDate);
@@ -499,6 +525,8 @@ namespace apod_wallpaper
                 MinimizeToTrayOnClose = settings.MinimizeToTrayOnClose,
                 Language = ApplicationSettingsSnapshot.NormalizeLanguage(settings.Language),
                 TranslationTargetLanguage = ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(settings.TranslationTargetLanguage),
+                RandomApodSource = ApplicationSettingsSnapshot.NormalizeRandomApodSource(settings.RandomApodSource),
+                RandomApodIncludeDeepArchive = settings.RandomApodIncludeDeepArchive,
                 NasaApiKeyValidationState = effectiveValidationState,
                 ImagesDirectoryPath = Normalize(settings.ImagesDirectoryPath),
                 LastAutoRefreshRunDate = !previousAutoRefreshEnabled && settings.AutoRefreshEnabled

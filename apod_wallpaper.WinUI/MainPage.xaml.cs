@@ -60,6 +60,18 @@ public sealed partial class MainPage : Page
         public string NameKey { get; }
     }
 
+    private sealed class RandomApodSourceOption
+    {
+        public RandomApodSourceOption(string source, string nameKey)
+        {
+            Source = source;
+            NameKey = nameKey;
+        }
+
+        public string Source { get; }
+        public string NameKey { get; }
+    }
+
     private static readonly SolidColorBrush CalendarGreenBrush = new(ColorHelper.FromArgb(0xFF, 0x3D, 0x8C, 0x63));
     private static readonly SolidColorBrush CalendarBlueBrush = new(ColorHelper.FromArgb(0xFF, 0x2F, 0x79, 0xD9));
     private static readonly SolidColorBrush CalendarRedBrush = new(ColorHelper.FromArgb(0xFF, 0xC4, 0x5A, 0x5A));
@@ -94,6 +106,12 @@ public sealed partial class MainPage : Page
         new(apod_wallpaper.TranslationTargetLanguage.Portuguese, "Portuguese"),
         new(apod_wallpaper.TranslationTargetLanguage.Japanese, "Japanese"),
     };
+    private static readonly RandomApodSourceOption[] RandomApodSources =
+    {
+        new(apod_wallpaper.RandomApodSource.Global, "Global"),
+        new(apod_wallpaper.RandomApodSource.Downloaded, "Downloaded"),
+        new(apod_wallpaper.RandomApodSource.Favorites, "Favorites"),
+    };
 
     private BackendHost? _backendHost;
     private apod_wallpaper.OperationResult<apod_wallpaper.ApplicationSettingsSnapshot>? _initialization;
@@ -127,8 +145,11 @@ public sealed partial class MainPage : Page
     private readonly object _previewAssetSyncRoot = new();
     private bool _isApplyingWallpaperAction;
     private bool _isFavoriteActionInProgress;
+    private bool _isRandomApodActionInProgress;
     private bool _suppressWallpaperStyleSelectionChanged;
     private bool _suppressAutoRefreshToggleChanged;
+    private bool _suppressRandomApodSourceSelectionChanged;
+    private bool _suppressRandomApodDeepSpaceChanged;
     private apod_wallpaper.IEventSubscription? _wallpaperAppliedSubscription;
     private bool _wallpaperAppliedSubscriptionRequested;
     private int _previewPixelWidth;
@@ -152,6 +173,7 @@ public sealed partial class MainPage : Page
         LocalizationHelper.ApplyTo(this);
         NavigationCacheMode = NavigationCacheMode.Required;
         WallpaperStyleComboBox.ItemsSource = WallpaperStyleDisplayOrder;
+        RebuildRandomApodSourceSelector();
         EnsureCalendarGridDefinitions();
         VisibleMonthText.Text = FormatVisibleMonth(_visibleMonth);
         RebuildTranslationTargetLanguageFlyout();
@@ -233,6 +255,8 @@ public sealed partial class MainPage : Page
         VisibleMonthText.Text = FormatVisibleMonth(_visibleMonth);
         RefreshSelectedDateText();
         UpdateAutoRefreshToggleVisual();
+        RebuildRandomApodSourceSelector();
+        UpdateRandomApodControls();
         RebuildTranslationTargetLanguageFlyout();
         UpdateTranslationTargetLanguageSelector();
         UpdateExplanationActionState();
@@ -381,6 +405,76 @@ public sealed partial class MainPage : Page
         ActionStatusBar.Message = AppStrings.Get("Translation language preference saved.");
     }
 
+    private async void RandomApodButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_backendHost == null || _isRandomApodActionInProgress || _isApplyingWallpaperAction || _isFavoriteActionInProgress)
+            return;
+
+        _isRandomApodActionInProgress = true;
+        ActionProgressRing.IsActive = true;
+        ActionProgressRing.Opacity = 1;
+        UpdateActionAvailability();
+
+        var source = GetSelectedRandomApodSource();
+        var includeDeepArchive = ShouldIncludeDeepArchiveForRandomSource(source);
+        ActionStatusBar.Severity = InfoBarSeverity.Informational;
+        ActionStatusBar.Title = AppStrings.Get("Searching random APOD");
+        ActionStatusBar.Message = AppStrings.Get("Checking a random APOD date.");
+
+        try
+        {
+            var result = await _backendHost.Backend.PickRandomApodDateAsync(source, includeDeepArchive);
+            if (!result.Succeeded || result.Value == null)
+            {
+                ActionStatusBar.Severity = InfoBarSeverity.Error;
+                ActionStatusBar.Title = AppStrings.Get("Random APOD unavailable");
+                ActionStatusBar.Message = AppStrings.GetBackendMessageOrDefault(result.Error?.Message, "Unable to pick a random APOD date.");
+                return;
+            }
+
+            if (result.Value.Status != apod_wallpaper.RandomApodStatus.Success || !result.Value.Date.HasValue)
+            {
+                ActionStatusBar.Severity = InfoBarSeverity.Warning;
+                ActionStatusBar.Title = AppStrings.Get("Random APOD unavailable");
+                ActionStatusBar.Message = AppStrings.GetBackendMessageOrDefault(result.Value.Message, "Could not find an available APOD date quickly.");
+                return;
+            }
+
+            var date = result.Value.Date.Value.Date;
+            _selectedDate = date;
+            _visibleMonth = new DateTime(date.Year, date.Month, 1);
+            await LoadVisibleMonthAsync();
+            await LoadPreviewForSelectedDateAsync();
+
+            ActionStatusBar.Severity = InfoBarSeverity.Success;
+            ActionStatusBar.Title = AppStrings.Get("Random APOD selected");
+            ActionStatusBar.Message = AppStrings.Format("Opened random APOD for {0}.", date.ToString("d", AppStrings.DateCulture));
+        }
+        finally
+        {
+            _isRandomApodActionInProgress = false;
+            ActionProgressRing.IsActive = false;
+            ActionProgressRing.Opacity = 0;
+            UpdateActionAvailability();
+        }
+    }
+
+    private async void RandomApodSourceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressRandomApodSourceSelectionChanged || _backendHost == null || _currentSettingsSnapshot == null)
+            return;
+
+        await SaveRandomApodSettingsAsync(showFeedback: true);
+    }
+
+    private async void RandomApodDeepSpaceCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_suppressRandomApodDeepSpaceChanged || _backendHost == null || _currentSettingsSnapshot == null)
+            return;
+
+        await SaveRandomApodSettingsAsync(showFeedback: true);
+    }
+
     private async void PreviousMonthButton_Click(object sender, RoutedEventArgs e)
     {
         _visibleMonth = _visibleMonth.AddMonths(-1);
@@ -456,6 +550,7 @@ public sealed partial class MainPage : Page
         UpdateCalendarSelectionOnly();
         SetWallpaperStyleSelection(snapshot.SelectedWallpaperStyle);
         SetAutoRefreshToggleState(settings.AutoRefreshEnabled);
+        SetRandomApodControls(settings);
         UpdateActionAvailability();
         ActionStatusBar.Severity = InfoBarSeverity.Informational;
         ActionStatusBar.Title = AppStrings.Get("Actions ready");
@@ -1390,7 +1485,7 @@ public sealed partial class MainPage : Page
     {
         var hasBackend = _backendHost != null;
         var hasSuccessfulPreview = _lastPreviewWorkflow?.Status == apod_wallpaper.ApodWorkflowStatus.Success;
-        var isBusy = _isApplyingWallpaperAction || _isFavoriteActionInProgress;
+        var isBusy = _isApplyingWallpaperAction || _isFavoriteActionInProgress || _isRandomApodActionInProgress;
 
         ReloadPreviewButton.IsEnabled = hasBackend && !isBusy;
         OpenNasaPageButton.IsEnabled = hasBackend && !isBusy;
@@ -1400,6 +1495,9 @@ public sealed partial class MainPage : Page
         DownloadAndApplyButton.IsEnabled = hasBackend && !isBusy;
         AutoRefreshToggleButton.IsEnabled = hasBackend && _currentSettingsSnapshot != null && !isBusy;
         ApplyLatestButton.IsEnabled = hasBackend && !isBusy;
+        RandomApodButton.IsEnabled = hasBackend && _currentSettingsSnapshot != null && !isBusy;
+        RandomApodSourceComboBox.IsEnabled = hasBackend && _currentSettingsSnapshot != null && !isBusy;
+        UpdateRandomApodControls();
 
         if (!hasSuccessfulPreview && !isBusy)
             WallpaperStyleComboBox.IsEnabled = hasBackend && _currentSettingsSnapshot != null;
@@ -1636,6 +1734,135 @@ public sealed partial class MainPage : Page
         return AppStrings.Format("{0}: {1}", AppStrings.Get("Translation language"), languageName);
     }
 
+    private void RebuildRandomApodSourceSelector()
+    {
+        var selectedSource = GetSelectedRandomApodSource();
+        _suppressRandomApodSourceSelectionChanged = true;
+        try
+        {
+            RandomApodSourceComboBox.Items.Clear();
+            foreach (var option in RandomApodSources)
+            {
+                var item = new ComboBoxItem
+                {
+                    Content = AppStrings.Get(option.NameKey),
+                    Tag = option.Source,
+                };
+                ToolTipService.SetToolTip(item, AppStrings.Get(option.NameKey));
+                AutomationProperties.SetName(item, AppStrings.Get(option.NameKey));
+                RandomApodSourceComboBox.Items.Add(item);
+
+                if (string.Equals(option.Source, selectedSource, StringComparison.Ordinal))
+                    RandomApodSourceComboBox.SelectedItem = item;
+            }
+        }
+        finally
+        {
+            _suppressRandomApodSourceSelectionChanged = false;
+        }
+
+        if (RandomApodSourceComboBox.SelectedItem == null && RandomApodSourceComboBox.Items.Count > 0)
+        {
+            _suppressRandomApodSourceSelectionChanged = true;
+            try
+            {
+                RandomApodSourceComboBox.SelectedIndex = 0;
+            }
+            finally
+            {
+                _suppressRandomApodSourceSelectionChanged = false;
+            }
+        }
+
+        UpdateRandomApodControls();
+    }
+
+    private void SetRandomApodControls(apod_wallpaper.ApplicationSettingsSnapshot? settings)
+    {
+        var selectedSource = apod_wallpaper.ApplicationSettingsSnapshot.NormalizeRandomApodSource(settings?.RandomApodSource);
+        _suppressRandomApodSourceSelectionChanged = true;
+        _suppressRandomApodDeepSpaceChanged = true;
+        try
+        {
+            foreach (var item in RandomApodSourceComboBox.Items)
+            {
+                if (item is ComboBoxItem comboBoxItem &&
+                    comboBoxItem.Tag is string source &&
+                    string.Equals(source, selectedSource, StringComparison.Ordinal))
+                {
+                    RandomApodSourceComboBox.SelectedItem = comboBoxItem;
+                    break;
+                }
+            }
+
+            RandomApodDeepSpaceCheckBox.IsChecked = settings?.RandomApodIncludeDeepArchive == true;
+        }
+        finally
+        {
+            _suppressRandomApodSourceSelectionChanged = false;
+            _suppressRandomApodDeepSpaceChanged = false;
+        }
+
+        UpdateRandomApodControls();
+    }
+
+    private void UpdateRandomApodControls()
+    {
+        var selectedSource = GetSelectedRandomApodSource();
+        RandomApodButton.Content = AppStrings.Get("Random");
+        ToolTipService.SetToolTip(RandomApodButton, AppStrings.Get("Pick a random APOD date"));
+        ToolTipService.SetToolTip(RandomApodSourceComboBox, AppStrings.Get("Random source"));
+        RandomApodDeepSpaceCheckBox.Content = AppStrings.Get("Into deep space");
+        ToolTipService.SetToolTip(
+            RandomApodDeepSpaceCheckBox,
+            AppStrings.Get("Use APOD full archive from 1995. Some early dates may be unavailable."));
+        RandomApodDeepSpaceCheckBox.IsEnabled =
+            RandomApodSourceComboBox.IsEnabled &&
+            string.Equals(selectedSource, apod_wallpaper.RandomApodSource.Global, StringComparison.Ordinal);
+    }
+
+    private string GetSelectedRandomApodSource()
+    {
+        if (RandomApodSourceComboBox.SelectedItem is ComboBoxItem item && item.Tag is string source)
+            return apod_wallpaper.ApplicationSettingsSnapshot.NormalizeRandomApodSource(source);
+
+        return apod_wallpaper.ApplicationSettingsSnapshot.NormalizeRandomApodSource(_currentSettingsSnapshot?.RandomApodSource);
+    }
+
+    private bool ShouldIncludeDeepArchiveForRandomSource(string source)
+    {
+        return string.Equals(apod_wallpaper.RandomApodSource.Normalize(source), apod_wallpaper.RandomApodSource.Global, StringComparison.Ordinal) &&
+            RandomApodDeepSpaceCheckBox.IsChecked == true;
+    }
+
+    private async Task SaveRandomApodSettingsAsync(bool showFeedback)
+    {
+        if (_backendHost == null)
+            return;
+
+        var source = GetSelectedRandomApodSource();
+        var updatedSnapshot = await GetFreshSettingsSnapshotAsync();
+        updatedSnapshot.RandomApodSource = source;
+        updatedSnapshot.RandomApodIncludeDeepArchive = ShouldIncludeDeepArchiveForRandomSource(source);
+
+        var saveResult = await _backendHost.Backend.SaveSettingsAsync(updatedSnapshot);
+        if (!saveResult.Succeeded || saveResult.Value == null)
+        {
+            ActionStatusBar.Severity = InfoBarSeverity.Error;
+            ActionStatusBar.Title = AppStrings.Get("Settings were not saved");
+            ActionStatusBar.Message = AppStrings.GetBackendMessageOrDefault(saveResult.Error?.Message, "Unknown backend error while saving settings.");
+            return;
+        }
+
+        ApplySavedSettingsSnapshot(saveResult.Value);
+        if (showFeedback)
+        {
+            ActionStatusBar.Severity = InfoBarSeverity.Success;
+            ActionStatusBar.Title = AppStrings.Get("Settings saved");
+            ActionStatusBar.Message = AppStrings.Get("Random APOD preference saved.");
+        }
+    }
+
     private bool TryCopyTextToClipboard(string text)
     {
         try
@@ -1798,6 +2025,7 @@ public sealed partial class MainPage : Page
 
         SetAutoRefreshToggleState(savedSettings.AutoRefreshEnabled);
         UpdateTranslationTargetLanguageSelector();
+        SetRandomApodControls(savedSettings);
         UpdateActionAvailability();
     }
 
@@ -2534,6 +2762,7 @@ public sealed partial class MainPage : Page
             : AppStrings.Get("Default window action");
         SetAutoRefreshToggleState(_currentSettingsSnapshot.AutoRefreshEnabled);
         SetWallpaperStyleSelection(ResolveWallpaperStyleFromSettings(_currentSettingsSnapshot));
+        SetRandomApodControls(_currentSettingsSnapshot);
         UpdateActionAvailability();
     }
 
