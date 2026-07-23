@@ -50,6 +50,11 @@ public sealed partial class ShellPage : Page
         NavigateToFavorites();
     }
 
+    private void LibraryButton_Click(object sender, RoutedEventArgs e)
+    {
+        NavigateToLibrary();
+    }
+
     private void AboutButton_Click(object sender, RoutedEventArgs e)
     {
         NavigateToAbout();
@@ -109,6 +114,15 @@ public sealed partial class ShellPage : Page
 
         SetActiveButton(FavoritesButton);
         ContentFrame.Navigate(typeof(FavoritesPage), _arguments.CreateFavoritesPageArguments(OpenFavoriteDate));
+    }
+
+    private void NavigateToLibrary()
+    {
+        if (_arguments == null)
+            return;
+
+        SetActiveButton(LibraryButton);
+        ContentFrame.Navigate(typeof(LibraryPage), _arguments.CreateLibraryPageArguments());
     }
 
     private void OpenFavoriteDate(DateTime date)
@@ -187,6 +201,7 @@ public sealed partial class ShellPage : Page
         SetButtonState(PreviewButton, activeButton == PreviewButton);
         SetButtonState(SettingsButton, activeButton == SettingsButton);
         SetButtonState(FavoritesButton, activeButton == FavoritesButton);
+        SetButtonState(LibraryButton, activeButton == LibraryButton);
         SetButtonState(AboutButton, activeButton == AboutButton);
     }
 
@@ -203,6 +218,7 @@ public sealed partial class ShellPage : Page
         ApplyButtonLabel(PreviewButton, "Calendar");
         ApplyButtonLabel(SettingsButton, "Settings");
         ApplyButtonLabel(FavoritesButton, "Favorites");
+        ApplyButtonLabel(LibraryButton, "Library");
         ApplyButtonLabel(AboutButton, "About");
     }
 

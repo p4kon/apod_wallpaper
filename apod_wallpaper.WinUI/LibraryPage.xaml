@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="apod_wallpaper.WinUI.LibraryPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Padding="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,18" Spacing="6">
+            <TextBlock FontSize="30" FontWeight="SemiBold" Text="Library" />
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="Review local APOD storage without deleting files."
+                TextWrapping="Wrap" />
+        </StackPanel>
+
+        <InfoBar
+            x:Name="LibraryStatusBar"
+            Grid.Row="1"
+            IsClosable="False"
+            IsOpen="True"
+            Severity="Informational"
+            Title="Loading library summary"
+            Visibility="Collapsed" />
+
+        <StackPanel
+            Grid.Row="2"
+            Margin="0,12,0,18"
+            Orientation="Horizontal"
+            Spacing="8">
+            <Button
+                x:Name="OpenImagesFolderButton"
+                MinWidth="126"
+                Click="OpenImagesFolderButton_Click"
+                Content="Open images folder" />
+            <Button
+                x:Name="OpenDataFolderButton"
+                MinWidth="126"
+                Click="OpenDataFolderButton_Click"
+                Content="Open data folder" />
+            <Button
+                x:Name="RefreshSummaryButton"
+                MinWidth="92"
+                Click="RefreshSummaryButton_Click"
+                Content="Refresh" />
+        </StackPanel>
+
+        <ScrollViewer
+            Grid.Row="3"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="SummaryPanel" Spacing="10" />
+        </ScrollViewer>
+    </Grid>
+</Page>

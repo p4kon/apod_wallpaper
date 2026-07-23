@@ -150,6 +150,40 @@ namespace apod_wallpaper
             return GetKnownImagePaths(baseName).FirstOrDefault(File.Exists);
         }
 
+        public static IReadOnlyList<string> GetDownloadedImageFiles()
+        {
+            var imagesDirectory = ImagesDirectory;
+            if (string.IsNullOrWhiteSpace(imagesDirectory) || !Directory.Exists(imagesDirectory))
+                return Array.Empty<string>();
+
+            return Directory
+                .GetFiles(imagesDirectory)
+                .Where(path => IsSupportedImageExtension(NormalizeImageExtension(Path.GetExtension(path))))
+                .Where(LocalImageValidator.IsUsableImageFile)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        public static IReadOnlyList<DateTime> GetDownloadedImageDates()
+        {
+            var dates = new HashSet<DateTime>();
+            foreach (var path in GetDownloadedImageFiles())
+            {
+                DateTime parsedDate;
+                if (DateTime.TryParseExact(
+                    Path.GetFileNameWithoutExtension(path),
+                    "yyyy-MM-dd",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None,
+                    out parsedDate))
+                {
+                    dates.Add(parsedDate.Date);
+                }
+            }
+
+            return dates.OrderBy(date => date).ToList();
+        }
+
         public static IReadOnlyList<string> GetKnownImagePaths(string baseName)
         {
             return new[]

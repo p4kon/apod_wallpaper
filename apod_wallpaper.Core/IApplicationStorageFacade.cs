@@ -6,5 +6,6 @@ namespace apod_wallpaper
     {
         Task<OperationResult<ApplicationStoragePaths>> GetStoragePathsAsync();
         Task<OperationResult<ApplicationStoragePaths>> EnsureStorageLayoutAsync();
+        Task<OperationResult<StorageSummary>> GetStorageSummaryAsync();
     }
 }

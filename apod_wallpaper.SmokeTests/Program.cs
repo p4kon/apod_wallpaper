@@ -57,6 +57,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Initial state snapshot returns startup data in one call", InitialStateSnapshotReturnsStartupData);
                 Run("Json settings store writes non-secret settings to settings.json", JsonSettingsStoreWritesSettingsFile);
                 Run("Storage layout resolves all backend paths centrally", StorageLayoutResolvesAllPathsCentrally);
+                Run("Storage summary counts local library without cleanup", StorageSummaryCountsLocalLibraryWithoutCleanup);
                 Run("Portable storage mode keeps app data near executable", PortableStorageModeUsesPortableLayout);
                 Run("Store storage mode keeps app data inside sandbox path", StoreStorageModeUsesSandboxLayout);
                 Run("Public facade methods use operation results", PublicFacadeMethodsUseOperationResults);
@@ -955,6 +956,36 @@ Bright clusters mark newborn stars.
                 apod_wallpaper.FileStorage.SetStorageModeOverride(null);
                 RestoreSettings(snapshot);
                 TryDeleteDirectory(customImagesDirectory);
+            }
+        }
+
+        private static void StorageSummaryCountsLocalLibraryWithoutCleanup()
+        {
+            var tempDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_storage_summary_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+            Directory.CreateDirectory(Path.Combine(tempDirectory, "smart"));
+            var snapshot = CaptureSettings();
+            try
+            {
+                using (var bitmap = new Bitmap(4, 4))
+                {
+                    bitmap.Save(Path.Combine(tempDirectory, "2026-07-14.jpg"), System.Drawing.Imaging.ImageFormat.Jpeg);
+                }
+
+                File.WriteAllText(Path.Combine(tempDirectory, "smart", "2026-07-14-smart.txt"), "generated");
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(tempDirectory);
+
+                var summary = new apod_wallpaper.StorageSummaryService().GetStorageSummary();
+                Assert(summary.DownloadedImageCount == 1, "Expected one valid downloaded image.");
+                Assert(summary.DownloadedImageSizeBytes > 0, "Expected downloaded image size to be counted.");
+                Assert(summary.SmartImages.FileCount == 1, "Expected smart variant files to be counted separately.");
+                Assert(File.Exists(Path.Combine(tempDirectory, "2026-07-14.jpg")), "Storage summary must not delete original images.");
+                Assert(File.Exists(Path.Combine(tempDirectory, "smart", "2026-07-14-smart.txt")), "Storage summary must not delete generated variants.");
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                TryDeleteDirectory(tempDirectory);
             }
         }
 
