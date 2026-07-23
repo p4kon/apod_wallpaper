@@ -335,6 +335,14 @@ namespace apod_wallpaper
                 "Unable to build calendar month state.");
         }
 
+        public Task<OperationResult<ApodCalendarYearState>> GetCalendarYearStateAsync(int year)
+        {
+            return ExecuteOperationAsync(
+                () => Task.Run(() => _calendarStateService.GetYearState(year)),
+                OperationErrorCode.WorkflowFailed,
+                "Unable to build calendar year state.");
+        }
+
         public Task<OperationResult<IReadOnlyList<DateTime>>> GetFavoriteDatesAsync()
         {
             return ExecuteOperationAsync(async () =>
