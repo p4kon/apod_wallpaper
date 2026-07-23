@@ -48,6 +48,14 @@ public sealed partial class MainPage : Page
         public string? LastVisualSignature { get; set; }
     }
 
+    private sealed class YearDayVisual
+    {
+        public required DateTime Date { get; init; }
+        public required Button Button { get; init; }
+        public required TextBlock DayNumberText { get; init; }
+        public required FontIcon FavoriteIcon { get; init; }
+    }
+
     private sealed class TranslationTargetLanguageOption
     {
         public TranslationTargetLanguageOption(string code, string nameKey)
@@ -127,9 +135,11 @@ public sealed partial class MainPage : Page
     private readonly Dictionary<DateTime, MonthCacheEntry> _hotMonthCache = new();
     private readonly HashSet<DateTime> _monthsInFlight = new();
     private readonly Dictionary<DateTime, CalendarDayVisual> _calendarDayVisuals = new();
+    private readonly Dictionary<DateTime, YearDayVisual> _yearDayVisuals = new();
     private DateTime _selectedDate = DateTime.Today;
     private DateTime _visibleMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime? _renderedCalendarMonth;
+    private apod_wallpaper.ApodCalendarYearState? _currentYearState;
     private readonly Stopwatch _previewImageStopwatch = new();
     private long _lastPreviewBackendElapsedMs;
     private long _lastMonthCachedElapsedMs;
@@ -154,6 +164,8 @@ public sealed partial class MainPage : Page
     private bool _wallpaperAppliedSubscriptionRequested;
     private int _previewPixelWidth;
     private int _previewPixelHeight;
+    private bool _isYearViewMode;
+    private int _yearRequestVersion;
     private static readonly SolidColorBrush AutoRefreshEnabledBrush = new(ColorHelper.FromArgb(0xFF, 0x1F, 0xB5, 0x7A));
     private static readonly SolidColorBrush AutoRefreshDisabledBrush = new(ColorHelper.FromArgb(0xFF, 0xC4, 0x5A, 0x5A));
     private static readonly SolidColorBrush AutoRefreshForegroundBrush = new(Colors.White);
@@ -252,8 +264,9 @@ public sealed partial class MainPage : Page
     private void RefreshLocalizedText()
     {
         LocalizationHelper.ApplyTo(this);
-        VisibleMonthText.Text = FormatVisibleMonth(_visibleMonth);
+        VisibleMonthText.Text = _isYearViewMode ? _visibleMonth.Year.ToString(CultureInfo.InvariantCulture) : FormatVisibleMonth(_visibleMonth);
         RefreshSelectedDateText();
+        UpdateCalendarViewModeVisual();
         UpdateAutoRefreshToggleVisual();
         RebuildRandomApodSourceSelector();
         UpdateRandomApodControls();
@@ -263,6 +276,8 @@ public sealed partial class MainPage : Page
         UpdateFavoriteActionState();
         UpdateActionAvailability();
         UpdateCalendarSelectionOnly();
+        if (_isYearViewMode && _currentYearState != null)
+            ApplyCalendarYearState(_currentYearState);
         RefreshTrayStatus();
     }
 
@@ -477,14 +492,46 @@ public sealed partial class MainPage : Page
 
     private async void PreviousMonthButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_isYearViewMode)
+        {
+            _visibleMonth = _visibleMonth.AddYears(-1);
+            await LoadVisibleYearAsync();
+            return;
+        }
+
         _visibleMonth = _visibleMonth.AddMonths(-1);
         await LoadVisibleMonthAsync();
     }
 
     private async void NextMonthButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_isYearViewMode)
+        {
+            _visibleMonth = _visibleMonth.AddYears(1);
+            await LoadVisibleYearAsync();
+            return;
+        }
+
         _visibleMonth = _visibleMonth.AddMonths(1);
         await LoadVisibleMonthAsync();
+    }
+
+    private async void MonthViewButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_isYearViewMode)
+            return;
+
+        SetCalendarViewMode(isYearViewMode: false);
+        await LoadVisibleMonthAsync();
+    }
+
+    private async void YearViewButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isYearViewMode)
+            return;
+
+        SetCalendarViewMode(isYearViewMode: true);
+        await LoadVisibleYearAsync();
     }
 
     private async Task RefreshStateAsync()
@@ -546,6 +593,7 @@ public sealed partial class MainPage : Page
         _visibleMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
         RefreshSelectedDateText();
         VisibleMonthText.Text = FormatVisibleMonth(_visibleMonth);
+        SetCalendarViewMode(isYearViewMode: false);
         EnsureCalendarMonthBuilt(_visibleMonth);
         UpdateCalendarSelectionOnly();
         SetWallpaperStyleSelection(snapshot.SelectedWallpaperStyle);
@@ -572,6 +620,7 @@ public sealed partial class MainPage : Page
         if (_backendHost == null)
             return;
 
+        SetCalendarViewMode(isYearViewMode: false);
         var month = new DateTime(_visibleMonth.Year, _visibleMonth.Month, 1);
         var requestVersion = Interlocked.Increment(ref _monthRequestVersion);
         VisibleMonthText.Text = FormatVisibleMonth(month);
@@ -627,6 +676,252 @@ public sealed partial class MainPage : Page
         MonthStatusBar.Message = BuildMonthWarmupMessage(month);
 
         _ = WarmMonthAsync(month, requestVersion);
+    }
+
+    private async Task LoadVisibleYearAsync()
+    {
+        if (_backendHost == null)
+            return;
+
+        SetCalendarViewMode(isYearViewMode: true);
+        var year = _visibleMonth.Year;
+        var requestVersion = Interlocked.Increment(ref _yearRequestVersion);
+        VisibleMonthText.Text = year.ToString(CultureInfo.InvariantCulture);
+        CalendarYearGrid.Children.Clear();
+        _yearDayVisuals.Clear();
+
+        MonthStatusBar.Severity = InfoBarSeverity.Informational;
+        MonthStatusBar.Title = AppStrings.Get("Loading year overview");
+        MonthStatusBar.Message = AppStrings.Get("Rendering the cached year overview without refreshing NASA state.");
+
+        var result = await _backendHost.Backend.GetCalendarYearStateAsync(year);
+        if (requestVersion != _yearRequestVersion)
+            return;
+
+        if (!result.Succeeded || result.Value == null)
+        {
+            MonthStatusBar.Severity = InfoBarSeverity.Error;
+            MonthStatusBar.Title = AppStrings.Get("Calendar year failed");
+            MonthStatusBar.Message = AppStrings.GetBackendMessageOrDefault(result.Error?.Message, "Unable to build calendar year state.");
+            return;
+        }
+
+        _currentYearState = result.Value;
+        ApplyCalendarYearState(_currentYearState);
+        MonthStatusBar.Severity = InfoBarSeverity.Informational;
+        MonthStatusBar.Title = AppStrings.Get("Year overview loaded");
+        MonthStatusBar.Message = AppStrings.Get("Year view uses cached local calendar knowledge only.");
+    }
+
+    private void SetCalendarViewMode(bool isYearViewMode)
+    {
+        _isYearViewMode = isYearViewMode;
+        CalendarMonthBorder.Visibility = isYearViewMode ? Visibility.Collapsed : Visibility.Visible;
+        CalendarYearScrollViewer.Visibility = isYearViewMode ? Visibility.Visible : Visibility.Collapsed;
+        VisibleMonthText.Text = isYearViewMode
+            ? _visibleMonth.Year.ToString(CultureInfo.InvariantCulture)
+            : FormatVisibleMonth(_visibleMonth);
+        UpdateCalendarViewModeVisual();
+    }
+
+    private void UpdateCalendarViewModeVisual()
+    {
+        MonthViewButton.Content = AppStrings.Get("Month");
+        YearViewButton.Content = AppStrings.Get("Year");
+        MonthViewButton.Opacity = _isYearViewMode ? 0.68 : 1.0;
+        YearViewButton.Opacity = _isYearViewMode ? 1.0 : 0.68;
+        ToolTipService.SetToolTip(MonthViewButton, AppStrings.Get("Month calendar"));
+        ToolTipService.SetToolTip(YearViewButton, AppStrings.Get("Year overview"));
+        AutomationProperties.SetName(MonthViewButton, AppStrings.Get("Month"));
+        AutomationProperties.SetName(YearViewButton, AppStrings.Get("Year"));
+    }
+
+    private void ApplyCalendarYearState(apod_wallpaper.ApodCalendarYearState yearState)
+    {
+        CalendarYearGrid.Children.Clear();
+        CalendarYearGrid.ColumnDefinitions.Clear();
+        CalendarYearGrid.RowDefinitions.Clear();
+        _yearDayVisuals.Clear();
+
+        for (var column = 0; column < 3; column++)
+            CalendarYearGrid.ColumnDefinitions.Add(new ColumnDefinition());
+
+        for (var row = 0; row < 4; row++)
+            CalendarYearGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        foreach (var monthState in yearState.Months)
+        {
+            var monthIndex = monthState.Month.Month - 1;
+            var monthPanel = BuildYearMonthPanel(monthState);
+            Grid.SetRow(monthPanel, monthIndex / 3);
+            Grid.SetColumn(monthPanel, monthIndex % 3);
+            CalendarYearGrid.Children.Add(monthPanel);
+        }
+    }
+
+    private Border BuildYearMonthPanel(apod_wallpaper.ApodCalendarMonthState monthState)
+    {
+        var month = monthState.Month;
+        var host = new StackPanel { Spacing = 5 };
+        host.Children.Add(new TextBlock
+        {
+            Text = month.ToString("MMMM", AppStrings.DateCulture),
+            FontWeight = FontWeights.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        });
+
+        host.Children.Add(BuildCompactWeekdayHeader());
+
+        var daysGrid = new Grid
+        {
+            ColumnSpacing = 2,
+            RowSpacing = 2,
+        };
+
+        for (var column = 0; column < 7; column++)
+            daysGrid.ColumnDefinitions.Add(new ColumnDefinition());
+
+        for (var row = 0; row < 6; row++)
+            daysGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var effectiveLatestPublishedDate = ResolveEffectiveLatestPublishedDate(monthState.LatestPublishedDate);
+        var daysInMonth = DateTime.DaysInMonth(month.Year, month.Month);
+        var startOffset = GetMondayFirstOffset(month.DayOfWeek);
+        for (var day = 1; day <= daysInMonth; day++)
+        {
+            var date = new DateTime(month.Year, month.Month, day);
+            monthState.TryGetDay(date, out var dayState);
+            var visual = CreateYearDayVisual(date, dayState, effectiveLatestPublishedDate);
+            _yearDayVisuals[date.Date] = visual;
+
+            var cellIndex = startOffset + day - 1;
+            Grid.SetRow(visual.Button, cellIndex / 7);
+            Grid.SetColumn(visual.Button, cellIndex % 7);
+            daysGrid.Children.Add(visual.Button);
+        }
+
+        host.Children.Add(daysGrid);
+
+        return new Border
+        {
+            Padding = new Thickness(8),
+            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Child = host,
+        };
+    }
+
+    private static Grid BuildCompactWeekdayHeader()
+    {
+        var grid = new Grid { ColumnSpacing = 2 };
+        for (var column = 0; column < 7; column++)
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+
+        var weekdayKeys = new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
+        for (var column = 0; column < weekdayKeys.Length; column++)
+        {
+            var label = new TextBlock
+            {
+                Text = AppStrings.Get(weekdayKeys[column]),
+                FontSize = 9,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            };
+            Grid.SetColumn(label, column);
+            grid.Children.Add(label);
+        }
+
+        return grid;
+    }
+
+    private YearDayVisual CreateYearDayVisual(DateTime date, apod_wallpaper.ApodCalendarDayState? dayState, DateTime latestPublishedDate)
+    {
+        var isFuture = date.Date > latestPublishedDate.Date;
+        var hasLocalImage = dayState?.IsLocalImageAvailable == true;
+        var hasRemoteImage = dayState?.IsKnown == true && dayState.HasImage && !hasLocalImage;
+        var isUnsupported = dayState?.IsKnown == true && !dayState.HasImage;
+        var isUnknown = !hasLocalImage && !hasRemoteImage && !isUnsupported;
+        var isSelected = _selectedDate.Date == date.Date;
+        var isFavorite = hasLocalImage && _favoriteDates.Contains(date.Date);
+        var isLightTheme = ActualTheme == ElementTheme.Light;
+        var background = ResolveCalendarUnknownBrush(isLightTheme);
+        var foreground = ResolveCalendarUnknownForegroundBrush(isLightTheme);
+        if (isFuture)
+        {
+            background = ResolveCalendarFutureBrush(isLightTheme);
+            foreground = ResolveCalendarFutureForegroundBrush(isLightTheme);
+        }
+        else if (hasLocalImage)
+        {
+            background = CalendarGreenBrush;
+            foreground = CalendarDefaultForegroundBrush;
+        }
+        else if (hasRemoteImage)
+        {
+            background = CalendarBlueBrush;
+            foreground = CalendarDefaultForegroundBrush;
+        }
+        else if (isUnsupported)
+        {
+            background = CalendarRedBrush;
+            foreground = CalendarDefaultForegroundBrush;
+        }
+
+        var dayNumberText = new TextBlock
+        {
+            Text = date.Day.ToString(CultureInfo.InvariantCulture),
+            FontSize = 10,
+            FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var favoriteIcon = new FontIcon
+        {
+            Glyph = "\uE735",
+            FontSize = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Foreground = CalendarFavoriteBrush,
+            Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed,
+            IsHitTestVisible = false,
+        };
+
+        var content = new Grid();
+        content.Children.Add(dayNumberText);
+        content.Children.Add(favoriteIcon);
+
+        var button = new Button
+        {
+            Content = content,
+            Padding = new Thickness(0),
+            MinWidth = 26,
+            MinHeight = 24,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            CornerRadius = new CornerRadius(6),
+            Background = background,
+            Foreground = foreground,
+            BorderBrush = isSelected ? ResolveCalendarSelectedBorderBrush(isLightTheme) : background,
+            BorderThickness = isSelected ? new Thickness(2) : new Thickness(1),
+            IsEnabled = !isFuture,
+            Tag = date,
+        };
+        button.Click += YearDayButton_Click;
+
+        ToolTipService.SetToolTip(
+            button,
+            BuildDayTooltip(date, isFuture, hasLocalImage, hasRemoteImage, isUnsupported, isUnknown, isFavorite));
+
+        return new YearDayVisual
+        {
+            Date = date.Date,
+            Button = button,
+            DayNumberText = dayNumberText,
+            FavoriteIcon = favoriteIcon,
+        };
     }
 
     private async Task WarmMonthAsync(DateTime month, int requestVersion)
@@ -1007,6 +1302,19 @@ public sealed partial class MainPage : Page
     {
         _selectedDate = date.Date;
         _visibleMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
+        SetCalendarViewMode(isYearViewMode: false);
+        await LoadVisibleMonthAsync();
+        await LoadPreviewForSelectedDateAsync();
+    }
+
+    private async void YearDayButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not DateTime date)
+            return;
+
+        _selectedDate = date.Date;
+        _visibleMonth = new DateTime(_selectedDate.Year, _selectedDate.Month, 1);
+        SetCalendarViewMode(isYearViewMode: false);
         await LoadVisibleMonthAsync();
         await LoadPreviewForSelectedDateAsync();
     }

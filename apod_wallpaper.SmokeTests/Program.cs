@@ -73,6 +73,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Calendar availability transient override unlocks today only", CalendarAvailabilityTransientOverrideUnlocksTodayOnly);
                 Run("Calendar availability throttle resets when today changes", CalendarAvailabilityThrottleResetsWhenTodayChanges);
                 Run("APOD availability probe source avoids workflow side effects", ApodAvailabilityProbeSourceAvoidsWorkflowSideEffects);
+                Run("Calendar year state source is cache only", CalendarYearStateSourceIsCacheOnly);
                 Run("Favorite APOD store persists normalized dates", FavoriteApodStorePersistsNormalizedDates);
                 Run("Update check compares release versions", UpdateCheckComparesReleaseVersions);
                 Run("Update check defaults to automatic checks enabled", UpdateCheckDefaultsToAutomaticChecksEnabled);
@@ -366,6 +367,15 @@ namespace apod_wallpaper.SmokeTests
             {
                 Assert(!source.Contains(token), "Availability probe must not call workflow side-effect path: " + token);
             }
+        }
+
+        private static void CalendarYearStateSourceIsCacheOnly()
+        {
+            var sourcePath = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.Core", "ApodCalendarStateService.cs");
+            var source = File.ReadAllText(sourcePath);
+            Assert(source.Contains("GetYearState(int year)"), "Expected calendar year state method.");
+            Assert(source.Contains("refreshMissingDates: false"), "Year state must render from cache without refreshing missing dates.");
+            Assert(source.Contains("MonthRefreshMode.Balanced"), "Year state should use balanced cache-only status evaluation.");
         }
 
         private static void FutureDateIsUnavailableSync()

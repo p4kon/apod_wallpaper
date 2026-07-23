@@ -58,6 +58,15 @@ namespace apod_wallpaper
             return monthState;
         }
 
+        public ApodCalendarYearState GetYearState(int year)
+        {
+            var months = new List<ApodCalendarMonthState>();
+            for (var month = 1; month <= 12; month++)
+                months.Add(GetMonthState(new DateTime(year, month, 1), refreshMissingDates: false, MonthRefreshMode.Balanced));
+
+            return new ApodCalendarYearState(year, months);
+        }
+
         public void Clear()
         {
             lock (_syncRoot)
