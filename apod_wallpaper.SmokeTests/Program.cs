@@ -83,6 +83,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Favorite rotation source defaults to latest", FavoriteRotationSourceDefaultsToLatest);
                 Run("Favorite rotation avoids immediate repeat", FavoriteRotationAvoidsImmediateRepeat);
                 Run("Display topology snapshot is read only", DisplayTopologySnapshotIsReadOnly);
+                Run("Month calendar keeps stable day visuals", MonthCalendarKeepsStableDayVisuals);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -288,6 +289,15 @@ namespace apod_wallpaper.SmokeTests
             });
             Assert(snapshot.IsMultiMonitor, "Expected two monitors to be detected as multi-monitor topology.");
             Assert(snapshot.Monitors[0].DevicePath == "secondary", "Expected monitors to be sorted by desktop position.");
+        }
+
+        private static void MonthCalendarKeepsStableDayVisuals()
+        {
+            var sourcePath = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "MainPage.xaml.cs");
+            var source = File.ReadAllText(sourcePath);
+
+            Assert(source.IndexOf("CalendarDaysGrid.Children.Clear()", StringComparison.Ordinal) < 0,
+                "Month navigation must not rebuild the date button visual tree.");
         }
 
         private static void ApodPageUrlBuilderIsDeterministic()

@@ -38,7 +38,7 @@ public sealed partial class MainPage : Page
 
     private sealed class CalendarDayVisual
     {
-        public required DateTime Date { get; init; }
+        public required DateTime Date { get; set; }
         public required Button Button { get; init; }
         public required TextBlock DayNumberText { get; init; }
         public required TextBlock StatusText { get; init; }
@@ -135,6 +135,7 @@ public sealed partial class MainPage : Page
     private readonly HashSet<DateTime> _favoriteDates = new();
     private readonly Dictionary<DateTime, MonthCacheEntry> _hotMonthCache = new();
     private readonly HashSet<DateTime> _monthsInFlight = new();
+    private readonly List<CalendarDayVisual> _calendarMonthSlots = new();
     private readonly Dictionary<DateTime, CalendarDayVisual> _calendarDayVisuals = new();
     private readonly Dictionary<DateTime, YearDayVisual> _yearDayVisuals = new();
     private DateTime _selectedDate = DateTime.Today;
@@ -534,7 +535,7 @@ public sealed partial class MainPage : Page
         _isCalendarNavigationAnimating = true;
         try
         {
-            await AnimateOpacityAsync(CalendarDaysGrid, 0.18, 90);
+            await AnimateOpacityAsync(CalendarDaysGrid, 0, 90);
             _visibleMonth = _visibleMonth.AddMonths(monthDelta);
             await LoadVisibleMonthAsync();
             await AnimateOpacityAsync(CalendarDaysGrid, 1, 140);
@@ -655,7 +656,6 @@ public sealed partial class MainPage : Page
         var requestVersion = Interlocked.Increment(ref _monthRequestVersion);
         VisibleMonthText.Text = FormatVisibleMonth(month);
         EnsureCalendarMonthBuilt(month);
-        SetCalendarToLoadingState(month);
         TouchVisibleMonthWindow(month);
 
         _ = PrewarmWindowAsync(month, requestVersion);
@@ -676,6 +676,8 @@ public sealed partial class MainPage : Page
 
             return;
         }
+
+        SetCalendarToLoadingState(month);
 
         MonthStatusBar.Severity = InfoBarSeverity.Informational;
         MonthStatusBar.Title = AppStrings.Get("Loading cached month state");
@@ -1317,7 +1319,7 @@ public sealed partial class MainPage : Page
         {
             _lastPreviewWorkflow = null;
             UpdateActionAvailability();
-            SetPreviewOperationError(selectedDate, operationResult.Error?.Message ?? "Unable to load preview.");
+            SetPreviewOperationError(selectedDate, operationResult.Error?.Message ?? AppStrings.Get("Unable to load preview."));
             return;
         }
 
@@ -1335,7 +1337,7 @@ public sealed partial class MainPage : Page
                 break;
 
             default:
-                SetPreviewOperationError(selectedDate, workflow.Message ?? "Unexpected preview workflow state.");
+                SetPreviewOperationError(selectedDate, workflow.Message ?? AppStrings.Get("Unexpected preview workflow state."));
                 break;
         }
 
@@ -1715,7 +1717,7 @@ public sealed partial class MainPage : Page
         if (_lastPreviewWorkflow?.Status == apod_wallpaper.ApodWorkflowStatus.Success && _lastPreviewWorkflow.Entry?.HasImage == true)
         {
             await ExecuteWallpaperActionAsync(
-                "Reapplying current image",
+                AppStrings.Get("Reapplying current image"),
                 AppStrings.Format("Wallpaper style changed to {0}. Reapplying the selected image.", AppStrings.WallpaperStyleName(selectedStyle)),
                 () => _backendHost.Backend.ApplyDayAsync(_selectedDate, selectedStyle),
                 updateSelectionFromWorkflow: false);
@@ -2527,12 +2529,12 @@ public sealed partial class MainPage : Page
             ?? workflow.RequestedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
         if (workflow.DownloadedNow)
-            return "Resolved " + resolvedDate + " and downloaded a fresh local image.";
+            return AppStrings.Format("Resolved {0} and downloaded a fresh local image.", resolvedDate);
 
         if (workflow.IsLocalFile)
-            return "Resolved " + resolvedDate + " using a local image file.";
+            return AppStrings.Format("Resolved {0} using a local image file.", resolvedDate);
 
-        return "Resolved " + resolvedDate + " successfully.";
+        return AppStrings.Format("Resolved {0} successfully.", resolvedDate);
     }
 
     private void PreviewBitmap_ImageOpened(object sender, RoutedEventArgs e)
@@ -3111,34 +3113,66 @@ public sealed partial class MainPage : Page
     private void EnsureCalendarMonthBuilt(DateTime month)
     {
         EnsureCalendarGridDefinitions();
+        EnsureCalendarMonthSlotsCreated();
 
         var normalizedMonth = new DateTime(month.Year, month.Month, 1);
         if (_renderedCalendarMonth == normalizedMonth)
             return;
 
-        CalendarDaysGrid.Children.Clear();
         _calendarDayVisuals.Clear();
         _renderedCalendarMonth = normalizedMonth;
 
         var daysInMonth = DateTime.DaysInMonth(normalizedMonth.Year, normalizedMonth.Month);
         var startOffset = GetMondayFirstOffset(normalizedMonth.DayOfWeek);
 
-        for (var day = 1; day <= daysInMonth; day++)
+        for (var slotIndex = 0; slotIndex < _calendarMonthSlots.Count; slotIndex++)
         {
+            var visual = _calendarMonthSlots[slotIndex];
+            var day = slotIndex - startOffset + 1;
+            if (day < 1 || day > daysInMonth)
+            {
+                ResetCalendarDayPlaceholder(visual);
+                continue;
+            }
+
             var date = new DateTime(normalizedMonth.Year, normalizedMonth.Month, day);
-            var cellIndex = startOffset + (day - 1);
-            var row = cellIndex / 7;
-            var column = cellIndex % 7;
-
-            var visual = CreateCalendarDayVisual(date);
+            visual.Date = date.Date;
+            visual.Button.Tag = date;
+            visual.Button.Visibility = Visibility.Visible;
+            visual.Button.IsHitTestVisible = true;
+            visual.LastVisualSignature = null;
             _calendarDayVisuals[date.Date] = visual;
+        }
+    }
 
-            Grid.SetRow(visual.Button, row);
-            Grid.SetColumn(visual.Button, column);
+    private void EnsureCalendarMonthSlotsCreated()
+    {
+        for (var slotIndex = _calendarMonthSlots.Count; slotIndex < 42; slotIndex++)
+        {
+            var visual = CreateCalendarDayVisual(DateTime.MinValue);
+            _calendarMonthSlots.Add(visual);
+
+            Grid.SetRow(visual.Button, slotIndex / 7);
+            Grid.SetColumn(visual.Button, slotIndex % 7);
             CalendarDaysGrid.Children.Add(visual.Button);
         }
+    }
 
-        SetCalendarToLoadingState(normalizedMonth);
+    private static void ResetCalendarDayPlaceholder(CalendarDayVisual visual)
+    {
+        visual.Date = DateTime.MinValue;
+        visual.Button.Tag = null;
+        visual.Button.Visibility = Visibility.Collapsed;
+        visual.Button.IsEnabled = false;
+        visual.Button.IsHitTestVisible = false;
+        visual.DayNumberText.Text = string.Empty;
+        visual.StatusText.Text = string.Empty;
+        visual.FavoriteIcon.Visibility = Visibility.Collapsed;
+        visual.IsLoading = false;
+        visual.CurrentDayState = null;
+        visual.LatestPublishedDate = DateTime.MinValue;
+        visual.LastVisualSignature = null;
+        ToolTipService.SetToolTip(visual.Button, null);
     }
 
     private void SetCalendarToLoadingState(DateTime month)
