@@ -740,6 +740,8 @@ public sealed partial class MainPage : Page
         YearViewButton.Content = AppStrings.Get("Year");
         MonthViewButton.Opacity = _isYearViewMode ? 0.68 : 1.0;
         YearViewButton.Opacity = _isYearViewMode ? 1.0 : 0.68;
+        PreviewPaneGrid.Visibility = _isYearViewMode ? Visibility.Collapsed : Visibility.Visible;
+        CalendarActionGrid.Visibility = _isYearViewMode ? Visibility.Collapsed : Visibility.Visible;
         ToolTipService.SetToolTip(MonthViewButton, AppStrings.Get("Month calendar"));
         ToolTipService.SetToolTip(YearViewButton, AppStrings.Get("Year overview"));
         AutomationProperties.SetName(MonthViewButton, AppStrings.Get("Month"));

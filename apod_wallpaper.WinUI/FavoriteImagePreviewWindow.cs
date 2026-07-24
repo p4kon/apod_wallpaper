@@ -23,6 +23,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private readonly Grid _root;
     private readonly Border _surface;
     private readonly ScaleTransform _surfaceScale;
+    private bool _openAnimationStarted;
 
     public FavoriteImagePreviewWindow(string imagePath, DateTime date, Action<DateTime> openInCalendar)
     {
@@ -30,26 +31,34 @@ internal sealed class FavoriteImagePreviewWindow : Window
         _openInCalendar = openInCalendar;
 
         ExtendsContentIntoTitleBar = true;
+        SystemBackdrop = new DesktopAcrylicBackdrop();
         AppWindow.SetIcon("Assets/AppIcon.ico");
 
         _surfaceScale = new ScaleTransform
         {
-            ScaleX = 0.92,
-            ScaleY = 0.92,
+            ScaleX = 0.96,
+            ScaleY = 0.96,
         };
 
         _surface = BuildSurface(imagePath);
         _root = new Grid
         {
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(226, 0, 0, 0)),
-            Opacity = 0,
+            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(168, 0, 0, 0)),
+            Opacity = 1,
             Children = { _surface },
         };
         _root.Tapped += Root_Tapped;
+        _root.Loaded += (_, _) => BeginOpenAnimation();
 
         Content = _root;
         SetTitleBar(new Grid { Height = 0 });
         ConfigureWindow();
+    }
+
+    public void ShowPreview()
+    {
+        Activate();
+        DispatcherQueue.TryEnqueue(BeginOpenAnimation);
     }
 
     private Border BuildSurface(string imagePath)
@@ -144,7 +153,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
             return;
 
         Activated -= FavoriteImagePreviewWindow_Activated;
-        AnimateOpen();
+        BeginOpenAnimation();
     }
 
     private void Root_Tapped(object sender, TappedRoutedEventArgs e)
@@ -163,17 +172,17 @@ internal sealed class FavoriteImagePreviewWindow : Window
         e.Handled = true;
     }
 
+    private void BeginOpenAnimation()
+    {
+        if (_openAnimationStarted)
+            return;
+
+        _openAnimationStarted = true;
+        AnimateOpen();
+    }
+
     private void AnimateOpen()
     {
-        var opacityAnimation = new DoubleAnimation
-        {
-            To = 1,
-            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
-            EnableDependentAnimation = true,
-        };
-        Storyboard.SetTarget(opacityAnimation, _root);
-        Storyboard.SetTargetProperty(opacityAnimation, "Opacity");
-
         var scaleXAnimation = new DoubleAnimation
         {
             To = 1,
@@ -193,7 +202,6 @@ internal sealed class FavoriteImagePreviewWindow : Window
         Storyboard.SetTargetProperty(scaleYAnimation, "ScaleY");
 
         var storyboard = new Storyboard();
-        storyboard.Children.Add(opacityAnimation);
         storyboard.Children.Add(scaleXAnimation);
         storyboard.Children.Add(scaleYAnimation);
         storyboard.Begin();

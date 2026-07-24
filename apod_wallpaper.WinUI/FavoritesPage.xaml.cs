@@ -285,7 +285,7 @@ public sealed partial class FavoritesPage : Page
         var window = new FavoriteImagePreviewWindow(item.ImagePath, item.Date.Date, date => _arguments?.OpenFavoriteDate(date));
         OpenPreviewWindows.Add(window);
         window.Closed += (_, _) => OpenPreviewWindows.Remove(window);
-        window.Activate();
+        window.ShowPreview();
     }
 
     private void ShowFavoriteContextMenu(FrameworkElement target, apod_wallpaper.FavoriteApodItem item)
