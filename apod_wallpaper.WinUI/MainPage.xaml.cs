@@ -150,6 +150,7 @@ public sealed partial class MainPage : Page
     private string? _previewCacheDirectory;
     private long _monthCacheAccessStamp;
     private const int WarmupVisualStepDelayMs = 16;
+    private const int CalendarNavigationHiddenSettleDelayMs = 200;
     private const int PinnedMonthWindowRadius = 1;
     private const int RecentMonthHistoryLimit = 3;
     private const int HotMonthCacheLimit = (PinnedMonthWindowRadius * 2) + 1 + RecentMonthHistoryLimit;
@@ -538,6 +539,7 @@ public sealed partial class MainPage : Page
             await AnimateOpacityAsync(CalendarDaysGrid, 0, 90);
             _visibleMonth = _visibleMonth.AddMonths(monthDelta);
             await LoadVisibleMonthAsync();
+            await Task.Delay(CalendarNavigationHiddenSettleDelayMs);
             await AnimateOpacityAsync(CalendarDaysGrid, 1, 140);
         }
         finally
@@ -1179,7 +1181,8 @@ public sealed partial class MainPage : Page
         visual.Button.Foreground = foreground;
         visual.Button.BorderBrush = isSelected ? ResolveCalendarSelectedBorderBrush(isLightTheme) : background;
         visual.Button.BorderThickness = isSelected ? new Thickness(2) : new Thickness(1);
-        visual.Button.IsEnabled = !isFuture;
+        visual.Button.IsEnabled = true;
+        visual.Button.IsHitTestVisible = true;
         visual.Button.Tag = date;
         visual.IsLoading = isLoading;
         visual.CurrentDayState = dayState;
@@ -1287,6 +1290,13 @@ public sealed partial class MainPage : Page
     {
         if (sender is not Button button || button.Tag is not DateTime date)
             return;
+
+        if (_calendarDayVisuals.TryGetValue(date.Date, out var visual))
+        {
+            var latestPublishedDate = ResolveEffectiveLatestPublishedDate(visual.LatestPublishedDate);
+            if (date.Date > latestPublishedDate.Date)
+                return;
+        }
 
         _selectedDate = date.Date;
         RefreshSelectedDateText();
@@ -3139,6 +3149,7 @@ public sealed partial class MainPage : Page
             visual.Date = date.Date;
             visual.Button.Tag = date;
             visual.Button.Visibility = Visibility.Visible;
+            visual.Button.IsEnabled = true;
             visual.Button.IsHitTestVisible = true;
             visual.LastVisualSignature = null;
             _calendarDayVisuals[date.Date] = visual;
@@ -3163,7 +3174,7 @@ public sealed partial class MainPage : Page
         visual.Date = DateTime.MinValue;
         visual.Button.Tag = null;
         visual.Button.Visibility = Visibility.Collapsed;
-        visual.Button.IsEnabled = false;
+        visual.Button.IsEnabled = true;
         visual.Button.IsHitTestVisible = false;
         visual.DayNumberText.Text = string.Empty;
         visual.StatusText.Text = string.Empty;
