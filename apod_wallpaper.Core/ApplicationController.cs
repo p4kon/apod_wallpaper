@@ -392,11 +392,16 @@ namespace apod_wallpaper
                 await _workflowService.RefreshLocalImageIndexAsync().ConfigureAwait(false);
                 var items = _favoriteStore
                     .GetDates()
-                    .Select(date => new FavoriteApodItem
+                    .Select(date =>
                     {
-                        Date = date.Date,
-                        ImagePath = _workflowService.GetLocalImagePath(date),
-                        Title = "APOD " + date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                        var imagePath = _workflowService.GetLocalImagePath(date);
+                        return new FavoriteApodItem
+                        {
+                            Date = date.Date,
+                            ImagePath = imagePath,
+                            ThumbnailPath = FavoriteThumbnailService.GetOrCreateThumbnailPath(date, imagePath),
+                            Title = "APOD " + date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                        };
                     })
                     .Where(item => !string.IsNullOrWhiteSpace(item.ImagePath))
                     .OrderByDescending(item => item.Date)

@@ -10,7 +10,7 @@ namespace apod_wallpaper.WinUI;
 public sealed partial class MainWindow : Window
 {
     private const int PreferredWindowWidthDip = 860;
-    private const int PreferredWindowHeightDip = 840;
+    private const int PreferredWindowHeightDip = 880;
     private const int MinimumWindowWidthPixels = 720;
     private const int MinimumWindowHeightPixels = 680;
     private const int WorkAreaMarginPixels = 32;

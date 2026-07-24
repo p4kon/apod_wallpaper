@@ -1917,7 +1917,7 @@ public sealed partial class MainPage : Page
 
     private void ShowFavoriteDownloadProgress(apod_wallpaper.DownloadProgressSnapshot? snapshot)
     {
-        FavoriteDownloadProgressPanel.Visibility = Visibility.Visible;
+        FavoriteDownloadProgressPanel.Opacity = 1;
 
         if (snapshot != null && snapshot.TotalBytes.HasValue && snapshot.TotalBytes.Value > 0)
         {
@@ -1940,7 +1940,7 @@ public sealed partial class MainPage : Page
     {
         FavoriteDownloadProgressBar.IsIndeterminate = false;
         FavoriteDownloadProgressBar.Value = 0;
-        FavoriteDownloadProgressPanel.Visibility = Visibility.Collapsed;
+        FavoriteDownloadProgressPanel.Opacity = 0;
     }
 
     private static string FormatBytes(long bytes)

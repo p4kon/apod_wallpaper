@@ -85,6 +85,13 @@
                 Orientation="Horizontal"
                 Spacing="6">
                 <Button
+                    x:Name="TodayButton"
+                    MinWidth="72"
+                    Padding="12,4"
+                    Click="TodayButton_Click"
+                    Content="Today"
+                    ToolTipService.ToolTip="Return to today" />
+                <Button
                     x:Name="MonthViewButton"
                     MinWidth="72"
                     Padding="12,4"
@@ -110,13 +117,6 @@
                     Click="RandomApodButton_Click"
                     Content="Random"
                     ToolTipService.ToolTip="Pick a random APOD date" />
-                <Button
-                    x:Name="TodayButton"
-                    MinWidth="72"
-                    Height="32"
-                    Click="TodayButton_Click"
-                    Content="Today"
-                    ToolTipService.ToolTip="Return to today" />
                 <ComboBox
                     x:Name="RandomApodSourceComboBox"
                     Width="124"
@@ -425,8 +425,8 @@
                 HorizontalAlignment="Center"
                 ColumnSpacing="12">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="42" />
+                    <RowDefinition Height="18" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="88" />
@@ -485,19 +485,20 @@
                     Grid.Row="1"
                     Grid.Column="1"
                     Grid.ColumnSpan="2"
-                    Margin="0,8,0,0"
-                    Spacing="4"
-                    Visibility="Collapsed">
+                    Margin="0,3,0,0"
+                    Opacity="0"
+                    Spacing="2"
+                    Visibility="Visible">
                     <ProgressBar
                         x:Name="FavoriteDownloadProgressBar"
-                        Height="3"
+                        Height="2"
                         Minimum="0"
                         Maximum="100"
                         Value="0" />
                     <TextBlock
                         x:Name="FavoriteDownloadProgressText"
                         HorizontalAlignment="Center"
-                        FontSize="11"
+                        FontSize="10"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         IsTextScaleFactorEnabled="False"
                         Text="Downloading image..." />

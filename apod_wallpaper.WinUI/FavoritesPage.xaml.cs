@@ -19,8 +19,15 @@ namespace apod_wallpaper.WinUI;
 
 public sealed partial class FavoritesPage : Page
 {
+    private const int ThumbnailDecodePixelWidth = 180;
+    private const int ThumbnailCacheLimit = 160;
+    private const int PreviewDecodePixelWidth = 1200;
+    private static IReadOnlyList<apod_wallpaper.FavoriteApodItem> CachedFavoriteItems = Array.Empty<apod_wallpaper.FavoriteApodItem>();
+    private static readonly Dictionary<string, BitmapImage> ThumbnailCache = new(StringComparer.OrdinalIgnoreCase);
+    private static bool HasCachedFavoriteItems;
     private FavoritesPageArguments? _arguments;
     private IReadOnlyList<apod_wallpaper.FavoriteApodItem> _favoriteItems = Array.Empty<apod_wallpaper.FavoriteApodItem>();
+    private DateTime? _previewedFavoriteDate;
     private int _loadVersion;
 
     public FavoritesPage()
@@ -38,18 +45,17 @@ public sealed partial class FavoritesPage : Page
         await LoadFavoritesAsync();
     }
 
-    private async void FavoritesPage_Loaded(object sender, RoutedEventArgs e)
+    private void FavoritesPage_Loaded(object sender, RoutedEventArgs e)
     {
         LocalizationHelper.ApplyTo(this);
         RebuildFavoritesList();
-        if (_arguments != null)
-            await LoadFavoritesAsync();
     }
 
     private void AppStrings_LanguageChanged(object? sender, EventArgs e)
     {
         LocalizationHelper.ApplyTo(this);
         FavoritesLoadingText.Text = AppStrings.Get("Loading favorite images");
+        UpdatePreviewTooltips();
         RebuildFavoritesList();
     }
 
@@ -59,10 +65,20 @@ public sealed partial class FavoritesPage : Page
             return;
 
         var loadVersion = Interlocked.Increment(ref _loadVersion);
-        FavoritesLoadingText.Text = AppStrings.Get("Loading favorite images");
-        FavoritesLoadingPanel.Visibility = Visibility.Visible;
-        FavoritesGridView.Visibility = Visibility.Collapsed;
-        EmptyFavoritesPanel.Visibility = Visibility.Collapsed;
+        var hasCachedItems = HasCachedFavoriteItems;
+        if (hasCachedItems)
+        {
+            _favoriteItems = CachedFavoriteItems;
+            FavoritesLoadingPanel.Visibility = Visibility.Collapsed;
+            RebuildFavoritesList();
+        }
+        else
+        {
+            FavoritesLoadingText.Text = AppStrings.Get("Loading favorite images");
+            FavoritesLoadingPanel.Visibility = Visibility.Visible;
+            FavoritesGridView.Visibility = Visibility.Collapsed;
+            EmptyFavoritesPanel.Visibility = Visibility.Collapsed;
+        }
 
         var result = await _arguments.BackendHost.Backend.GetFavoriteApodsAsync();
         if (loadVersion != _loadVersion)
@@ -71,12 +87,18 @@ public sealed partial class FavoritesPage : Page
         FavoritesLoadingPanel.Visibility = Visibility.Collapsed;
         if (!result.Succeeded || result.Value == null)
         {
-            _favoriteItems = Array.Empty<apod_wallpaper.FavoriteApodItem>();
-            RebuildFavoritesList();
+            if (!hasCachedItems)
+            {
+                _favoriteItems = Array.Empty<apod_wallpaper.FavoriteApodItem>();
+                RebuildFavoritesList();
+            }
+
             return;
         }
 
         _favoriteItems = result.Value;
+        CachedFavoriteItems = _favoriteItems;
+        HasCachedFavoriteItems = true;
         RebuildFavoritesList();
     }
 
@@ -109,8 +131,8 @@ public sealed partial class FavoritesPage : Page
             Height = 132,
             Tag = item.Date.Date,
         };
-        ToolTipService.SetToolTip(root, AppStrings.Get("Open favorite in Calendar"));
-        AutomationProperties.SetName(root, AppStrings.Get("Open favorite in Calendar"));
+        ToolTipService.SetToolTip(root, AppStrings.Get("Preview favorite image"));
+        AutomationProperties.SetName(root, AppStrings.Get("Preview favorite image"));
 
         var thumbnail = new Border
         {
@@ -121,8 +143,8 @@ public sealed partial class FavoritesPage : Page
             Background = (Brush)Application.Current.Resources["ControlFillColorSecondaryBrush"],
             Child = new Image
             {
-                Source = CreateImageSource(item.ImagePath),
-                Stretch = Stretch.Uniform,
+                Source = CreateThumbnailImageSource(item),
+                Stretch = Stretch.UniformToFill,
             },
         };
         root.Children.Add(thumbnail);
@@ -193,34 +215,129 @@ public sealed partial class FavoritesPage : Page
         return item.Title.Trim();
     }
 
-    private static ImageSource? CreateImageSource(string? imagePath)
+    private static ImageSource? CreateThumbnailImageSource(apod_wallpaper.FavoriteApodItem item)
+    {
+        var imagePath = !string.IsNullOrWhiteSpace(item.ThumbnailPath)
+            ? item.ThumbnailPath
+            : item.ImagePath;
+        return CreateImageSource(imagePath, ThumbnailDecodePixelWidth, useMemoryCache: true);
+    }
+
+    private static ImageSource? CreatePreviewImageSource(string? imagePath)
+    {
+        return CreateImageSource(imagePath, PreviewDecodePixelWidth, useMemoryCache: false);
+    }
+
+    private static ImageSource? CreateImageSource(string? imagePath, int decodePixelWidth, bool useMemoryCache)
     {
         if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
             return null;
 
-        return new BitmapImage(new Uri(imagePath, UriKind.Absolute));
+        if (useMemoryCache && ThumbnailCache.TryGetValue(imagePath, out var cachedImage))
+            return cachedImage;
+
+        if (useMemoryCache && ThumbnailCache.Count >= ThumbnailCacheLimit)
+            ThumbnailCache.Clear();
+
+        var image = new BitmapImage
+        {
+            DecodePixelWidth = decodePixelWidth,
+        };
+        image.UriSource = new Uri(imagePath, UriKind.Absolute);
+        if (useMemoryCache)
+            ThumbnailCache[imagePath] = image;
+        return image;
     }
 
     private void FavoritesGridView_ItemClick(object sender, ItemClickEventArgs e)
     {
-        TryOpenFavoriteFromItem(e.ClickedItem);
+        TryShowFavoritePreviewFromItem(e.ClickedItem);
     }
 
     private void FavoriteTile_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        if (TryOpenFavoriteFromItem(sender))
+        if (TryShowFavoritePreviewFromItem(sender))
             e.Handled = true;
     }
 
-    private bool TryOpenFavoriteFromItem(object? item)
+    private bool TryShowFavoritePreviewFromItem(object? item)
     {
         if (item is FrameworkElement { Tag: DateTime date })
         {
-            _arguments?.OpenFavoriteDate(date.Date);
+            var favorite = _favoriteItems.FirstOrDefault(candidate => candidate.Date.Date == date.Date);
+            if (favorite != null)
+                ShowFavoritePreview(favorite);
             return true;
         }
 
         return false;
+    }
+
+    private void ShowFavoritePreview(apod_wallpaper.FavoriteApodItem item)
+    {
+        _previewedFavoriteDate = item.Date.Date;
+        FavoritePreviewImage.Source = CreatePreviewImageSource(item.ImagePath);
+        FavoritePreviewSurface.MaxWidth = Math.Max(360, ActualWidth * 0.75);
+        FavoritePreviewSurface.MaxHeight = Math.Max(320, ActualHeight * 0.75);
+        UpdatePreviewTooltips();
+
+        FavoritePreviewOverlay.Visibility = Visibility.Visible;
+        FavoritePreviewOverlay.Opacity = 0;
+        FavoritePreviewScaleTransform.ScaleX = 0.9;
+        FavoritePreviewScaleTransform.ScaleY = 0.9;
+        AnimatePreviewOverlay(1, 1, null);
+    }
+
+    private void UpdatePreviewTooltips()
+    {
+        var calendarText = AppStrings.Get("Open favorite in Calendar");
+        var closeText = AppStrings.Get("Close preview");
+        ToolTipService.SetToolTip(FavoritePreviewCalendarButton, calendarText);
+        ToolTipService.SetToolTip(FavoritePreviewCloseButton, closeText);
+        AutomationProperties.SetName(FavoritePreviewCalendarButton, calendarText);
+        AutomationProperties.SetName(FavoritePreviewCloseButton, closeText);
+    }
+
+    private void FavoritePreviewOverlay_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        CloseFavoritePreview();
+    }
+
+    private void FavoritePreviewSurface_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        CloseFavoritePreview();
+        e.Handled = true;
+    }
+
+    private void FavoritePreviewCloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        CloseFavoritePreview();
+    }
+
+    private void FavoritePreviewCalendarButton_Click(object sender, RoutedEventArgs e)
+    {
+        var date = _previewedFavoriteDate;
+        CloseFavoritePreview();
+        if (date.HasValue)
+            _arguments?.OpenFavoriteDate(date.Value.Date);
+    }
+
+    private void FavoritePreviewCommandButton_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        e.Handled = true;
+    }
+
+    private void CloseFavoritePreview()
+    {
+        if (FavoritePreviewOverlay.Visibility != Visibility.Visible)
+            return;
+
+        AnimatePreviewOverlay(0, 0.94, () =>
+        {
+            FavoritePreviewOverlay.Visibility = Visibility.Collapsed;
+            FavoritePreviewImage.Source = null;
+            _previewedFavoriteDate = null;
+        });
     }
 
     private async void RemoveFavoriteButton_Click(object sender, RoutedEventArgs e)
@@ -240,6 +357,8 @@ public sealed partial class FavoritesPage : Page
 
         await FadeOutFavoriteItemAsync(date.Date);
         _favoriteItems = _favoriteItems.Where(item => item.Date.Date != date.Date).ToList();
+        CachedFavoriteItems = _favoriteItems;
+        HasCachedFavoriteItems = true;
         RemoveFavoriteGridItem(date.Date);
         EmptyFavoritesPanel.Visibility = _favoriteItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         FavoritesGridView.Visibility = _favoriteItems.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -296,6 +415,44 @@ public sealed partial class FavoritesPage : Page
         storyboard.Completed += (_, _) => completion.TrySetResult(true);
         storyboard.Begin();
         return completion.Task;
+    }
+
+    private void AnimatePreviewOverlay(double overlayOpacity, double scale, Action? completed)
+    {
+        var overlayAnimation = new DoubleAnimation
+        {
+            To = overlayOpacity,
+            Duration = new Duration(TimeSpan.FromMilliseconds(170)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(overlayAnimation, FavoritePreviewOverlay);
+        Storyboard.SetTargetProperty(overlayAnimation, "Opacity");
+
+        var scaleXAnimation = new DoubleAnimation
+        {
+            To = scale,
+            Duration = new Duration(TimeSpan.FromMilliseconds(170)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(scaleXAnimation, FavoritePreviewScaleTransform);
+        Storyboard.SetTargetProperty(scaleXAnimation, "ScaleX");
+
+        var scaleYAnimation = new DoubleAnimation
+        {
+            To = scale,
+            Duration = new Duration(TimeSpan.FromMilliseconds(170)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(scaleYAnimation, FavoritePreviewScaleTransform);
+        Storyboard.SetTargetProperty(scaleYAnimation, "ScaleY");
+
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(overlayAnimation);
+        storyboard.Children.Add(scaleXAnimation);
+        storyboard.Children.Add(scaleYAnimation);
+        if (completed != null)
+            storyboard.Completed += (_, _) => completed();
+        storyboard.Begin();
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
