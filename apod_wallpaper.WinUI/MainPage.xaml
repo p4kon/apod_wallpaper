@@ -145,6 +145,7 @@
             <Border
                 x:Name="CalendarMonthBorder"
                 Grid.Row="0"
+                Height="420"
                 Padding="16,14"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -183,7 +184,7 @@
             <ScrollViewer
                 x:Name="CalendarYearScrollViewer"
                 Grid.Row="0"
-                MaxHeight="420"
+                Height="420"
                 VerticalScrollBarVisibility="Auto"
                 VerticalScrollMode="Auto"
                 Visibility="Collapsed">
@@ -426,7 +427,7 @@
                 ColumnSpacing="12">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="42" />
-                    <RowDefinition Height="18" />
+                    <RowDefinition Height="34" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="88" />
@@ -484,8 +485,8 @@
                     x:Name="FavoriteDownloadProgressPanel"
                     Grid.Row="1"
                     Grid.Column="1"
-                    Grid.ColumnSpan="2"
-                    Margin="0,3,0,0"
+                    Grid.ColumnSpan="3"
+                    Margin="0,5,0,0"
                     Opacity="0"
                     Spacing="2"
                     Visibility="Visible">
@@ -498,9 +499,10 @@
                     <TextBlock
                         x:Name="FavoriteDownloadProgressText"
                         HorizontalAlignment="Center"
-                        FontSize="10"
+                        FontSize="11"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         IsTextScaleFactorEnabled="False"
+                        LineHeight="14"
                         Text="Downloading image..." />
                 </StackPanel>
             </Grid>

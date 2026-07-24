@@ -191,6 +191,7 @@ internal static class AppStrings
         ["Open favorite in Calendar"] = "Открыть избранное в календаре",
         ["Open GitHub release"] = "Открыть релиз GitHub",
         ["Open images folder"] = "Открыть папку изображений",
+        ["Open in folder"] = "Открыть в папке",
         ["Open in Google Translate"] = "Открыть в Google Переводчике",
         ["Open NASA page"] = "Открыть NASA",
         ["Could not open Google Translate"] = "Не удалось открыть Google Переводчик",

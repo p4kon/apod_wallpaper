@@ -15,6 +15,8 @@ namespace apod_wallpaper.WinUI;
 
 public sealed partial class LibraryPage : Page
 {
+    private static apod_wallpaper.StorageSummary? CachedSummary;
+    private static string? CachedSummaryKey;
     private LibraryPageArguments? _arguments;
     private apod_wallpaper.StorageSummary? _summary;
 
@@ -36,8 +38,8 @@ public sealed partial class LibraryPage : Page
     private async void LibraryPage_Loaded(object sender, RoutedEventArgs e)
     {
         RefreshLocalizedText();
-        if (_arguments != null)
-            await LoadSummaryAsync();
+        if (_summary != null)
+            RebuildSummary();
     }
 
     private void AppStrings_LanguageChanged(object? sender, EventArgs e)
@@ -67,7 +69,16 @@ public sealed partial class LibraryPage : Page
             return;
 
         LibraryStatusBar.Visibility = Visibility.Collapsed;
-        SetActionButtonsEnabled(false);
+        if (CachedSummary != null)
+        {
+            _summary = CachedSummary;
+            RebuildSummary();
+            SetActionButtonsEnabled(true);
+        }
+        else
+        {
+            SetActionButtonsEnabled(false);
+        }
 
         var result = await _arguments.BackendHost.Backend.GetStorageSummaryAsync();
         if (!result.Succeeded || result.Value == null)
@@ -81,8 +92,15 @@ public sealed partial class LibraryPage : Page
             return;
         }
 
+        var summaryKey = BuildSummaryKey(result.Value);
         _summary = result.Value;
-        RebuildSummary();
+        CachedSummary = _summary;
+        if (!string.Equals(CachedSummaryKey, summaryKey, StringComparison.Ordinal))
+        {
+            CachedSummaryKey = summaryKey;
+            RebuildSummary();
+        }
+
         LibraryStatusBar.Visibility = Visibility.Collapsed;
         SetActionButtonsEnabled(true);
     }
@@ -238,6 +256,29 @@ public sealed partial class LibraryPage : Page
         }
 
         return value.ToString(value >= 10 ? "0.#" : "0.##", CultureInfo.InvariantCulture) + " " + units[unitIndex];
+    }
+
+    private static string BuildSummaryKey(apod_wallpaper.StorageSummary summary)
+    {
+        return string.Join("|",
+            summary.DownloadedImageCount.ToString(CultureInfo.InvariantCulture),
+            summary.DownloadedImageSizeBytes.ToString(CultureInfo.InvariantCulture),
+            BuildDirectorySummaryKey(summary.Images),
+            BuildDirectorySummaryKey(summary.SmartImages),
+            BuildDirectorySummaryKey(summary.Cache),
+            BuildDirectorySummaryKey(summary.Logs),
+            BuildDirectorySummaryKey(summary.ApplicationData));
+    }
+
+    private static string BuildDirectorySummaryKey(apod_wallpaper.StorageDirectorySummary? summary)
+    {
+        if (summary == null)
+            return string.Empty;
+
+        return string.Join(":",
+            summary.Path ?? string.Empty,
+            summary.FileCount.ToString(CultureInfo.InvariantCulture),
+            summary.SizeBytes.ToString(CultureInfo.InvariantCulture));
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
