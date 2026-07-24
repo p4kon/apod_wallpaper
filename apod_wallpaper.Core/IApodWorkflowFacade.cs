@@ -9,7 +9,9 @@ namespace apod_wallpaper
         Task<OperationResult<ApodWorkflowResult>> DownloadDayAsync(DateTime date, bool forceRefresh = false);
         Task<OperationResult<ApodWorkflowResult>> DownloadDayAsync(DateTime date, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress);
         Task<OperationResult<ApodWorkflowResult>> ApplyDayAsync(DateTime date, WallpaperStyle style, bool forceRefresh = false);
+        Task<OperationResult<ApodWorkflowResult>> ApplyDayAsync(DateTime date, WallpaperStyle style, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress);
         Task<OperationResult<ApodWorkflowResult>> ApplyLatestPublishedAsync(WallpaperStyle style, bool forceRefresh = false);
+        Task<OperationResult<ApodWorkflowResult>> ApplyLatestPublishedAsync(WallpaperStyle style, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress);
         Task<OperationResult<string>> ReapplyCurrentWallpaperStyleAsync(WallpaperStyle style);
         Task<OperationResult<string>> GetPostUrlAsync(DateTime date);
     }

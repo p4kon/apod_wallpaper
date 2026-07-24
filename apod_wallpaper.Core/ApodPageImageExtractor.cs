@@ -182,7 +182,23 @@ namespace apod_wallpaper
                 return true;
             }
 
+            if (LooksLikeTextOnlyApodContent(html, relevantHtml))
+            {
+                resolution = new ApodPageMediaResolution
+                {
+                    Kind = ApodPageMediaKind.Unsupported,
+                    MediaUrl = pageUrl,
+                };
+                return true;
+            }
+
             return false;
+        }
+
+        private static bool LooksLikeTextOnlyApodContent(string html, string relevantHtml)
+        {
+            return ApodDateHeadingRegex.IsMatch(relevantHtml) &&
+                (ExplanationLabelRegex.IsMatch(html) || HtmlTitleRegex.IsMatch(html));
         }
 
         private static string ExtractRelevantHtml(string html)

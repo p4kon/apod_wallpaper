@@ -288,18 +288,18 @@ public sealed partial class MainPage : Page
 
     private async void DownloadOnlyButton_Click(object sender, RoutedEventArgs e)
     {
-        await ExecuteWallpaperActionAsync(
+        await ExecuteWallpaperDownloadActionAsync(
             AppStrings.Get("Downloading image"),
             AppStrings.Format("Downloading APOD image for {0}.", _selectedDate.ToString("yyyy-MM-dd")),
-            () => _backendHost!.Backend.DownloadDayAsync(_selectedDate));
+            progress => _backendHost!.Backend.DownloadDayAsync(_selectedDate, false, progress));
     }
 
     private async void DownloadAndApplyButton_Click(object sender, RoutedEventArgs e)
     {
-        await ExecuteWallpaperActionAsync(
+        await ExecuteWallpaperDownloadActionAsync(
             AppStrings.Get("Applying wallpaper"),
             AppStrings.Format("Downloading and applying APOD for {0}.", _selectedDate.ToString("yyyy-MM-dd")),
-            () => _backendHost!.Backend.ApplyDayAsync(_selectedDate, GetSelectedWallpaperStyle()),
+            progress => _backendHost!.Backend.ApplyDayAsync(_selectedDate, GetSelectedWallpaperStyle(), false, progress),
             disableAutoRefreshOnSuccess: true);
     }
 
@@ -320,10 +320,20 @@ public sealed partial class MainPage : Page
 
     private async void ApplyLatestButton_Click(object sender, RoutedEventArgs e)
     {
-        await ExecuteWallpaperActionAsync(
+        await ExecuteWallpaperDownloadActionAsync(
             AppStrings.Get("Applying latest APOD"),
             AppStrings.Get("Requesting the latest available APOD and applying it as wallpaper."),
-            () => _backendHost!.Backend.ApplyLatestPublishedAsync(GetSelectedWallpaperStyle()));
+            progress => _backendHost!.Backend.ApplyLatestPublishedAsync(GetSelectedWallpaperStyle(), false, progress));
+    }
+
+    private async void TodayButton_Click(object sender, RoutedEventArgs e)
+    {
+        var today = DateTime.Today;
+        _selectedDate = today;
+        _visibleMonth = new DateTime(today.Year, today.Month, 1);
+        await LoadVisibleMonthAsync();
+        await LoadPreviewForSelectedDateAsync();
+        QueueTodayAvailabilityProbe();
     }
 
     private async void OpenNasaPageButton_Click(object sender, RoutedEventArgs e)
@@ -1815,6 +1825,7 @@ public sealed partial class MainPage : Page
         AutoRefreshToggleButton.IsEnabled = hasBackend && _currentSettingsSnapshot != null && !isBusy;
         ApplyLatestButton.IsEnabled = hasBackend && !isBusy;
         RandomApodButton.IsEnabled = hasBackend && _currentSettingsSnapshot != null && !isBusy;
+        TodayButton.IsEnabled = hasBackend && !isBusy;
         RandomApodSourceComboBox.IsEnabled = hasBackend && _currentSettingsSnapshot != null && !isBusy;
         UpdateRandomApodControls();
 
@@ -2178,6 +2189,10 @@ public sealed partial class MainPage : Page
         var selectedSource = GetSelectedRandomApodSource();
         RandomApodButton.Content = AppStrings.Get("Random");
         ToolTipService.SetToolTip(RandomApodButton, AppStrings.Get("Pick a random APOD date"));
+        TodayButton.Content = AppStrings.Get("Today");
+        ToolTipService.SetToolTip(TodayButton, AppStrings.Get("Return to today"));
+        AutomationProperties.SetName(TodayButton, AppStrings.Get("Today"));
+        AutomationProperties.SetHelpText(TodayButton, AppStrings.Get("Return to today"));
         ToolTipService.SetToolTip(RandomApodSourceComboBox, AppStrings.Get("Random source"));
         RandomApodDeepSpaceCheckBox.Content = AppStrings.Get("Into deep space");
         ToolTipService.SetToolTip(
@@ -2263,6 +2278,39 @@ public sealed partial class MainPage : Page
         bool updateSelectionFromWorkflow = true,
         bool disableAutoRefreshOnSuccess = false)
     {
+        await ExecuteWallpaperActionCoreAsync(
+            title,
+            message,
+            _ => action(),
+            showDownloadProgress: false,
+            updateSelectionFromWorkflow,
+            disableAutoRefreshOnSuccess);
+    }
+
+    private async Task ExecuteWallpaperDownloadActionAsync(
+        string title,
+        string message,
+        Func<IProgress<apod_wallpaper.DownloadProgressSnapshot>, Task<apod_wallpaper.OperationResult<apod_wallpaper.ApodWorkflowResult>>> action,
+        bool updateSelectionFromWorkflow = true,
+        bool disableAutoRefreshOnSuccess = false)
+    {
+        await ExecuteWallpaperActionCoreAsync(
+            title,
+            message,
+            progress => action(progress!),
+            showDownloadProgress: true,
+            updateSelectionFromWorkflow,
+            disableAutoRefreshOnSuccess);
+    }
+
+    private async Task ExecuteWallpaperActionCoreAsync(
+        string title,
+        string message,
+        Func<IProgress<apod_wallpaper.DownloadProgressSnapshot>?, Task<apod_wallpaper.OperationResult<apod_wallpaper.ApodWorkflowResult>>> action,
+        bool showDownloadProgress,
+        bool updateSelectionFromWorkflow,
+        bool disableAutoRefreshOnSuccess)
+    {
         if (_backendHost == null || _isApplyingWallpaperAction)
             return;
 
@@ -2273,11 +2321,17 @@ public sealed partial class MainPage : Page
         ActionStatusBar.Severity = InfoBarSeverity.Informational;
         ActionStatusBar.Title = title;
         ActionStatusBar.Message = message;
+        IProgress<apod_wallpaper.DownloadProgressSnapshot>? progress = null;
+        if (showDownloadProgress)
+        {
+            ShowFavoriteDownloadProgress(null);
+            progress = new Progress<apod_wallpaper.DownloadProgressSnapshot>(ShowFavoriteDownloadProgress);
+        }
 
         try
         {
             var previousWorkflow = _lastPreviewWorkflow;
-            var operationResult = await action();
+            var operationResult = await action(progress);
             if (!operationResult.Succeeded || operationResult.Value == null)
             {
                 ActionStatusBar.Severity = InfoBarSeverity.Error;
@@ -2319,6 +2373,8 @@ public sealed partial class MainPage : Page
         {
             ActionProgressRing.IsActive = false;
             ActionProgressRing.Opacity = 0;
+            if (showDownloadProgress)
+                HideFavoriteDownloadProgress();
             _isApplyingWallpaperAction = false;
             UpdateActionAvailability();
         }

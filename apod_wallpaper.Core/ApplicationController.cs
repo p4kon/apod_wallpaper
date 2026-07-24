@@ -302,10 +302,15 @@ namespace apod_wallpaper
 
         public Task<OperationResult<ApodWorkflowResult>> ApplyDayAsync(DateTime date, WallpaperStyle style, bool forceRefresh = false)
         {
+            return ApplyDayAsync(date, style, forceRefresh, null);
+        }
+
+        public Task<OperationResult<ApodWorkflowResult>> ApplyDayAsync(DateTime date, WallpaperStyle style, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress)
+        {
             return ExecuteOperationAsync(async () =>
             {
                 await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
-                var result = await _workflowService.ApplyDayAsync(date, style, forceRefresh).ConfigureAwait(false);
+                var result = await _workflowService.ApplyDayAsync(date, style, forceRefresh, progress).ConfigureAwait(false);
                 PersistLastAppliedWallpaperImagePath(result.ImagePath);
                 _calendarStateService.Clear();
                 RaiseWallpaperApplied(result, false);
@@ -315,10 +320,15 @@ namespace apod_wallpaper
 
         public Task<OperationResult<ApodWorkflowResult>> ApplyLatestPublishedAsync(WallpaperStyle style, bool forceRefresh = false)
         {
+            return ApplyLatestPublishedAsync(style, forceRefresh, null);
+        }
+
+        public Task<OperationResult<ApodWorkflowResult>> ApplyLatestPublishedAsync(WallpaperStyle style, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress)
+        {
             return ExecuteOperationAsync(async () =>
             {
                 await EnsureApiKeyValidationAsync().ConfigureAwait(false);
-                var result = await _workflowService.ApplyLatestPublishedAsync(style, forceRefresh).ConfigureAwait(false);
+                var result = await _workflowService.ApplyLatestPublishedAsync(style, forceRefresh, progress).ConfigureAwait(false);
                 PersistLastAppliedWallpaperImagePath(result.ImagePath);
                 _calendarStateService.Clear();
                 RaiseWallpaperApplied(result, false);

@@ -174,13 +174,18 @@ namespace apod_wallpaper
 
         public Task<ApodWorkflowResult> ApplyDayAsync(DateTime date, WallpaperStyle style, bool forceRefresh = false)
         {
+            return ApplyDayAsync(date, style, forceRefresh, null);
+        }
+
+        public Task<ApodWorkflowResult> ApplyDayAsync(DateTime date, WallpaperStyle style, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress)
+        {
             var futureDateResult = CreateFutureDateUnavailableResult(date);
             if (futureDateResult != null)
                 return Task.FromResult(futureDateResult);
 
             return ExecuteAsync(date, async () =>
             {
-                var apply = await _wallpaperService.ApplyWallpaperByDateAsync(date, style, forceRefresh).ConfigureAwait(false);
+                var apply = await _wallpaperService.ApplyWallpaperByDateAsync(date, style, forceRefresh, progress).ConfigureAwait(false);
                 return new ApodWorkflowResult
                 {
                     Status = ApodWorkflowStatus.Success,
@@ -224,10 +229,15 @@ namespace apod_wallpaper
 
         public Task<ApodWorkflowResult> ApplyLatestPublishedAsync(WallpaperStyle style, bool forceRefresh = false)
         {
+            return ApplyLatestPublishedAsync(style, forceRefresh, null);
+        }
+
+        public Task<ApodWorkflowResult> ApplyLatestPublishedAsync(WallpaperStyle style, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress)
+        {
             return ExecuteAsync(DateTime.UtcNow.Date, async () =>
             {
                 var latestPublishedDate = await _wallpaperService.GetLatestPublishedDateAsync().ConfigureAwait(false);
-                var apply = await _wallpaperService.ApplyLatestPublishedWallpaperAsync(style, forceRefresh).ConfigureAwait(false);
+                var apply = await _wallpaperService.ApplyLatestPublishedWallpaperAsync(style, forceRefresh, progress).ConfigureAwait(false);
                 var resolvedDate = ParseEntryDate(apply.Entry, DateTime.UtcNow.Date);
 
                 return new ApodWorkflowResult

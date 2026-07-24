@@ -110,6 +110,13 @@
                     Click="RandomApodButton_Click"
                     Content="Random"
                     ToolTipService.ToolTip="Pick a random APOD date" />
+                <Button
+                    x:Name="TodayButton"
+                    MinWidth="72"
+                    Height="32"
+                    Click="TodayButton_Click"
+                    Content="Today"
+                    ToolTipService.ToolTip="Return to today" />
                 <ComboBox
                     x:Name="RandomApodSourceComboBox"
                     Width="124"

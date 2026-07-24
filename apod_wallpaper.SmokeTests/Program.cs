@@ -39,6 +39,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Preferred display date uses last applied date", PreferredDisplayDateUsesLastAppliedDate);
                 Run("HTML extractor resolves preview and full image", HtmlExtractorResolvesImagePage);
                 Run("HTML extractor rejects video page", HtmlExtractorRejectsVideoPage);
+                Run("HTML extractor classifies text-only APOD page as unsupported", HtmlExtractorClassifiesTextOnlyPageAsUnsupported);
                 Run("HTML extractor handles annotated image page", HtmlExtractorHandlesAnnotatedImagePage);
                 Run("HTML extractor resolves title and explanation text", HtmlExtractorResolvesTextMetadata);
                 Run("Runtime settings fall back to DEMO_KEY for invalid key", InvalidApiKeyFallsBackToDemoKey);
@@ -533,6 +534,32 @@ namespace apod_wallpaper.SmokeTests
             Assert(!result, "Expected extractor to reject a video page.");
             Assert(string.IsNullOrEmpty(previewUrl), "Preview URL should be empty for video pages.");
             Assert(string.IsNullOrEmpty(imageUrl), "Image URL should be empty for video pages.");
+        }
+
+        private static void HtmlExtractorClassifiesTextOnlyPageAsUnsupported()
+        {
+            const string html =
+@"<html>
+<head>
+<title>APOD: 2012 March 12 - Text Only APOD</title>
+</head>
+<body>
+<center>
+2012 March 12
+</center>
+<p><b> Explanation: </b>
+Some APOD archive pages contain text but no downloadable image or video media.
+</body>
+</html>";
+
+            string videoUrl;
+            var result = apod_wallpaper.ApodPageImageExtractor.TryExtractVideo(
+                html,
+                "https://apod.nasa.gov/apod/ap120312.html",
+                out videoUrl);
+
+            Assert(result, "Expected text-only APOD page to be classified as unsupported media.");
+            Assert(videoUrl == "https://apod.nasa.gov/apod/ap120312.html", "Expected text-only media URL to point to the APOD page.");
         }
 
         private static void HtmlExtractorHandlesAnnotatedImagePage()

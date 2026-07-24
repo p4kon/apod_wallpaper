@@ -418,7 +418,12 @@ namespace apod_wallpaper
 
         public async Task<ApodApplyResult> ApplyWallpaperByDateAsync(DateTime date, WallpaperStyle style, bool forceRefresh = false)
         {
-            var downloadResult = await DownloadImageByDateAsync(date, forceRefresh).ConfigureAwait(false);
+            return await ApplyWallpaperByDateAsync(date, style, forceRefresh, null).ConfigureAwait(false);
+        }
+
+        public async Task<ApodApplyResult> ApplyWallpaperByDateAsync(DateTime date, WallpaperStyle style, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress)
+        {
+            var downloadResult = await DownloadImageByDateAsync(date, forceRefresh, progress).ConfigureAwait(false);
             _wallpaperService.ApplyPreservingHistory(downloadResult.ImagePath, style);
 
             return new ApodApplyResult
@@ -453,9 +458,14 @@ namespace apod_wallpaper
 
         public async Task<ApodApplyResult> ApplyLatestPublishedWallpaperAsync(WallpaperStyle style, bool forceRefresh = false)
         {
+            return await ApplyLatestPublishedWallpaperAsync(style, forceRefresh, null).ConfigureAwait(false);
+        }
+
+        public async Task<ApodApplyResult> ApplyLatestPublishedWallpaperAsync(WallpaperStyle style, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress)
+        {
             var latestEntry = await GetLatestAvailableImageEntryAsync(forceRefresh).ConfigureAwait(false);
             var entryDate = DateTime.Parse(latestEntry.Date).Date;
-            var downloadResult = await EnsureImageDownloadedAsync(latestEntry, entryDate).ConfigureAwait(false);
+            var downloadResult = await EnsureImageDownloadedAsync(latestEntry, entryDate, progress).ConfigureAwait(false);
             _wallpaperService.ApplyPreservingHistory(downloadResult.ImagePath, style);
 
             return new ApodApplyResult
