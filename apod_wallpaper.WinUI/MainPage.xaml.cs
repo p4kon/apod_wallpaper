@@ -15,6 +15,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.Foundation;
@@ -143,6 +144,7 @@ public sealed partial class MainPage : Page
     private readonly Stopwatch _previewImageStopwatch = new();
     private long _lastPreviewBackendElapsedMs;
     private long _lastMonthCachedElapsedMs;
+    private bool _isCalendarNavigationAnimating;
     private string? _pendingPreviewLocation;
     private string? _previewCacheDirectory;
     private long _monthCacheAccessStamp;
@@ -509,8 +511,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        _visibleMonth = _visibleMonth.AddMonths(-1);
-        await LoadVisibleMonthAsync();
+        await NavigateVisibleMonthAsync(-1);
     }
 
     private async void NextMonthButton_Click(object sender, RoutedEventArgs e)
@@ -522,8 +523,27 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        _visibleMonth = _visibleMonth.AddMonths(1);
-        await LoadVisibleMonthAsync();
+        await NavigateVisibleMonthAsync(1);
+    }
+
+    private async Task NavigateVisibleMonthAsync(int monthDelta)
+    {
+        if (_isCalendarNavigationAnimating)
+            return;
+
+        _isCalendarNavigationAnimating = true;
+        try
+        {
+            await AnimateOpacityAsync(CalendarDaysGrid, 0.18, 90);
+            _visibleMonth = _visibleMonth.AddMonths(monthDelta);
+            await LoadVisibleMonthAsync();
+            await AnimateOpacityAsync(CalendarDaysGrid, 1, 140);
+        }
+        finally
+        {
+            CalendarDaysGrid.Opacity = 1;
+            _isCalendarNavigationAnimating = false;
+        }
     }
 
     private async void MonthViewButton_Click(object sender, RoutedEventArgs e)
@@ -742,6 +762,8 @@ public sealed partial class MainPage : Page
         YearViewButton.Opacity = _isYearViewMode ? 1.0 : 0.68;
         PreviewPaneGrid.Visibility = _isYearViewMode ? Visibility.Collapsed : Visibility.Visible;
         CalendarActionGrid.Visibility = _isYearViewMode ? Visibility.Collapsed : Visibility.Visible;
+        MainPageScrollViewer.VerticalScrollMode = _isYearViewMode ? ScrollMode.Disabled : ScrollMode.Auto;
+        MainPageScrollViewer.VerticalScrollBarVisibility = _isYearViewMode ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
         ToolTipService.SetToolTip(MonthViewButton, AppStrings.Get("Month calendar"));
         ToolTipService.SetToolTip(YearViewButton, AppStrings.Get("Year overview"));
         AutomationProperties.SetName(MonthViewButton, AppStrings.Get("Month"));
@@ -3038,6 +3060,37 @@ public sealed partial class MainPage : Page
             return "\uE714";
 
         return "\uE783";
+    }
+
+    private void CalendarYearScrollViewer_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        var wheelDelta = e.GetCurrentPoint(CalendarYearScrollViewer).Properties.MouseWheelDelta;
+        if (wheelDelta == 0)
+            return;
+
+        var targetOffset = CalendarYearScrollViewer.VerticalOffset - (wheelDelta * 0.55);
+        targetOffset = Math.Max(0, Math.Min(CalendarYearScrollViewer.ScrollableHeight, targetOffset));
+        CalendarYearScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: false);
+        e.Handled = true;
+    }
+
+    private static Task AnimateOpacityAsync(UIElement target, double to, int durationMs)
+    {
+        var completion = new TaskCompletionSource<object?>();
+        var animation = new DoubleAnimation
+        {
+            To = to,
+            Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, "Opacity");
+
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(animation);
+        storyboard.Completed += (_, _) => completion.TrySetResult(null);
+        storyboard.Begin();
+        return completion.Task;
     }
 
     private void EnsureCalendarGridDefinitions()

@@ -46,12 +46,11 @@ internal sealed class FavoriteImagePreviewWindow : Window
         _surface = BuildSurface(imagePath);
         _root = new Grid
         {
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(76, 0, 0, 0)),
+            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(46, 0, 0, 0)),
             Opacity = 1,
             Children = { _surface },
         };
         _root.Tapped += Root_Tapped;
-        _root.PointerPressed += Root_PointerPressed;
         _root.Loaded += (_, _) => BeginOpenAnimation();
 
         Content = _root;
@@ -81,14 +80,10 @@ internal sealed class FavoriteImagePreviewWindow : Window
         var calendarButton = BuildOverlayButton("\uE787", AppStrings.Get("Open favorite in Calendar"));
         calendarButton.HorizontalAlignment = HorizontalAlignment.Left;
         calendarButton.Click += CalendarButton_Click;
-        calendarButton.Tapped += CommandButton_Tapped;
-        calendarButton.PointerPressed += CommandButton_PointerPressed;
 
         var closeButton = BuildOverlayButton("\uE711", AppStrings.Get("Close preview"));
         closeButton.HorizontalAlignment = HorizontalAlignment.Right;
         closeButton.Click += (_, _) => Close();
-        closeButton.Tapped += CommandButton_Tapped;
-        closeButton.PointerPressed += CommandButton_PointerPressed;
 
         var grid = new Grid
         {
@@ -110,8 +105,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
             RenderTransform = _surfaceScale,
             RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5),
         };
-        surface.Tapped += (_, _) => Close();
-        surface.PointerPressed += Surface_PointerPressed;
+        surface.Tapped += Surface_Tapped;
         return surface;
     }
 
@@ -148,8 +142,10 @@ internal sealed class FavoriteImagePreviewWindow : Window
             presenter.SetBorderAndTitleBar(false, false);
             presenter.IsResizable = false;
             presenter.IsMaximizable = false;
+            presenter.IsAlwaysOnTop = true;
         }
 
+        EnableLayeredComposition(_hwnd);
         AppWindow.MoveAndResize(new RectInt32(workArea.X, workArea.Y, workArea.Width, workArea.Height));
         Activated += FavoriteImagePreviewWindow_Activated;
     }
@@ -165,17 +161,17 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
     private void Root_Tapped(object sender, TappedRoutedEventArgs e)
     {
+        if (IsWithin(_surface, e.OriginalSource as DependencyObject))
+            return;
+
         Close();
     }
 
-    private void Root_PointerPressed(object sender, PointerRoutedEventArgs e)
+    private void Surface_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        Close();
-        e.Handled = true;
-    }
+        if (IsWithinButton(e.OriginalSource as DependencyObject))
+            return;
 
-    private void Surface_PointerPressed(object sender, PointerRoutedEventArgs e)
-    {
         Close();
         e.Handled = true;
     }
@@ -188,14 +184,30 @@ internal sealed class FavoriteImagePreviewWindow : Window
         openInCalendar(date);
     }
 
-    private void CommandButton_Tapped(object sender, TappedRoutedEventArgs e)
+    private static bool IsWithin(DependencyObject parent, DependencyObject? child)
     {
-        e.Handled = true;
+        while (child != null)
+        {
+            if (ReferenceEquals(parent, child))
+                return true;
+
+            child = VisualTreeHelper.GetParent(child);
+        }
+
+        return false;
     }
 
-    private void CommandButton_PointerPressed(object sender, PointerRoutedEventArgs e)
+    private static bool IsWithinButton(DependencyObject? child)
     {
-        e.Handled = true;
+        while (child != null)
+        {
+            if (child is Button)
+                return true;
+
+            child = VisualTreeHelper.GetParent(child);
+        }
+
+        return false;
     }
 
     private void BeginOpenAnimation()
@@ -235,4 +247,27 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    private static void EnableLayeredComposition(IntPtr hwnd)
+    {
+        var extendedStyle = GetWindowLong(hwnd, GwlExStyle);
+        if (extendedStyle == 0)
+            return;
+
+        SetWindowLong(hwnd, GwlExStyle, extendedStyle | WsExLayered);
+        SetLayeredWindowAttributes(hwnd, 0, 255, LwaAlpha);
+    }
+
+    private const int GwlExStyle = -20;
+    private const int WsExLayered = 0x00080000;
+    private const int LwaAlpha = 0x00000002;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern int GetWindowLong(IntPtr hwnd, int index);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern int SetWindowLong(IntPtr hwnd, int index, int value);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint colorKey, byte alpha, uint flags);
 }

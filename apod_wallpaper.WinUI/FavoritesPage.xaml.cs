@@ -135,7 +135,6 @@ public sealed partial class FavoritesPage : Page
             Height = 132,
             Tag = item.Date.Date,
         };
-        ToolTipService.SetToolTip(root, AppStrings.Get("Preview favorite image"));
         AutomationProperties.SetName(root, AppStrings.Get("Preview favorite image"));
 
         var thumbnail = new Border
