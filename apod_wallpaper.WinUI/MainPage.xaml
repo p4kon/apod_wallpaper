@@ -176,14 +176,19 @@
                         <TextBlock Grid.Column="6" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Sun" />
                     </Grid>
 
-                    <Grid x:Name="CalendarDaysGrid" Grid.Row="1" ColumnSpacing="6" RowSpacing="6" />
+                    <Grid
+                        x:Name="CalendarDaysGrid"
+                        Grid.Row="1"
+                        Height="294"
+                        ColumnSpacing="6"
+                        RowSpacing="6" />
                 </Grid>
             </Border>
 
             <ScrollViewer
                 x:Name="CalendarYearScrollViewer"
                 Grid.Row="0"
-                Height="420"
+                Height="620"
                 VerticalScrollBarVisibility="Auto"
                 VerticalScrollMode="Auto"
                 Visibility="Collapsed">

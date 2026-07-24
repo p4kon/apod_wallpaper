@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics;
+using WinRT.Interop;
 
 namespace apod_wallpaper.WinUI;
 
@@ -23,6 +24,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private readonly Grid _root;
     private readonly Border _surface;
     private readonly ScaleTransform _surfaceScale;
+    private readonly IntPtr _hwnd;
     private bool _openAnimationStarted;
 
     public FavoriteImagePreviewWindow(string imagePath, DateTime date, Action<DateTime> openInCalendar)
@@ -33,6 +35,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
         ExtendsContentIntoTitleBar = true;
         SystemBackdrop = new DesktopAcrylicBackdrop();
         AppWindow.SetIcon("Assets/AppIcon.ico");
+        _hwnd = WindowNative.GetWindowHandle(this);
 
         _surfaceScale = new ScaleTransform
         {
@@ -43,11 +46,12 @@ internal sealed class FavoriteImagePreviewWindow : Window
         _surface = BuildSurface(imagePath);
         _root = new Grid
         {
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(168, 0, 0, 0)),
+            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(76, 0, 0, 0)),
             Opacity = 1,
             Children = { _surface },
         };
         _root.Tapped += Root_Tapped;
+        _root.PointerPressed += Root_PointerPressed;
         _root.Loaded += (_, _) => BeginOpenAnimation();
 
         Content = _root;
@@ -58,6 +62,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
     public void ShowPreview()
     {
         Activate();
+        SetForegroundWindow(_hwnd);
         DispatcherQueue.TryEnqueue(BeginOpenAnimation);
     }
 
@@ -77,11 +82,13 @@ internal sealed class FavoriteImagePreviewWindow : Window
         calendarButton.HorizontalAlignment = HorizontalAlignment.Left;
         calendarButton.Click += CalendarButton_Click;
         calendarButton.Tapped += CommandButton_Tapped;
+        calendarButton.PointerPressed += CommandButton_PointerPressed;
 
         var closeButton = BuildOverlayButton("\uE711", AppStrings.Get("Close preview"));
         closeButton.HorizontalAlignment = HorizontalAlignment.Right;
         closeButton.Click += (_, _) => Close();
         closeButton.Tapped += CommandButton_Tapped;
+        closeButton.PointerPressed += CommandButton_PointerPressed;
 
         var grid = new Grid
         {
@@ -104,6 +111,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
             RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5),
         };
         surface.Tapped += (_, _) => Close();
+        surface.PointerPressed += Surface_PointerPressed;
         return surface;
     }
 
@@ -143,7 +151,6 @@ internal sealed class FavoriteImagePreviewWindow : Window
         }
 
         AppWindow.MoveAndResize(new RectInt32(workArea.X, workArea.Y, workArea.Width, workArea.Height));
-        AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
         Activated += FavoriteImagePreviewWindow_Activated;
     }
 
@@ -161,13 +168,32 @@ internal sealed class FavoriteImagePreviewWindow : Window
         Close();
     }
 
+    private void Root_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        Close();
+        e.Handled = true;
+    }
+
+    private void Surface_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        Close();
+        e.Handled = true;
+    }
+
     private void CalendarButton_Click(object sender, RoutedEventArgs e)
     {
-        _openInCalendar(_date);
+        var date = _date;
+        var openInCalendar = _openInCalendar;
         Close();
+        openInCalendar(date);
     }
 
     private void CommandButton_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        e.Handled = true;
+    }
+
+    private void CommandButton_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
         e.Handled = true;
     }
@@ -206,4 +232,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
         storyboard.Children.Add(scaleYAnimation);
         storyboard.Begin();
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hwnd);
 }

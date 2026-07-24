@@ -3052,7 +3052,7 @@ public sealed partial class MainPage : Page
             CalendarDaysGrid.ColumnDefinitions.Add(new ColumnDefinition());
 
         for (var row = 0; row < 6; row++)
-            CalendarDaysGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            CalendarDaysGrid.RowDefinitions.Add(new RowDefinition());
     }
 
     private void EnsureCalendarMonthBuilt(DateTime month)
