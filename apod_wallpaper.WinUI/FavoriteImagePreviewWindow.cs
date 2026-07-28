@@ -4,6 +4,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
 using Microsoft.UI;
 using Microsoft.UI.Text;
 using Microsoft.UI.Windowing;
@@ -16,6 +17,8 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.Graphics;
+using Windows.Storage;
+using Windows.Storage.Streams;
 using WinRT.Interop;
 using DrawingBitmap = System.Drawing.Bitmap;
 using DrawingBrush = System.Drawing.SolidBrush;
@@ -39,26 +42,32 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
     private readonly DateTime _date;
     private readonly Action<DateTime> _openInCalendar;
+    private readonly string _imagePath;
+    private readonly BitmapImage _previewBitmap;
     private readonly Grid _root;
     private readonly Border _surface;
     private readonly ScaleTransform _surfaceScale;
     private readonly IntPtr _hwnd;
     private readonly RectInt32 _workArea;
-    private readonly RectInt32 _hiddenArea;
     private WndProc? _windowProc;
     private IntPtr _previousWindowProc;
+    private bool _imagePrepared;
     private bool _openAnimationStarted;
 
     public FavoriteImagePreviewWindow(string imagePath, DateTime date, Action<DateTime> openInCalendar)
     {
         _date = date.Date;
         _openInCalendar = openInCalendar;
+        _imagePath = imagePath;
 
         ExtendsContentIntoTitleBar = true;
         AppWindow.SetIcon("Assets/AppIcon.ico");
         _hwnd = WindowNative.GetWindowHandle(this);
         _workArea = ResolveWorkArea();
-        _hiddenArea = CreateHiddenWindowBounds(_workArea);
+        _previewBitmap = new BitmapImage
+        {
+            DecodePixelWidth = PreviewDecodePixelWidth,
+        };
 
         _surfaceScale = new ScaleTransform
         {
@@ -66,7 +75,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
             ScaleY = 0.96,
         };
 
-        _surface = BuildSurface(imagePath);
+        _surface = BuildSurface();
         _root = new Grid
         {
             Background = BuildBackdropBrush(_workArea),
@@ -85,28 +94,41 @@ internal sealed class FavoriteImagePreviewWindow : Window
         Closed += FavoriteImagePreviewWindow_Closed;
     }
 
-    public void ShowPreview()
+    public async Task ShowPreviewAsync()
     {
-        Activate();
-        BringToForeground("hidden");
+        await PreparePreviewImageAsync();
+        AppWindow.Show(true);
+        BringToForeground("visible");
         DispatcherQueue.TryEnqueue(() =>
         {
-            AppWindow.MoveAndResize(_workArea);
-            Activate();
-            BringToForeground("visible");
             BeginOpenAnimation();
         });
     }
 
-    private Border BuildSurface(string imagePath)
+    private async Task PreparePreviewImageAsync()
+    {
+        if (_imagePrepared)
+            return;
+
+        _imagePrepared = true;
+        try
+        {
+            var file = await StorageFile.GetFileFromPathAsync(_imagePath);
+            using IRandomAccessStream stream = await file.OpenReadAsync();
+            await _previewBitmap.SetSourceAsync(stream);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Favorite preview image preload failed: {ex.Message}");
+            _previewBitmap.UriSource = new Uri(_imagePath, UriKind.Absolute);
+        }
+    }
+
+    private Border BuildSurface()
     {
         var image = new WinUIImage
         {
-            Source = new BitmapImage
-            {
-                DecodePixelWidth = PreviewDecodePixelWidth,
-                UriSource = new Uri(imagePath, UriKind.Absolute),
-            },
+            Source = _previewBitmap,
             Stretch = Stretch.Uniform,
         };
 
@@ -178,17 +200,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
         ConfigureNativeWindowChrome(_hwnd);
         InstallMouseActivateGuard(_hwnd);
-        AppWindow.MoveAndResize(_hiddenArea);
-        Activated += FavoriteImagePreviewWindow_Activated;
-    }
-
-    private void FavoriteImagePreviewWindow_Activated(object sender, WindowActivatedEventArgs args)
-    {
-        if (args.WindowActivationState == WindowActivationState.Deactivated)
-            return;
-
-        Activated -= FavoriteImagePreviewWindow_Activated;
-        BeginOpenAnimation();
+        AppWindow.MoveAndResize(_workArea);
     }
 
     private void Root_Tapped(object sender, TappedRoutedEventArgs e)
@@ -286,11 +298,6 @@ internal sealed class FavoriteImagePreviewWindow : Window
     {
         var displayArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
         return displayArea.WorkArea;
-    }
-
-    private static RectInt32 CreateHiddenWindowBounds(RectInt32 workArea)
-    {
-        return new RectInt32(workArea.X - 32000, workArea.Y - 32000, 16, 16);
     }
 
     private static Brush BuildBackdropBrush(RectInt32 bounds)
@@ -405,7 +412,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
     private void BringToForeground(string phase)
     {
-        SetWindowPos(_hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpShowWindow);
+        SetWindowPos(_hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize);
         var foregroundSet = SetForegroundWindow(_hwnd);
         var isForeground = GetForegroundWindow() == _hwnd;
         Debug.WriteLine($"Favorite preview foreground pass ({phase}): SetForegroundWindow={foregroundSet}, IsForeground={isForeground}");
@@ -514,7 +521,6 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoActivate = 0x0010;
-    private const uint SwpShowWindow = 0x0040;
     private const uint SwpFrameChanged = 0x0020;
     private const uint WmMouseActivate = 0x0021;
     private const int MaActivate = 1;

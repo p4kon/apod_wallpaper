@@ -341,9 +341,14 @@ namespace apod_wallpaper.SmokeTests
                 "Favorites preview must build a screenshot-backed blurred backdrop before showing.");
             Assert(previewSource.IndexOf("Background = BuildBackdropBrush(_workArea)", StringComparison.Ordinal) >= 0,
                 "Favorites preview must use the captured backdrop as the root background for the first visible frame.");
-            Assert(previewSource.IndexOf("CreateHiddenWindowBounds(_workArea)", StringComparison.Ordinal) >= 0 &&
-                previewSource.IndexOf("AppWindow.MoveAndResize(_workArea);", StringComparison.Ordinal) >= 0,
-                "Favorites preview must precompose offscreen before moving to the visible work area.");
+            Assert(previewSource.IndexOf("public async Task ShowPreviewAsync()", StringComparison.Ordinal) >= 0,
+                "Favorites preview must prepare the first image frame before showing the window.");
+            Assert(previewSource.IndexOf("await PreparePreviewImageAsync();", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("await PreparePreviewImageAsync();", StringComparison.Ordinal) < previewSource.IndexOf("AppWindow.Show(true);", StringComparison.Ordinal),
+                "Favorites preview must load the image before the first visible AppWindow.Show call.");
+            Assert(previewSource.IndexOf("CreateHiddenWindowBounds", StringComparison.Ordinal) < 0 &&
+                previewSource.IndexOf("BringToForeground(\"hidden\")", StringComparison.Ordinal) < 0,
+                "Favorites preview must not show a hidden window and then visibly resize it to fullscreen.");
             Assert(previewSource.IndexOf("SetLayeredWindowAttributes", StringComparison.Ordinal) < 0,
                 "Favorites preview must not use alpha 255 layered transparency for backdrop.");
             Assert(previewSource.IndexOf("WmMouseActivate", StringComparison.Ordinal) >= 0 &&

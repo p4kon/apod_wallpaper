@@ -254,26 +254,28 @@ public sealed partial class FavoritesPage : Page
         return image;
     }
 
-    private void FavoriteTile_Tapped(object sender, TappedRoutedEventArgs e)
+    private async void FavoriteTile_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        if (TryShowFavoritePreviewFromItem(sender))
+        if (TryResolveFavoriteFromItem(sender, out var favorite) && favorite != null)
+        {
             e.Handled = true;
+            await ShowFavoritePreviewAsync(favorite);
+        }
     }
 
-    private bool TryShowFavoritePreviewFromItem(object? item)
+    private bool TryResolveFavoriteFromItem(object? item, out apod_wallpaper.FavoriteApodItem? favorite)
     {
+        favorite = null;
         if (item is FrameworkElement { Tag: DateTime date })
         {
-            var favorite = _favoriteItems.FirstOrDefault(candidate => candidate.Date.Date == date.Date);
-            if (favorite != null)
-                ShowFavoritePreview(favorite);
+            favorite = _favoriteItems.FirstOrDefault(candidate => candidate.Date.Date == date.Date);
             return true;
         }
 
         return false;
     }
 
-    private void ShowFavoritePreview(apod_wallpaper.FavoriteApodItem item)
+    private async Task ShowFavoritePreviewAsync(apod_wallpaper.FavoriteApodItem item)
     {
         if (string.IsNullOrWhiteSpace(item.ImagePath) || !File.Exists(item.ImagePath))
             return;
@@ -292,7 +294,7 @@ public sealed partial class FavoritesPage : Page
                 OpenPreviewWindows.Remove(window);
                 _previewOpenInProgress = false;
             };
-            window.ShowPreview();
+            await window.ShowPreviewAsync();
         }
         catch
         {
