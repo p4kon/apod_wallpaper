@@ -231,7 +231,10 @@ public sealed partial class ShellPage : Page
 
     private void NotifyCalendarHostReturned()
     {
-        if (ContentFrame.Content is MainPage mainPage)
-            mainPage.NotifyHostReturnedToCalendar();
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (ContentFrame.Content is MainPage mainPage)
+                mainPage.NotifyHostReturnedToCalendar();
+        });
     }
 }

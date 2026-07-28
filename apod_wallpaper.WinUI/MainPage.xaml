@@ -190,7 +190,6 @@
                 x:Name="CalendarYearScrollViewer"
                 Grid.Row="0"
                 Height="620"
-                PointerWheelChanged="CalendarYearScrollViewer_PointerWheelChanged"
                 VerticalScrollBarVisibility="Auto"
                 VerticalScrollMode="Auto"
                 Visibility="Collapsed">

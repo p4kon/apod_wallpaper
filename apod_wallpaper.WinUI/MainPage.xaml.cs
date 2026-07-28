@@ -1021,6 +1021,9 @@ public sealed partial class MainPage : Page
 
     private async Task ApplyCalendarMonthStateAsync(apod_wallpaper.ApodCalendarMonthState monthState, bool progressive, int requestVersion)
     {
+        if (requestVersion != _monthRequestVersion || !IsVisibleMonth(monthState.Month))
+            return;
+
         EnsureCalendarGridDefinitions();
         EnsureCalendarMonthBuilt(monthState.Month);
 
@@ -1246,7 +1249,7 @@ public sealed partial class MainPage : Page
 
         var previousTransientDate = _transientAvailableApodDate;
         _transientAvailableApodDate = today;
-        if (previousTransientDate.HasValue && previousTransientDate.Value.Date >= today)
+        if (previousTransientDate.HasValue && previousTransientDate.Value.Date > today)
             return;
 
         await RefreshCalendarAfterAvailabilityProbeAsync(today);
@@ -2955,6 +2958,12 @@ public sealed partial class MainPage : Page
         return month.Date == currentMonth;
     }
 
+    private bool IsVisibleMonth(DateTime month)
+    {
+        var normalizedMonth = new DateTime(month.Year, month.Month, 1);
+        return normalizedMonth.Date == new DateTime(_visibleMonth.Year, _visibleMonth.Month, 1);
+    }
+
     private string BuildMonthWarmupMessage(DateTime month)
     {
         if (IsCurrentMonth(month))
@@ -3072,18 +3081,6 @@ public sealed partial class MainPage : Page
             return "\uE714";
 
         return "\uE783";
-    }
-
-    private void CalendarYearScrollViewer_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
-    {
-        var wheelDelta = e.GetCurrentPoint(CalendarYearScrollViewer).Properties.MouseWheelDelta;
-        if (wheelDelta == 0)
-            return;
-
-        var targetOffset = CalendarYearScrollViewer.VerticalOffset - (wheelDelta * 0.55);
-        targetOffset = Math.Max(0, Math.Min(CalendarYearScrollViewer.ScrollableHeight, targetOffset));
-        CalendarYearScrollViewer.ChangeView(null, targetOffset, null, disableAnimation: false);
-        e.Handled = true;
     }
 
     private static Task AnimateOpacityAsync(UIElement target, double to, int durationMs)

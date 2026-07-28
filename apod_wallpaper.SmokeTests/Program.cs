@@ -295,9 +295,21 @@ namespace apod_wallpaper.SmokeTests
         {
             var sourcePath = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "MainPage.xaml.cs");
             var source = File.ReadAllText(sourcePath);
+            var xamlPath = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "MainPage.xaml");
+            var xaml = File.ReadAllText(xamlPath);
 
             Assert(source.IndexOf("CalendarDaysGrid.Children.Clear()", StringComparison.Ordinal) < 0,
                 "Month navigation must not rebuild the date button visual tree.");
+            Assert(source.IndexOf("visual.Button.IsEnabled = !isFuture", StringComparison.Ordinal) < 0,
+                "Month calendar future dates must not rely on Button disabled visual state.");
+            Assert(xaml.IndexOf("CalendarYearScrollViewer_PointerWheelChanged", StringComparison.Ordinal) < 0,
+                "Year calendar scrolling should use the native ScrollViewer wheel handling.");
+
+            var applyMethodIndex = source.IndexOf("private async Task ApplyCalendarMonthStateAsync", StringComparison.Ordinal);
+            var requestGuardIndex = source.IndexOf("if (requestVersion != _monthRequestVersion || !IsVisibleMonth(monthState.Month))", applyMethodIndex, StringComparison.Ordinal);
+            var ensureMonthIndex = source.IndexOf("EnsureCalendarMonthBuilt(monthState.Month);", applyMethodIndex, StringComparison.Ordinal);
+            Assert(applyMethodIndex >= 0 && requestGuardIndex > applyMethodIndex && requestGuardIndex < ensureMonthIndex,
+                "Month state application must reject stale requests before touching the calendar UI.");
         }
 
         private static void ApodPageUrlBuilderIsDeterministic()
