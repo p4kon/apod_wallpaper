@@ -29,6 +29,7 @@ public sealed partial class FavoritesPage : Page
     private FavoritesPageArguments? _arguments;
     private IReadOnlyList<apod_wallpaper.FavoriteApodItem> _favoriteItems = Array.Empty<apod_wallpaper.FavoriteApodItem>();
     private int _loadVersion;
+    private bool _previewOpenInProgress;
 
     public FavoritesPage()
     {
@@ -252,11 +253,6 @@ public sealed partial class FavoritesPage : Page
         return image;
     }
 
-    private void FavoritesGridView_ItemClick(object sender, ItemClickEventArgs e)
-    {
-        TryShowFavoritePreviewFromItem(e.ClickedItem);
-    }
-
     private void FavoriteTile_Tapped(object sender, TappedRoutedEventArgs e)
     {
         if (TryShowFavoritePreviewFromItem(sender))
@@ -281,10 +277,29 @@ public sealed partial class FavoritesPage : Page
         if (string.IsNullOrWhiteSpace(item.ImagePath) || !File.Exists(item.ImagePath))
             return;
 
-        var window = new FavoriteImagePreviewWindow(item.ImagePath, item.Date.Date, date => _arguments?.OpenFavoriteDate(date));
-        OpenPreviewWindows.Add(window);
-        window.Closed += (_, _) => OpenPreviewWindows.Remove(window);
-        window.ShowPreview();
+        if (_previewOpenInProgress || OpenPreviewWindows.Count > 0)
+            return;
+
+        FavoriteImagePreviewWindow? window = null;
+        try
+        {
+            _previewOpenInProgress = true;
+            window = new FavoriteImagePreviewWindow(item.ImagePath, item.Date.Date, date => _arguments?.OpenFavoriteDate(date));
+            OpenPreviewWindows.Add(window);
+            window.Closed += (_, _) =>
+            {
+                OpenPreviewWindows.Remove(window);
+                _previewOpenInProgress = false;
+            };
+            window.ShowPreview();
+        }
+        catch
+        {
+            if (window != null)
+                OpenPreviewWindows.Remove(window);
+            _previewOpenInProgress = false;
+            throw;
+        }
     }
 
     private void ShowFavoriteContextMenu(FrameworkElement target, apod_wallpaper.FavoriteApodItem item)

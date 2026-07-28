@@ -84,6 +84,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Favorite rotation avoids immediate repeat", FavoriteRotationAvoidsImmediateRepeat);
                 Run("Display topology snapshot is read only", DisplayTopologySnapshotIsReadOnly);
                 Run("Month calendar keeps stable day visuals", MonthCalendarKeepsStableDayVisuals);
+                Run("Favorites preview uses a single open gesture path", FavoritesPreviewUsesSingleOpenGesturePath);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -310,6 +311,30 @@ namespace apod_wallpaper.SmokeTests
             var ensureMonthIndex = source.IndexOf("EnsureCalendarMonthBuilt(monthState.Month);", applyMethodIndex, StringComparison.Ordinal);
             Assert(applyMethodIndex >= 0 && requestGuardIndex > applyMethodIndex && requestGuardIndex < ensureMonthIndex,
                 "Month state application must reject stale requests before touching the calendar UI.");
+        }
+
+        private static void FavoritesPreviewUsesSingleOpenGesturePath()
+        {
+            var favoritesPagePath = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "FavoritesPage.xaml.cs");
+            var favoritesSource = File.ReadAllText(favoritesPagePath);
+            var favoritesXamlPath = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "FavoritesPage.xaml");
+            var favoritesXaml = File.ReadAllText(favoritesXamlPath);
+            var previewWindowPath = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "FavoriteImagePreviewWindow.cs");
+            var previewSource = File.ReadAllText(previewWindowPath);
+
+            Assert(favoritesXaml.IndexOf("ItemClick=\"FavoritesGridView_ItemClick\"", StringComparison.Ordinal) < 0,
+                "Favorites GridView must not use ItemClick when favorite tiles also handle Tapped.");
+            Assert(favoritesSource.IndexOf("FavoritesGridView_ItemClick", StringComparison.Ordinal) < 0,
+                "Favorites preview must have one authoritative tile open handler.");
+            Assert(favoritesSource.IndexOf("_previewOpenInProgress", StringComparison.Ordinal) >= 0,
+                "Favorites preview must guard against duplicate open requests from one input gesture.");
+            Assert(previewSource.IndexOf("TryCreateBlurredBackdrop", StringComparison.Ordinal) >= 0,
+                "Favorites preview must build a screenshot-backed blurred backdrop before showing.");
+            Assert(previewSource.IndexOf("SetLayeredWindowAttributes", StringComparison.Ordinal) < 0,
+                "Favorites preview must not use alpha 255 layered transparency for backdrop.");
+            Assert(previewSource.IndexOf("WmMouseActivate", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("RemoveMouseActivateGuard", StringComparison.Ordinal) >= 0,
+                "Favorites preview must keep a first-click guard with cleanup.");
         }
 
         private static void ApodPageUrlBuilderIsDeterministic()
