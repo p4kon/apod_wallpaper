@@ -328,8 +328,22 @@ namespace apod_wallpaper.SmokeTests
                 "Favorites preview must have one authoritative tile open handler.");
             Assert(favoritesSource.IndexOf("_previewOpenInProgress", StringComparison.Ordinal) >= 0,
                 "Favorites preview must guard against duplicate open requests from one input gesture.");
+            Assert(favoritesSource.IndexOf("AppStrings.Get(\"Set as wallpaper\")", StringComparison.Ordinal) >= 0,
+                "Favorites context menu must localize the Set as wallpaper action.");
+            Assert(favoritesSource.IndexOf("AppStrings.Get(\"Remove from favorites\")", StringComparison.Ordinal) >= 0,
+                "Favorites context menu must localize the Remove from favorites action.");
+            Assert(favoritesSource.IndexOf("SetFavoriteAsWallpaperAsync", StringComparison.Ordinal) >= 0 &&
+                favoritesSource.IndexOf("ApplyDayAsync(item.Date.Date, wallpaperStyle)", StringComparison.Ordinal) >= 0,
+                "Favorites context menu must apply the selected favorite through the backend workflow.");
+            Assert(favoritesSource.IndexOf("updatedSnapshot.AutoRefreshEnabled = false;", StringComparison.Ordinal) >= 0,
+                "Applying a favorite as wallpaper must turn off automatic wallpaper apply.");
             Assert(previewSource.IndexOf("TryCreateBlurredBackdrop", StringComparison.Ordinal) >= 0,
                 "Favorites preview must build a screenshot-backed blurred backdrop before showing.");
+            Assert(previewSource.IndexOf("Background = BuildBackdropBrush(_workArea)", StringComparison.Ordinal) >= 0,
+                "Favorites preview must use the captured backdrop as the root background for the first visible frame.");
+            Assert(previewSource.IndexOf("CreateHiddenWindowBounds(_workArea)", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("AppWindow.MoveAndResize(_workArea);", StringComparison.Ordinal) >= 0,
+                "Favorites preview must precompose offscreen before moving to the visible work area.");
             Assert(previewSource.IndexOf("SetLayeredWindowAttributes", StringComparison.Ordinal) < 0,
                 "Favorites preview must not use alpha 255 layered transparency for backdrop.");
             Assert(previewSource.IndexOf("WmMouseActivate", StringComparison.Ordinal) >= 0 &&
@@ -1301,6 +1315,7 @@ Bright clusters mark newborn stars.
             Assert(!appStringsSource.Contains("LanguageSystem"), "AppStrings must not use the removed System language.");
             Assert(!appStringsSource.Contains("CultureInfo.CurrentUICulture.TwoLetterISOLanguageName"), "AppStrings must not choose UI language from CurrentUICulture.");
             Assert(appStringKeys.Contains("CopyFailed"), "AppStrings must contain CopyFailed.");
+            Assert(appStringKeys.Contains("Set as wallpaper"), "AppStrings must contain the Favorites Set as wallpaper action.");
             Assert(appStringKeys.Contains("Translation language"), "AppStrings must contain the translation language tooltip prefix.");
             foreach (var languageName in new[] { "Russian", "Spanish", "German", "French", "Italian", "Portuguese", "Japanese" })
                 Assert(appStringKeys.Contains(languageName), "AppStrings must contain language name: " + languageName);

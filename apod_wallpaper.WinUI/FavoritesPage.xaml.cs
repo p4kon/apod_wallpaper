@@ -29,6 +29,7 @@ public sealed partial class FavoritesPage : Page
     private FavoritesPageArguments? _arguments;
     private IReadOnlyList<apod_wallpaper.FavoriteApodItem> _favoriteItems = Array.Empty<apod_wallpaper.FavoriteApodItem>();
     private int _loadVersion;
+    private bool _isApplyingFavoriteWallpaper;
     private bool _previewOpenInProgress;
 
     public FavoritesPage()
@@ -305,6 +306,13 @@ public sealed partial class FavoritesPage : Page
     private void ShowFavoriteContextMenu(FrameworkElement target, apod_wallpaper.FavoriteApodItem item)
     {
         var menu = new MenuFlyout();
+        var setWallpaperItem = new MenuFlyoutItem
+        {
+            Text = AppStrings.Get("Set as wallpaper"),
+            Icon = new FontIcon { Glyph = "\uE771" },
+        };
+        setWallpaperItem.Click += async (_, _) => await SetFavoriteAsWallpaperAsync(item);
+
         var openCalendarItem = new MenuFlyoutItem
         {
             Text = AppStrings.Get("Open favorite in Calendar"),
@@ -319,8 +327,18 @@ public sealed partial class FavoritesPage : Page
         };
         openFolderItem.Click += (_, _) => OpenImageInFolder(item.ImagePath);
 
+        var removeFavoriteItem = new MenuFlyoutItem
+        {
+            Text = AppStrings.Get("Remove from favorites"),
+            Icon = new FontIcon { Glyph = "\uE711" },
+        };
+        removeFavoriteItem.Click += async (_, _) => await RemoveFavoriteAsync(item.Date.Date, null);
+
+        menu.Items.Add(setWallpaperItem);
         menu.Items.Add(openCalendarItem);
         menu.Items.Add(openFolderItem);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(removeFavoriteItem);
         menu.ShowAt(target);
     }
 
@@ -339,16 +357,25 @@ public sealed partial class FavoritesPage : Page
 
     private async void RemoveFavoriteButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_arguments == null || sender is not Button { Tag: DateTime date })
+        if (sender is not Button { Tag: DateTime date } removeButton)
             return;
 
-        var removeButton = (Button)sender;
-        removeButton.IsEnabled = false;
+        await RemoveFavoriteAsync(date.Date, removeButton);
+    }
+
+    private async Task RemoveFavoriteAsync(DateTime date, Button? removeButton)
+    {
+        if (_arguments == null)
+            return;
+
+        if (removeButton != null)
+            removeButton.IsEnabled = false;
 
         var result = await _arguments.BackendHost.Backend.SetFavoriteAsync(date.Date, false);
         if (!result.Succeeded)
         {
-            removeButton.IsEnabled = true;
+            if (removeButton != null)
+                removeButton.IsEnabled = true;
             return;
         }
 
@@ -359,6 +386,53 @@ public sealed partial class FavoritesPage : Page
         RemoveFavoriteGridItem(date.Date);
         EmptyFavoritesPanel.Visibility = _favoriteItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         FavoritesGridView.Visibility = _favoriteItems.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private async Task SetFavoriteAsWallpaperAsync(apod_wallpaper.FavoriteApodItem item)
+    {
+        if (_arguments == null || _isApplyingFavoriteWallpaper)
+            return;
+
+        if (string.IsNullOrWhiteSpace(item.ImagePath) || !File.Exists(item.ImagePath))
+            return;
+
+        _isApplyingFavoriteWallpaper = true;
+        try
+        {
+            var settingsResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
+            var wallpaperStyle = ResolveWallpaperStyleFromSettings(settingsResult.Value);
+            var applyResult = await _arguments.BackendHost.Backend.ApplyDayAsync(item.Date.Date, wallpaperStyle);
+            if (!applyResult.Succeeded || applyResult.Value == null)
+                return;
+
+            await DisableAutoRefreshAfterFavoriteWallpaperApplyAsync();
+        }
+        finally
+        {
+            _isApplyingFavoriteWallpaper = false;
+        }
+    }
+
+    private async Task DisableAutoRefreshAfterFavoriteWallpaperApplyAsync()
+    {
+        if (_arguments == null)
+            return;
+
+        var settingsResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
+        if (!settingsResult.Succeeded || settingsResult.Value == null || !settingsResult.Value.AutoRefreshEnabled)
+            return;
+
+        var updatedSnapshot = settingsResult.Value.Clone();
+        updatedSnapshot.AutoRefreshEnabled = false;
+        await _arguments.BackendHost.Backend.SaveSettingsAsync(updatedSnapshot);
+    }
+
+    private static apod_wallpaper.WallpaperStyle ResolveWallpaperStyleFromSettings(apod_wallpaper.ApplicationSettingsSnapshot? settings)
+    {
+        if (settings != null && Enum.IsDefined(typeof(apod_wallpaper.WallpaperStyle), settings.WallpaperStyleIndex))
+            return (apod_wallpaper.WallpaperStyle)settings.WallpaperStyleIndex;
+
+        return apod_wallpaper.WallpaperStyle.Smart;
     }
 
     private Task FadeOutFavoriteItemAsync(DateTime date)

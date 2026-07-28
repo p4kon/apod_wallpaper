@@ -245,6 +245,7 @@ internal static class AppStrings
         ["Settings saved"] = "Настройки сохранены",
         ["Settings unavailable"] = "Настройки недоступны",
         ["Settings were not saved"] = "Настройки не сохранены",
+        ["Set as wallpaper"] = "Установить как обои",
         ["Show"] = "Показать",
         ["Smart"] = "Умный",
         ["Searching random APOD"] = "Поиск случайного APOD",

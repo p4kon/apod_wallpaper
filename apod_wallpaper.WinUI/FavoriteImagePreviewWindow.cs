@@ -44,6 +44,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private readonly ScaleTransform _surfaceScale;
     private readonly IntPtr _hwnd;
     private readonly RectInt32 _workArea;
+    private readonly RectInt32 _hiddenArea;
     private WndProc? _windowProc;
     private IntPtr _previousWindowProc;
     private bool _openAnimationStarted;
@@ -57,6 +58,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
         AppWindow.SetIcon("Assets/AppIcon.ico");
         _hwnd = WindowNative.GetWindowHandle(this);
         _workArea = ResolveWorkArea();
+        _hiddenArea = CreateHiddenWindowBounds(_workArea);
 
         _surfaceScale = new ScaleTransform
         {
@@ -67,17 +69,15 @@ internal sealed class FavoriteImagePreviewWindow : Window
         _surface = BuildSurface(imagePath);
         _root = new Grid
         {
-            Background = new SolidColorBrush(WinUIColor.FromArgb(255, 14, 11, 12)),
+            Background = BuildBackdropBrush(_workArea),
             Opacity = 1,
             Children =
             {
-                BuildBackdropLayer(_workArea),
                 BuildTintLayer(),
                 _surface,
             },
         };
         _root.Tapped += Root_Tapped;
-        _root.Loaded += (_, _) => BeginOpenAnimation();
 
         Content = _root;
         SetTitleBar(new Grid { Height = 0 });
@@ -88,11 +88,12 @@ internal sealed class FavoriteImagePreviewWindow : Window
     public void ShowPreview()
     {
         Activate();
-        BringToForeground("initial");
+        BringToForeground("hidden");
         DispatcherQueue.TryEnqueue(() =>
         {
+            AppWindow.MoveAndResize(_workArea);
             Activate();
-            BringToForeground("deferred");
+            BringToForeground("visible");
             BeginOpenAnimation();
         });
     }
@@ -177,7 +178,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
         ConfigureNativeWindowChrome(_hwnd);
         InstallMouseActivateGuard(_hwnd);
-        AppWindow.MoveAndResize(_workArea);
+        AppWindow.MoveAndResize(_hiddenArea);
         Activated += FavoriteImagePreviewWindow_Activated;
     }
 
@@ -287,32 +288,32 @@ internal sealed class FavoriteImagePreviewWindow : Window
         return displayArea.WorkArea;
     }
 
-    private UIElement BuildBackdropLayer(RectInt32 bounds)
+    private static RectInt32 CreateHiddenWindowBounds(RectInt32 workArea)
+    {
+        return new RectInt32(workArea.X - 32000, workArea.Y - 32000, 16, 16);
+    }
+
+    private static Brush BuildBackdropBrush(RectInt32 bounds)
     {
         var backdrop = TryCreateBlurredBackdrop(bounds);
         if (backdrop != null)
         {
-            return new WinUIImage
+            return new ImageBrush
             {
-                Source = backdrop,
+                ImageSource = backdrop,
                 Stretch = Stretch.Fill,
-                IsHitTestVisible = false,
             };
         }
 
-        return new Grid
+        return new Microsoft.UI.Xaml.Media.LinearGradientBrush
         {
-            Background = new Microsoft.UI.Xaml.Media.LinearGradientBrush
+            StartPoint = new Windows.Foundation.Point(0, 0),
+            EndPoint = new Windows.Foundation.Point(1, 1),
+            GradientStops =
             {
-                StartPoint = new Windows.Foundation.Point(0, 0),
-                EndPoint = new Windows.Foundation.Point(1, 1),
-                GradientStops =
-                {
-                    new GradientStop { Color = WinUIColor.FromArgb(255, 18, 14, 18), Offset = 0 },
-                    new GradientStop { Color = WinUIColor.FromArgb(255, 5, 5, 8), Offset = 1 },
-                },
+                new GradientStop { Color = WinUIColor.FromArgb(255, 18, 14, 18), Offset = 0 },
+                new GradientStop { Color = WinUIColor.FromArgb(255, 5, 5, 8), Offset = 1 },
             },
-            IsHitTestVisible = false,
         };
     }
 
