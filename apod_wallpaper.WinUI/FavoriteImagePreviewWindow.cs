@@ -21,8 +21,6 @@ using Windows.Storage;
 using Windows.Storage.Streams;
 using WinRT.Interop;
 using DrawingBitmap = System.Drawing.Bitmap;
-using DrawingBrush = System.Drawing.SolidBrush;
-using DrawingColor = System.Drawing.Color;
 using DrawingGraphics = System.Drawing.Graphics;
 using DrawingPixelFormat = System.Drawing.Imaging.PixelFormat;
 using DrawingPoint = System.Drawing.Point;
@@ -39,12 +37,16 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private const int PreviewDecodePixelWidth = 1800;
     private const double BackdropScale = 0.11;
     private const byte BackdropTintAlpha = 96;
+    private const int BackgroundFadeInMs = 100;
+    private const int SurfaceFadeInMs = 150;
+    private const int CloseFadeOutMs = 50;
 
     private readonly DateTime _date;
     private readonly Action<DateTime> _openInCalendar;
     private readonly string _imagePath;
     private readonly BitmapImage _previewBitmap;
     private readonly Grid _root;
+    private readonly Rectangle _tintLayer;
     private readonly Border _surface;
     private readonly ScaleTransform _surfaceScale;
     private readonly IntPtr _hwnd;
@@ -52,6 +54,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private WndProc? _windowProc;
     private IntPtr _previousWindowProc;
     private bool _imagePrepared;
+    private bool _isClosing;
     private bool _openAnimationStarted;
 
     public FavoriteImagePreviewWindow(string imagePath, DateTime date, Action<DateTime> openInCalendar)
@@ -75,18 +78,21 @@ internal sealed class FavoriteImagePreviewWindow : Window
             ScaleY = 0.96,
         };
 
+        _tintLayer = BuildTintLayer();
         _surface = BuildSurface();
         _root = new Grid
         {
             Background = BuildBackdropBrush(_workArea),
             Opacity = 1,
+            IsTabStop = true,
             Children =
             {
-                BuildTintLayer(),
+                _tintLayer,
                 _surface,
             },
         };
         _root.Tapped += Root_Tapped;
+        _root.KeyDown += Root_KeyDown;
 
         Content = _root;
         SetTitleBar(new Grid { Height = 0 });
@@ -99,6 +105,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
         await PreparePreviewImageAsync();
         AppWindow.Show(true);
         BringToForeground("visible");
+        _root.Focus(FocusState.Programmatic);
         DispatcherQueue.TryEnqueue(() =>
         {
             BeginOpenAnimation();
@@ -138,7 +145,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
         var closeButton = BuildOverlayButton("\uE711", AppStrings.Get("Close preview"));
         closeButton.HorizontalAlignment = HorizontalAlignment.Right;
-        closeButton.Click += (_, _) => Close();
+        closeButton.Click += async (_, _) => await ClosePreviewAsync();
 
         var grid = new Grid
         {
@@ -157,6 +164,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
             Background = new SolidColorBrush(WinUIColor.FromArgb(255, 0, 0, 0)),
             Child = grid,
             CornerRadius = new CornerRadius(14),
+            Opacity = 0,
             RenderTransform = _surfaceScale,
             RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5),
         };
@@ -203,29 +211,35 @@ internal sealed class FavoriteImagePreviewWindow : Window
         AppWindow.MoveAndResize(_workArea);
     }
 
-    private void Root_Tapped(object sender, TappedRoutedEventArgs e)
+    private async void Root_Tapped(object sender, TappedRoutedEventArgs e)
     {
         if (IsWithin(_surface, e.OriginalSource as DependencyObject))
             return;
 
-        Close();
+        await ClosePreviewAsync();
     }
 
-    private void Surface_Tapped(object sender, TappedRoutedEventArgs e)
+    private async void Surface_Tapped(object sender, TappedRoutedEventArgs e)
     {
         if (IsWithinButton(e.OriginalSource as DependencyObject))
             return;
 
-        Close();
         e.Handled = true;
+        await ClosePreviewAsync();
     }
 
-    private void CalendarButton_Click(object sender, RoutedEventArgs e)
+    private async void CalendarButton_Click(object sender, RoutedEventArgs e)
     {
         var date = _date;
         var openInCalendar = _openInCalendar;
-        Close();
+        await ClosePreviewAsync();
         openInCalendar(date);
+    }
+
+    private async void Root_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        e.Handled = true;
+        await ClosePreviewAsync();
     }
 
     private void FavoriteImagePreviewWindow_Closed(object sender, WindowEventArgs args)
@@ -270,10 +284,28 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
     private void AnimateOpen()
     {
+        var tintOpacityAnimation = new DoubleAnimation
+        {
+            To = 1,
+            Duration = new Duration(TimeSpan.FromMilliseconds(BackgroundFadeInMs)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(tintOpacityAnimation, _tintLayer);
+        Storyboard.SetTargetProperty(tintOpacityAnimation, "Opacity");
+
+        var surfaceOpacityAnimation = new DoubleAnimation
+        {
+            To = 1,
+            Duration = new Duration(TimeSpan.FromMilliseconds(SurfaceFadeInMs)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(surfaceOpacityAnimation, _surface);
+        Storyboard.SetTargetProperty(surfaceOpacityAnimation, "Opacity");
+
         var scaleXAnimation = new DoubleAnimation
         {
             To = 1,
-            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
+            Duration = new Duration(TimeSpan.FromMilliseconds(SurfaceFadeInMs)),
             EnableDependentAnimation = true,
         };
         Storyboard.SetTarget(scaleXAnimation, _surfaceScale);
@@ -282,16 +314,47 @@ internal sealed class FavoriteImagePreviewWindow : Window
         var scaleYAnimation = new DoubleAnimation
         {
             To = 1,
-            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
+            Duration = new Duration(TimeSpan.FromMilliseconds(SurfaceFadeInMs)),
             EnableDependentAnimation = true,
         };
         Storyboard.SetTarget(scaleYAnimation, _surfaceScale);
         Storyboard.SetTargetProperty(scaleYAnimation, "ScaleY");
 
         var storyboard = new Storyboard();
+        storyboard.Children.Add(tintOpacityAnimation);
+        storyboard.Children.Add(surfaceOpacityAnimation);
         storyboard.Children.Add(scaleXAnimation);
         storyboard.Children.Add(scaleYAnimation);
         storyboard.Begin();
+    }
+
+    private async Task ClosePreviewAsync()
+    {
+        if (_isClosing)
+            return;
+
+        _isClosing = true;
+        await AnimateCloseAsync();
+        Close();
+    }
+
+    private Task AnimateCloseAsync()
+    {
+        var completion = new TaskCompletionSource<object?>();
+        var rootOpacityAnimation = new DoubleAnimation
+        {
+            To = 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(CloseFadeOutMs)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(rootOpacityAnimation, _root);
+        Storyboard.SetTargetProperty(rootOpacityAnimation, "Opacity");
+
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(rootOpacityAnimation);
+        storyboard.Completed += (_, _) => completion.TrySetResult(null);
+        storyboard.Begin();
+        return completion.Task;
     }
 
     private RectInt32 ResolveWorkArea()
@@ -329,6 +392,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
         return new Rectangle
         {
             Fill = new SolidColorBrush(WinUIColor.FromArgb(BackdropTintAlpha, 0, 0, 0)),
+            Opacity = 0,
             IsHitTestVisible = false,
         };
     }
@@ -368,8 +432,6 @@ internal sealed class FavoriteImagePreviewWindow : Window
                 graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 graphics.SmoothingMode = SmoothingMode.HighSpeed;
                 graphics.DrawImage(small, new DrawingRectangle(0, 0, bounds.Width, bounds.Height));
-                using var tint = new DrawingBrush(DrawingColor.FromArgb(104, 0, 0, 0));
-                graphics.FillRectangle(tint, new DrawingRectangle(0, 0, bounds.Width, bounds.Height));
             }
 
             return CreateImageSource(blurred);

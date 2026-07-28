@@ -349,6 +349,17 @@ namespace apod_wallpaper.SmokeTests
             Assert(previewSource.IndexOf("CreateHiddenWindowBounds", StringComparison.Ordinal) < 0 &&
                 previewSource.IndexOf("BringToForeground(\"hidden\")", StringComparison.Ordinal) < 0,
                 "Favorites preview must not show a hidden window and then visibly resize it to fullscreen.");
+            Assert(previewSource.IndexOf("BackgroundFadeInMs = 100", StringComparison.Ordinal) >= 0,
+                "Favorites preview background fade-in must stay at 100 ms.");
+            Assert(previewSource.IndexOf("SurfaceFadeInMs = 150", StringComparison.Ordinal) >= 0,
+                "Favorites preview image fade-in must stay at 150 ms.");
+            Assert(previewSource.IndexOf("CloseFadeOutMs = 50", StringComparison.Ordinal) >= 0,
+                "Favorites preview close fade-out must stay at 50 ms.");
+            Assert(previewSource.IndexOf("_root.KeyDown += Root_KeyDown;", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("private async void Root_KeyDown", StringComparison.Ordinal) >= 0,
+                "Favorites preview must close from keyboard input.");
+            Assert(previewSource.IndexOf("graphics.FillRectangle(tint", StringComparison.Ordinal) < 0,
+                "Favorites preview must animate darkening instead of baking the tint into the captured backdrop.");
             Assert(previewSource.IndexOf("SetLayeredWindowAttributes", StringComparison.Ordinal) < 0,
                 "Favorites preview must not use alpha 255 layered transparency for backdrop.");
             Assert(previewSource.IndexOf("WmMouseActivate", StringComparison.Ordinal) >= 0 &&
