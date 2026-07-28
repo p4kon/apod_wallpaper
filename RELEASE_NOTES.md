@@ -1,3 +1,102 @@
+# APOD Wallpaper 1.3.0
+
+This release adds a much more complete APOD browsing and wallpaper workflow: favorites, random discovery, year overview, local library summary, update checks, favorite-based wallpaper rotation, download progress, and several calendar/preview stability improvements.
+
+## What's new
+
+### Favorites
+
+- Added a new Favorites page for saved local APOD images.
+- Favorite dates are marked in the calendar.
+- Favorite images are shown as thumbnail tiles.
+- Favorite preview now opens in a fullscreen-style viewer with a blurred, darkened backdrop.
+- The preview can open the selected APOD date back in the calendar.
+- Favorite add/remove behavior is local-only and does not require an account.
+
+### Random APOD
+
+- Added Random APOD picker.
+- Supported sources:
+  - Global APOD archive
+  - Downloaded images
+  - Favorites
+- Added optional deep archive mode for older APOD dates.
+- Random APOD opens the selected date for preview and does not automatically download or apply wallpaper.
+
+### Year view
+
+- Added a cache-first calendar year view.
+- Users can quickly scan APOD availability across the whole year.
+- Clicking a day from the year view opens that date in the normal calendar flow.
+- Year view does not spam NASA requests and does not trigger downloads or wallpaper changes.
+
+### Local library summary
+
+- Added a Library page with local storage information.
+- Shows downloaded images, smart variants, cache, logs, and app data folders.
+- Added quick actions to open images and data folders.
+- This release does not add cleanup/delete actions.
+
+### Favorite wallpaper rotation
+
+- Automatic wallpaper mode can now use downloaded favorites as the wallpaper source.
+- The existing latest-APOD automation remains available.
+- Favorite rotation avoids immediately repeating the same favorite when alternatives exist.
+
+### Update checker
+
+- Added manual update check in the About page.
+- Added optional automatic update checks.
+- The app checks GitHub Releases and can open the latest release page.
+- Updates are not downloaded or installed automatically.
+
+### Download progress
+
+- Image download and apply flows now show progress.
+- Progress can include downloaded size and speed when available.
+- Applies to normal download/apply actions and favorite download flows.
+
+## Improvements and fixes
+
+- Improved calendar month navigation and rendering stability.
+- Reduced stale async calendar updates during fast navigation.
+- Improved year view layout and scrolling behavior.
+- Fixed downloaded image date scanning so smart wallpaper artifacts are not treated as original downloaded APOD dates.
+- Improved handling of text-only APOD pages by treating them as unsupported media instead of leaving them as unchecked.
+- Improved fullscreen favorite preview:
+  - fixed first-click behavior;
+  - improved backdrop rendering;
+  - removed broken transparency approach;
+  - reduced border/chrome artifacts.
+
+## Privacy and network notes
+
+- APOD Wallpaper remains local-first.
+- Favorites, thumbnails, settings, cache, downloaded images, and logs are stored locally.
+- The optional NASA API key remains local.
+- The update checker contacts GitHub Releases to check the latest available version.
+- Google Translate opens in the default browser only when the user chooses the Translate action.
+- No analytics, telemetry, ads, accounts, or in-app purchases were added.
+
+## Downloads
+
+- `APODWallpaper-1.3.0.0-win-x64-setup.exe`
+  Recommended for most users. Installs APOD Wallpaper for the current Windows user and supports upgrading over previous versions.
+
+- `APODWallpaper-1.3.0.0-win-x64-portable.zip`
+  Portable version. Extract the whole archive first, then run `APODWallpaper.exe`.
+
+- `APODWallpaper-1.3.0.0-win-x64-portable.zip.sha256`
+  SHA256 checksum for the portable zip.
+
+## Notes
+
+- Windows 10/11 x64.
+- Setup installer is recommended for clean installations and upgrades.
+- Portable builds keep app binaries, downloaded images, cache, logs, and settings inside the extracted folder.
+- The build is not code-signed yet, so Windows SmartScreen may show a warning.
+- APOD Wallpaper is an independent project and is not affiliated with, endorsed by, or sponsored by NASA.
+
 # APOD Wallpaper 1.2.1
 
 This release adds a responsive APOD availability check for the calendar.

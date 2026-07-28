@@ -26,6 +26,9 @@ using DrawingPixelFormat = System.Drawing.Imaging.PixelFormat;
 using DrawingPoint = System.Drawing.Point;
 using DrawingRectangle = System.Drawing.Rectangle;
 using DrawingSize = System.Drawing.Size;
+using IOFile = System.IO.File;
+using IODirectory = System.IO.Directory;
+using IOPath = System.IO.Path;
 using WinUIImage = Microsoft.UI.Xaml.Controls.Image;
 using WinUIColor = Windows.UI.Color;
 
@@ -39,7 +42,9 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private const byte BackdropTintAlpha = 96;
     private const int BackgroundFadeInMs = 100;
     private const int SurfaceFadeInMs = 150;
-    private const int CloseFadeOutMs = 50;
+    private const int NativeWindowFadeInMs = 120;
+    private const int CloseFadeOutMs = 80;
+    private static readonly bool CapturePreviewStartupFrames = false;
 
     private readonly DateTime _date;
     private readonly Action<DateTime> _openInCalendar;
@@ -103,13 +108,15 @@ internal sealed class FavoriteImagePreviewWindow : Window
     public async Task ShowPreviewAsync()
     {
         await PreparePreviewImageAsync();
-        AppWindow.Show(true);
+        AppWindow.MoveAndResize(CreateWarmupBounds());
+        AppWindow.Show(false);
+        await WaitForRenderPassesAsync(2);
+        SetNativeWindowAlpha(0);
+        AppWindow.MoveAndResize(_workArea);
         BringToForeground("visible");
         _root.Focus(FocusState.Programmatic);
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            BeginOpenAnimation();
-        });
+        BeginOpenAnimation();
+        await FadeInNativeWindowAsync();
     }
 
     private async Task PreparePreviewImageAsync()
@@ -328,6 +335,134 @@ internal sealed class FavoriteImagePreviewWindow : Window
         storyboard.Begin();
     }
 
+    private RectInt32 CreateWarmupBounds()
+    {
+        return new RectInt32(
+            -32000,
+            -32000,
+            Math.Max(1, _workArea.Width),
+            Math.Max(1, _workArea.Height));
+    }
+
+    private static async Task WaitForRenderPassesAsync(int passCount)
+    {
+        for (var i = 0; i < passCount; i++)
+            await WaitForRenderPassAsync();
+    }
+
+    private static Task WaitForRenderPassAsync()
+    {
+        var completion = new TaskCompletionSource<object?>();
+        EventHandler<object>? rendering = null;
+        rendering = (_, _) =>
+        {
+            CompositionTarget.Rendering -= rendering;
+            completion.TrySetResult(null);
+        };
+
+        CompositionTarget.Rendering += rendering;
+        _ = CompleteRenderFallbackAsync(completion, rendering);
+        return completion.Task;
+    }
+
+    private static async Task CompleteRenderFallbackAsync(TaskCompletionSource<object?> completion, EventHandler<object> rendering)
+    {
+        await Task.Delay(120);
+        if (completion.Task.IsCompleted)
+            return;
+
+        CompositionTarget.Rendering -= rendering;
+        completion.TrySetResult(null);
+    }
+
+    private string? PreparePreviewStartupDiagnosticsFolder()
+    {
+        // Temporary startup-frame diagnostics from the fullscreen preview investigation.
+        // Keep disconnected from production flow; enable only for local diagnostics.
+        if (!CapturePreviewStartupFrames)
+            return null;
+
+        try
+        {
+            var root = IOPath.Combine(IOPath.GetTempPath(), "apod-preview-frames");
+            IODirectory.CreateDirectory(root);
+
+            var folderName = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff");
+            var folder = IOPath.Combine(root, folderName);
+            IODirectory.CreateDirectory(folder);
+            Debug.WriteLine($"Favorite preview diagnostics folder: {folder}");
+            return folder;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Favorite preview diagnostics folder creation failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private void StartPreviewStartupFrameCapture(string? folder)
+    {
+        if (folder is null)
+            return;
+
+        _ = CapturePreviewStartupTimelineAsync(folder);
+    }
+
+    private async Task CapturePreviewStartupTimelineAsync(string folder)
+    {
+        await CapturePreviewStartupFrameAsync(folder, "01-after-show");
+        await Task.Delay(30);
+        await CapturePreviewStartupFrameAsync(folder, "04-plus-030ms");
+        await Task.Delay(40);
+        await CapturePreviewStartupFrameAsync(folder, "05-plus-070ms");
+        await Task.Delay(50);
+        await CapturePreviewStartupFrameAsync(folder, "06-plus-120ms");
+        await Task.Delay(60);
+        await CapturePreviewStartupFrameAsync(folder, "07-plus-180ms");
+    }
+
+    private async Task CapturePreviewStartupFrameAsync(string? folder, string frameName)
+    {
+        if (folder is null)
+            return;
+
+        var bounds = _workArea;
+        var state = string.Join(
+            Environment.NewLine,
+            $"Frame={frameName}",
+            $"Timestamp={DateTime.Now:O}",
+            $"RootOpacity={_root.Opacity:0.###}",
+            $"TintOpacity={_tintLayer.Opacity:0.###}",
+            $"SurfaceOpacity={_surface.Opacity:0.###}",
+            $"SurfaceScaleX={_surfaceScale.ScaleX:0.###}",
+            $"SurfaceScaleY={_surfaceScale.ScaleY:0.###}",
+            $"OpenAnimationStarted={_openAnimationStarted}",
+            $"IsClosing={_isClosing}",
+            $"WorkArea={bounds.X},{bounds.Y},{bounds.Width},{bounds.Height}");
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                using var frame = new DrawingBitmap(bounds.Width, bounds.Height, DrawingPixelFormat.Format32bppPArgb);
+                using (var graphics = DrawingGraphics.FromImage(frame))
+                {
+                    graphics.CopyFromScreen(
+                        new DrawingPoint(bounds.X, bounds.Y),
+                        DrawingPoint.Empty,
+                        new DrawingSize(bounds.Width, bounds.Height));
+                }
+
+                frame.Save(IOPath.Combine(folder, $"{frameName}.png"), ImageFormat.Png);
+                IOFile.WriteAllText(IOPath.Combine(folder, $"{frameName}.txt"), state);
+            });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Favorite preview diagnostics frame '{frameName}' failed: {ex.Message}");
+        }
+    }
+
     private async Task ClosePreviewAsync()
     {
         if (_isClosing)
@@ -340,21 +475,53 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
     private Task AnimateCloseAsync()
     {
-        var completion = new TaskCompletionSource<object?>();
-        var rootOpacityAnimation = new DoubleAnimation
-        {
-            To = 0,
-            Duration = new Duration(TimeSpan.FromMilliseconds(CloseFadeOutMs)),
-            EnableDependentAnimation = true,
-        };
-        Storyboard.SetTarget(rootOpacityAnimation, _root);
-        Storyboard.SetTargetProperty(rootOpacityAnimation, "Opacity");
+        return FadeOutNativeWindowAsync();
+    }
 
-        var storyboard = new Storyboard();
-        storyboard.Children.Add(rootOpacityAnimation);
-        storyboard.Completed += (_, _) => completion.TrySetResult(null);
-        storyboard.Begin();
-        return completion.Task;
+    private async Task FadeInNativeWindowAsync()
+    {
+        const int steps = 8;
+        for (var step = 1; step <= steps; step++)
+        {
+            var alpha = (byte)Math.Clamp((int)Math.Round(255d * step / steps), 0, 255);
+            SetNativeWindowAlpha(alpha);
+            await Task.Delay(Math.Max(1, NativeWindowFadeInMs / steps));
+        }
+
+        RemoveNativeWindowAlpha();
+    }
+
+    private async Task FadeOutNativeWindowAsync()
+    {
+        const int steps = 8;
+        for (var step = steps - 1; step >= 0; step--)
+        {
+            var alpha = (byte)Math.Clamp((int)Math.Round(255d * step / steps), 0, 255);
+            SetNativeWindowAlpha(alpha);
+            await Task.Delay(Math.Max(1, CloseFadeOutMs / steps));
+        }
+    }
+
+    private void SetNativeWindowAlpha(byte alpha)
+    {
+        var extendedStyle = GetWindowLong(_hwnd, GwlExStyle);
+        if ((extendedStyle & WsExLayered) == 0)
+        {
+            SetWindowLong(_hwnd, GwlExStyle, extendedStyle | WsExLayered);
+            SetWindowPos(_hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate | SwpFrameChanged);
+        }
+
+        SetLayeredWindowAttributes(_hwnd, 0, alpha, LwaAlpha);
+    }
+
+    private void RemoveNativeWindowAlpha()
+    {
+        var extendedStyle = GetWindowLong(_hwnd, GwlExStyle);
+        if ((extendedStyle & WsExLayered) == 0)
+            return;
+
+        SetWindowLong(_hwnd, GwlExStyle, extendedStyle & ~WsExLayered);
+        SetWindowPos(_hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpFrameChanged);
     }
 
     private RectInt32 ResolveWorkArea()
@@ -548,6 +715,9 @@ internal sealed class FavoriteImagePreviewWindow : Window
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hwnd, IntPtr hwndInsertAfter, int x, int y, int cx, int cy, uint flags);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
     private static extern IntPtr SetWindowLongPtr64(IntPtr hwnd, int index, IntPtr value);
 
@@ -585,6 +755,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpFrameChanged = 0x0020;
     private const uint WmMouseActivate = 0x0021;
+    private const uint LwaAlpha = 0x00000002;
     private const int MaActivate = 1;
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwaBorderColor = 34;

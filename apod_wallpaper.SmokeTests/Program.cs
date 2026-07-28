@@ -344,8 +344,8 @@ namespace apod_wallpaper.SmokeTests
             Assert(previewSource.IndexOf("public async Task ShowPreviewAsync()", StringComparison.Ordinal) >= 0,
                 "Favorites preview must prepare the first image frame before showing the window.");
             Assert(previewSource.IndexOf("await PreparePreviewImageAsync();", StringComparison.Ordinal) >= 0 &&
-                previewSource.IndexOf("await PreparePreviewImageAsync();", StringComparison.Ordinal) < previewSource.IndexOf("AppWindow.Show(true);", StringComparison.Ordinal),
-                "Favorites preview must load the image before the first visible AppWindow.Show call.");
+                previewSource.IndexOf("await PreparePreviewImageAsync();", StringComparison.Ordinal) < previewSource.IndexOf("AppWindow.Show(false);", StringComparison.Ordinal),
+                "Favorites preview must load the image before the off-screen AppWindow.Show call.");
             Assert(previewSource.IndexOf("CreateHiddenWindowBounds", StringComparison.Ordinal) < 0 &&
                 previewSource.IndexOf("BringToForeground(\"hidden\")", StringComparison.Ordinal) < 0,
                 "Favorites preview must not show a hidden window and then visibly resize it to fullscreen.");
@@ -353,15 +353,30 @@ namespace apod_wallpaper.SmokeTests
                 "Favorites preview background fade-in must stay at 100 ms.");
             Assert(previewSource.IndexOf("SurfaceFadeInMs = 150", StringComparison.Ordinal) >= 0,
                 "Favorites preview image fade-in must stay at 150 ms.");
-            Assert(previewSource.IndexOf("CloseFadeOutMs = 50", StringComparison.Ordinal) >= 0,
-                "Favorites preview close fade-out must stay at 50 ms.");
+            Assert(previewSource.IndexOf("NativeWindowFadeInMs = 120", StringComparison.Ordinal) >= 0,
+                "Favorites preview native window fade-in must smooth the first visible backdrop frame.");
+            Assert(previewSource.IndexOf("CloseFadeOutMs = 80", StringComparison.Ordinal) >= 0,
+                "Favorites preview close fade-out must stay short but smooth.");
             Assert(previewSource.IndexOf("_root.KeyDown += Root_KeyDown;", StringComparison.Ordinal) >= 0 &&
                 previewSource.IndexOf("private async void Root_KeyDown", StringComparison.Ordinal) >= 0,
                 "Favorites preview must close from keyboard input.");
             Assert(previewSource.IndexOf("graphics.FillRectangle(tint", StringComparison.Ordinal) < 0,
                 "Favorites preview must animate darkening instead of baking the tint into the captured backdrop.");
-            Assert(previewSource.IndexOf("SetLayeredWindowAttributes", StringComparison.Ordinal) < 0,
-                "Favorites preview must not use alpha 255 layered transparency for backdrop.");
+            Assert(previewSource.IndexOf("AppWindow.MoveAndResize(CreateWarmupBounds());", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("AppWindow.MoveAndResize(CreateWarmupBounds());", StringComparison.Ordinal) < previewSource.IndexOf("AppWindow.Show(false);", StringComparison.Ordinal),
+                "Favorites preview must warm up off-screen before the first visible move.");
+            Assert(previewSource.IndexOf("await WaitForRenderPassesAsync(2);", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("AppWindow.MoveAndResize(_workArea);", StringComparison.Ordinal) > previewSource.IndexOf("await WaitForRenderPassesAsync(2);", StringComparison.Ordinal),
+                "Favorites preview must wait for render-ready state before moving on-screen.");
+            Assert(previewSource.IndexOf("SetNativeWindowAlpha(0);", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("SetNativeWindowAlpha(0);", StringComparison.Ordinal) < previewSource.IndexOf("AppWindow.MoveAndResize(_workArea);", StringComparison.Ordinal) &&
+                previewSource.IndexOf("await FadeInNativeWindowAsync();", StringComparison.Ordinal) > previewSource.IndexOf("BeginOpenAnimation();", StringComparison.Ordinal),
+                "Favorites preview must fade the native window in with the XAML image animation.");
+            Assert(previewSource.IndexOf("AppWindow.Show(true);", StringComparison.Ordinal) < 0,
+                "Favorites preview must not show directly on-screen before warmup.");
+            Assert(previewSource.IndexOf("FadeOutNativeWindowAsync", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("SetNativeWindowAlpha(alpha)", StringComparison.Ordinal) >= 0,
+                "Favorites preview close must fade the native window instead of fading XAML root to black.");
             Assert(previewSource.IndexOf("WmMouseActivate", StringComparison.Ordinal) >= 0 &&
                 previewSource.IndexOf("RemoveMouseActivateGuard", StringComparison.Ordinal) >= 0,
                 "Favorites preview must keep a first-click guard with cleanup.");
