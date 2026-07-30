@@ -208,6 +208,16 @@ public sealed partial class AboutPage : Page
 
         var currentVersion = AppVersionResolver.ResolveCurrentVersionText();
         var cachedStatus = apod_wallpaper.UpdateReminderPolicy.GetCachedUpdateAvailability(settingsResult.Value, currentVersion);
+        System.Diagnostics.Debug.WriteLine(
+            string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "[UpdateStatus] About cache refresh; current={0}; cachedLatest={1}; releaseUrlEmpty={2}; autoCheck={3}; suppressReminder={4}; policy={5}",
+                currentVersion,
+                settingsResult.Value.LastKnownLatestVersion,
+                string.IsNullOrWhiteSpace(settingsResult.Value.LastKnownLatestReleaseUrl),
+                settingsResult.Value.AutoCheckUpdatesEnabled,
+                settingsResult.Value.SuppressAutomaticUpdateReminder,
+                cachedStatus.Kind));
         if (cachedStatus.Kind == apod_wallpaper.CachedUpdateAvailabilityKind.UpdateAvailable)
         {
             ShowUpdateStatus(

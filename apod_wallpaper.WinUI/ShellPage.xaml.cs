@@ -218,6 +218,15 @@ public sealed partial class ShellPage : Page
             return;
 
         var settings = settingsResult.Value.Clone();
+        System.Diagnostics.Debug.WriteLine(
+            string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "[UpdateStatus] Reminder choice before save; suppressChoice={0}; cachedLatest={1}; releaseUrlEmpty={2}; autoCheck={3}; suppressReminder={4}",
+                suppressAutomaticReminders,
+                settings.LastKnownLatestVersion,
+                string.IsNullOrWhiteSpace(settings.LastKnownLatestReleaseUrl),
+                settings.AutoCheckUpdatesEnabled,
+                settings.SuppressAutomaticUpdateReminder));
         settings.LastUpdateReminderShownUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(DateTime.UtcNow);
         settings.LastUpdateReminderVersion = result.LatestVersion;
         if (!string.IsNullOrWhiteSpace(result.LatestVersion))
@@ -230,6 +239,23 @@ public sealed partial class ShellPage : Page
             settings.SuppressAutomaticUpdateReminder = true;
         }
         var saveResult = await _arguments.BackendHost.Backend.SaveSettingsAsync(settings);
+        if (saveResult.Succeeded)
+        {
+            var afterSaveResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
+            if (afterSaveResult.Succeeded && afterSaveResult.Value != null)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    string.Format(
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        "[UpdateStatus] Reminder choice after save; suppressChoice={0}; cachedLatest={1}; releaseUrlEmpty={2}; reminderVersion={3}; autoCheck={4}; suppressReminder={5}",
+                        suppressAutomaticReminders,
+                        afterSaveResult.Value.LastKnownLatestVersion,
+                        string.IsNullOrWhiteSpace(afterSaveResult.Value.LastKnownLatestReleaseUrl),
+                        afterSaveResult.Value.LastUpdateReminderVersion,
+                        afterSaveResult.Value.AutoCheckUpdatesEnabled,
+                        afterSaveResult.Value.SuppressAutomaticUpdateReminder));
+            }
+        }
         if (saveResult.Succeeded && suppressAutomaticReminders)
             await RefreshSettingsPageIfVisibleAsync();
         if (saveResult.Succeeded)

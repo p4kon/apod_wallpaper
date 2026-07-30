@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -578,6 +579,20 @@ namespace apod_wallpaper
                 AutoCheckUpdatesEnabled = settings.AutoCheckUpdatesEnabled,
                 SuppressAutomaticUpdateReminder = settings.SuppressAutomaticUpdateReminder,
                 LastUpdateCheckUtc = Normalize(settings.LastUpdateCheckUtc),
+                LastAutomaticUpdateCheckUtc = Normalize(settings.LastAutomaticUpdateCheckUtc),
+                LastAutomaticUpdateCheckFailedUtc = Normalize(settings.LastAutomaticUpdateCheckFailedUtc),
+                LastUpdateReminderShownUtc = string.IsNullOrWhiteSpace(settings.LastUpdateReminderShownUtc)
+                    ? Normalize(persistedSettings.LastUpdateReminderShownUtc)
+                    : Normalize(settings.LastUpdateReminderShownUtc),
+                LastUpdateReminderVersion = string.IsNullOrWhiteSpace(settings.LastUpdateReminderVersion)
+                    ? Normalize(persistedSettings.LastUpdateReminderVersion)
+                    : Normalize(settings.LastUpdateReminderVersion),
+                LastKnownLatestVersion = string.IsNullOrWhiteSpace(settings.LastKnownLatestVersion)
+                    ? Normalize(persistedSettings.LastKnownLatestVersion)
+                    : Normalize(settings.LastKnownLatestVersion),
+                LastKnownLatestReleaseUrl = string.IsNullOrWhiteSpace(settings.LastKnownLatestReleaseUrl)
+                    ? Normalize(persistedSettings.LastKnownLatestReleaseUrl)
+                    : Normalize(settings.LastKnownLatestReleaseUrl),
             });
 
             if (apiKeyChanged)
@@ -904,6 +919,8 @@ namespace apod_wallpaper
         private void PersistUpdateCheckResult(UpdateCheckResult result, bool automatic)
         {
             var snapshot = BuildSettingsSnapshot();
+            var beforeLatestVersion = snapshot.LastKnownLatestVersion;
+            var beforeReleaseUrl = snapshot.LastKnownLatestReleaseUrl;
             snapshot.LastUpdateCheckUtc = UpdateReminderPolicy.FormatUtc(result.CheckedAtUtc);
 
             if (automatic)
@@ -919,7 +936,55 @@ namespace apod_wallpaper
             if (!string.IsNullOrWhiteSpace(result.LatestReleaseUrl))
                 snapshot.LastKnownLatestReleaseUrl = result.LatestReleaseUrl;
 
+            TraceUpdateStatus(
+                "PersistUpdateCheckResult before save",
+                result.CurrentVersion,
+                result.LatestVersion,
+                beforeLatestVersion,
+                snapshot.LastKnownLatestVersion,
+                beforeReleaseUrl,
+                snapshot.LastKnownLatestReleaseUrl,
+                snapshot.AutoCheckUpdatesEnabled,
+                snapshot.SuppressAutomaticUpdateReminder);
             SaveSettingsCore(snapshot);
+            var afterSave = BuildSettingsSnapshot();
+            TraceUpdateStatus(
+                "PersistUpdateCheckResult after save",
+                result.CurrentVersion,
+                result.LatestVersion,
+                snapshot.LastKnownLatestVersion,
+                afterSave.LastKnownLatestVersion,
+                snapshot.LastKnownLatestReleaseUrl,
+                afterSave.LastKnownLatestReleaseUrl,
+                afterSave.AutoCheckUpdatesEnabled,
+                afterSave.SuppressAutomaticUpdateReminder);
+        }
+
+        private static void TraceUpdateStatus(
+            string stage,
+            string currentVersion,
+            string latestVersion,
+            string latestBefore,
+            string latestAfter,
+            string releaseUrlBefore,
+            string releaseUrlAfter,
+            bool autoCheckEnabled,
+            bool suppressReminder)
+        {
+            var message = string.Format(
+                CultureInfo.InvariantCulture,
+                "[UpdateStatus] {0}; current={1}; latestResult={2}; cachedLatestBefore={3}; cachedLatestAfter={4}; releaseUrlBeforeEmpty={5}; releaseUrlAfterEmpty={6}; autoCheck={7}; suppressReminder={8}",
+                stage,
+                Normalize(currentVersion),
+                Normalize(latestVersion),
+                Normalize(latestBefore),
+                Normalize(latestAfter),
+                string.IsNullOrWhiteSpace(releaseUrlBefore),
+                string.IsNullOrWhiteSpace(releaseUrlAfter),
+                autoCheckEnabled,
+                suppressReminder);
+            Debug.WriteLine(message);
+            AppLogger.Info(message);
         }
 
         private static ApiKeyValidationState ParseValidationState(string value)

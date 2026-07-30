@@ -79,6 +79,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Update check compares release versions", UpdateCheckComparesReleaseVersions);
                 Run("Update check defaults to automatic checks enabled", UpdateCheckDefaultsToAutomaticChecksEnabled);
                 Run("Update reminder policy respects cooldowns", UpdateReminderPolicyRespectsCooldowns);
+                Run("Update check persistence keeps cached latest after dialog choices", UpdateCheckPersistenceKeepsCachedLatestAfterDialogChoices);
                 Run("About update status preserves cached updates after failures", AboutUpdateStatusPreservesCachedUpdatesAfterFailures);
                 Run("Random APOD settings and sources normalize", RandomApodSettingsAndSourcesNormalize);
                 Run("Downloaded APOD date scan ignores smart artifacts", DownloadedApodDateScanIgnoresSmartArtifacts);
@@ -347,6 +348,68 @@ namespace apod_wallpaper.SmokeTests
             Assert(source.Contains("RefreshUpdateStatusFromBackendAsync()"), "About page should expose a lightweight cached status refresh.");
             Assert(source.Contains("TryShowPersistentUpdateStatusAsync(hideStalePersistentStatus: true)"), "About page refresh should re-read persisted cached update state.");
             Assert(source.Contains("if (!await TryShowPersistentUpdateStatusAsync())"), "Manual check failures should keep cached update status when it is still available.");
+        }
+
+        private static void UpdateCheckPersistenceKeepsCachedLatestAfterDialogChoices()
+        {
+            var snapshot = CaptureSettings();
+            try
+            {
+                var controller = CreateController();
+                const string CurrentVersion = "1.2.4";
+                const string LatestVersion = "1.3.0";
+                const string ReleaseUrl = "https://github.com/p4kon/apod_wallpaper/releases/tag/v1.3.0";
+                var checkedAtUtc = new DateTime(2026, 7, 30, 12, 0, 0, DateTimeKind.Utc);
+
+                InvokePersistUpdateCheckResult(controller, new apod_wallpaper.UpdateCheckResult
+                {
+                    Status = apod_wallpaper.UpdateCheckStatus.UpdateAvailable,
+                    CurrentVersion = CurrentVersion,
+                    LatestVersion = LatestVersion,
+                    LatestReleaseUrl = ReleaseUrl,
+                    CheckedAtUtc = checkedAtUtc,
+                }, automatic: false);
+
+                var afterManualCheck = ReadSettings(controller);
+                AssertCachedUpdateAvailable(afterManualCheck, CurrentVersion, LatestVersion, ReleaseUrl, "Manual check should persist cached latest version.");
+
+                var later = afterManualCheck.Clone();
+                later.LastUpdateReminderShownUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(checkedAtUtc.AddMinutes(1));
+                later.LastUpdateReminderVersion = LatestVersion;
+                Assert(controller.SaveSettingsAsync(later).GetAwaiter().GetResult().Succeeded, "Expected Later reminder save to succeed.");
+                var afterLater = ReadSettings(controller);
+                Assert(afterLater.LastUpdateReminderVersion == LatestVersion, "Later should persist reminder version.");
+                AssertCachedUpdateAvailable(afterLater, CurrentVersion, LatestVersion, ReleaseUrl, "Later should keep cached latest version.");
+
+                var openRelease = afterLater.Clone();
+                openRelease.LastUpdateReminderShownUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(checkedAtUtc.AddMinutes(2));
+                openRelease.LastUpdateReminderVersion = LatestVersion;
+                Assert(controller.SaveSettingsAsync(openRelease).GetAwaiter().GetResult().Succeeded, "Expected Open release reminder save to succeed.");
+                var afterOpenRelease = ReadSettings(controller);
+                AssertCachedUpdateAvailable(afterOpenRelease, CurrentVersion, LatestVersion, ReleaseUrl, "Open release should keep cached latest version.");
+
+                var doNotRemind = afterOpenRelease.Clone();
+                doNotRemind.AutoCheckUpdatesEnabled = false;
+                doNotRemind.SuppressAutomaticUpdateReminder = true;
+                doNotRemind.LastUpdateReminderShownUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(checkedAtUtc.AddMinutes(3));
+                doNotRemind.LastUpdateReminderVersion = LatestVersion;
+                Assert(controller.SaveSettingsAsync(doNotRemind).GetAwaiter().GetResult().Succeeded, "Expected Do not remind save to succeed.");
+                var afterDoNotRemind = ReadSettings(controller);
+                Assert(!afterDoNotRemind.AutoCheckUpdatesEnabled, "Do not remind should turn automatic update checks off.");
+                Assert(afterDoNotRemind.SuppressAutomaticUpdateReminder, "Do not remind should suppress automatic reminders.");
+                AssertCachedUpdateAvailable(afterDoNotRemind, CurrentVersion, LatestVersion, ReleaseUrl, "Do not remind should keep cached latest version.");
+
+                var legacySettingsSave = CreateDefaultSettingsSnapshot();
+                legacySettingsSave.SuppressAutomaticUpdateReminder = true;
+                legacySettingsSave.AutoCheckUpdatesEnabled = false;
+                Assert(controller.SaveSettingsAsync(legacySettingsSave).GetAwaiter().GetResult().Succeeded, "Expected legacy settings save to succeed.");
+                var afterLegacySave = ReadSettings(controller);
+                AssertCachedUpdateAvailable(afterLegacySave, CurrentVersion, LatestVersion, ReleaseUrl, "A settings save without cached latest fields should not wipe known update status.");
+            }
+            finally
+            {
+                RestoreSettings(snapshot);
+            }
         }
 
         private static void DisplayTopologySnapshotIsReadOnly()
@@ -1583,6 +1646,34 @@ Bright clusters mark newborn stars.
         {
             var restoreResult = CreateController().SaveSettingsAsync(snapshot).GetAwaiter().GetResult();
             Assert(restoreResult.Succeeded, "Expected settings restore to succeed.");
+        }
+
+        private static apod_wallpaper.ApplicationSettingsSnapshot ReadSettings(apod_wallpaper.ApplicationController controller)
+        {
+            return GetValueOrThrow(controller.GetSettingsAsync().GetAwaiter().GetResult(), "Unable to read application settings.");
+        }
+
+        private static void InvokePersistUpdateCheckResult(apod_wallpaper.ApplicationController controller, apod_wallpaper.UpdateCheckResult result, bool automatic)
+        {
+            var method = typeof(apod_wallpaper.ApplicationController).GetMethod(
+                "PersistUpdateCheckResult",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert(method != null, "Expected ApplicationController.PersistUpdateCheckResult to exist.");
+            method.Invoke(controller, new object[] { result, automatic });
+        }
+
+        private static void AssertCachedUpdateAvailable(
+            apod_wallpaper.ApplicationSettingsSnapshot settings,
+            string currentVersion,
+            string latestVersion,
+            string releaseUrl,
+            string message)
+        {
+            Assert(settings.LastKnownLatestVersion == latestVersion, message + " LastKnownLatestVersion mismatch.");
+            Assert(settings.LastKnownLatestReleaseUrl == releaseUrl, message + " LastKnownLatestReleaseUrl mismatch.");
+            var cachedStatus = apod_wallpaper.UpdateReminderPolicy.GetCachedUpdateAvailability(settings, currentVersion);
+            Assert(cachedStatus.Kind == apod_wallpaper.CachedUpdateAvailabilityKind.UpdateAvailable, message);
+            Assert(cachedStatus.LatestVersion == latestVersion, message + " Cached latest version mismatch.");
         }
 
         private static apod_wallpaper.ApplicationController CreateController()
