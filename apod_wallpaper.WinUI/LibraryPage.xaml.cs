@@ -126,10 +126,6 @@ public sealed partial class LibraryPage : Page
             return;
         }
 
-        SummaryPanel.Children.Add(BuildMetricRow(
-            "Downloaded images",
-            AppStrings.Format("{0} files, {1}", _summary.DownloadedImageCount.ToString(CultureInfo.InvariantCulture), FormatBytes(_summary.DownloadedImageSizeBytes)),
-            _summary.Paths.ImagesDirectory));
         SummaryPanel.Children.Add(BuildDirectoryRow("Images folder", _summary.Images));
         SummaryPanel.Children.Add(BuildDirectoryRow("Smart variants", _summary.SmartImages));
         SummaryPanel.Children.Add(BuildDirectoryRow("Cache", _summary.Cache));
