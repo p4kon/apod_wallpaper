@@ -87,6 +87,11 @@ public sealed partial class SettingsPage : Page
         SettingsStatusBar.Message = AppStrings.Get("Changes save through the backend as soon as each control is committed.");
     }
 
+    internal Task RefreshSettingsFromBackendAsync()
+    {
+        return LoadSettingsAsync();
+    }
+
     private void PopulateSettings(apod_wallpaper.ApplicationSettingsSnapshot settings, apod_wallpaper.ApiKeyValidationState apiKeyValidationState)
     {
         _isHydratingControls = true;
@@ -186,6 +191,8 @@ public sealed partial class SettingsPage : Page
                 snapshot.AutoCheckUpdatesEnabled = UpdateCheckToggle.IsOn;
                 if (UpdateCheckToggle.IsOn)
                     snapshot.SuppressAutomaticUpdateReminder = false;
+                else
+                    snapshot.SuppressAutomaticUpdateReminder = true;
             },
             "Update check preference saved.");
     }

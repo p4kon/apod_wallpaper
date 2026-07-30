@@ -78,6 +78,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Favorite APOD store persists normalized dates", FavoriteApodStorePersistsNormalizedDates);
                 Run("Update check compares release versions", UpdateCheckComparesReleaseVersions);
                 Run("Update check defaults to automatic checks enabled", UpdateCheckDefaultsToAutomaticChecksEnabled);
+                Run("Update reminder policy respects cooldowns", UpdateReminderPolicyRespectsCooldowns);
                 Run("Random APOD settings and sources normalize", RandomApodSettingsAndSourcesNormalize);
                 Run("Downloaded APOD date scan ignores smart artifacts", DownloadedApodDateScanIgnoresSmartArtifacts);
                 Run("Favorite rotation source defaults to latest", FavoriteRotationSourceDefaultsToLatest);
@@ -172,6 +173,10 @@ namespace apod_wallpaper.SmokeTests
         private static void UpdateCheckComparesReleaseVersions()
         {
             Assert(apod_wallpaper.UpdateCheckService.NormalizeVersionText("v1.2.1") == "1.2.1", "Expected v-prefix to be ignored.");
+            Assert(apod_wallpaper.UpdateCheckService.CompareReleaseVersions("v1.3.0", "1.2.1") > 0, "Expected v1.3.0 to be newer than 1.2.1.");
+            Assert(apod_wallpaper.UpdateCheckService.CompareReleaseVersions("v1.3.0", "1.3.0") == 0, "Expected v-prefix not to affect equal version comparison.");
+            Assert(apod_wallpaper.UpdateCheckService.CompareReleaseVersions("1.3.0", "v1.3.0") == 0, "Expected current v-prefix not to affect equal version comparison.");
+            Assert(apod_wallpaper.UpdateCheckService.CompareReleaseVersions("v1.3.1", "1.3.0") > 0, "Expected v1.3.1 to be newer than 1.3.0.");
             Assert(apod_wallpaper.UpdateCheckService.CompareReleaseVersions("v1.2.2", "1.2.1") > 0, "Expected newer release to compare higher.");
             Assert(apod_wallpaper.UpdateCheckService.CompareReleaseVersions("1.2.1", "v1.2.1") == 0, "Expected equal versions to compare equal.");
             Assert(apod_wallpaper.UpdateCheckService.CompareReleaseVersions("1.2.0", "1.2.1") < 0, "Expected older release to compare lower.");
@@ -191,12 +196,22 @@ namespace apod_wallpaper.SmokeTests
                 defaults.AutoCheckUpdatesEnabled = false;
                 defaults.SuppressAutomaticUpdateReminder = true;
                 defaults.LastUpdateCheckUtc = new DateTime(2026, 7, 23, 0, 0, 0, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture);
+                defaults.LastAutomaticUpdateCheckUtc = new DateTime(2026, 7, 23, 1, 0, 0, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture);
+                defaults.LastUpdateReminderShownUtc = new DateTime(2026, 7, 23, 2, 0, 0, DateTimeKind.Utc).ToString("O", CultureInfo.InvariantCulture);
+                defaults.LastUpdateReminderVersion = "1.3.0";
+                defaults.LastKnownLatestVersion = "1.3.0";
+                defaults.LastKnownLatestReleaseUrl = "https://github.com/p4kon/apod_wallpaper/releases/tag/v1.3.0";
                 store.Save(defaults);
 
                 var reloaded = store.Load();
                 Assert(!reloaded.AutoCheckUpdatesEnabled, "Saved update auto-check setting should round-trip.");
                 Assert(reloaded.SuppressAutomaticUpdateReminder, "Saved reminder suppression should round-trip.");
                 Assert(!string.IsNullOrWhiteSpace(reloaded.LastUpdateCheckUtc), "Last update check timestamp should round-trip.");
+                Assert(!string.IsNullOrWhiteSpace(reloaded.LastAutomaticUpdateCheckUtc), "Last automatic update timestamp should round-trip.");
+                Assert(!string.IsNullOrWhiteSpace(reloaded.LastUpdateReminderShownUtc), "Last reminder timestamp should round-trip.");
+                Assert(reloaded.LastUpdateReminderVersion == "1.3.0", "Last reminder version should round-trip.");
+                Assert(reloaded.LastKnownLatestVersion == "1.3.0", "Last known latest version should round-trip.");
+                Assert(reloaded.LastKnownLatestReleaseUrl.Contains("v1.3.0"), "Last known release URL should round-trip.");
             }
             finally
             {
@@ -265,6 +280,50 @@ namespace apod_wallpaper.SmokeTests
 
             var only = apod_wallpaper.ApplicationController.SelectFavoriteRotationDate(new[] { last }, last);
             Assert(only.HasValue && only.Value == last, "Expected a single favorite to remain selectable.");
+        }
+
+        private static void UpdateReminderPolicyRespectsCooldowns()
+        {
+            var now = new DateTime(2026, 7, 30, 12, 0, 0, DateTimeKind.Utc);
+            var settings = apod_wallpaper.JsonSettingsStore.CreateDefaultSnapshot();
+
+            Assert(apod_wallpaper.UpdateReminderPolicy.ShouldRunAutomaticCheck(settings, now), "Fresh settings should allow automatic update check.");
+
+            settings.LastAutomaticUpdateCheckUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(now.AddHours(-23));
+            Assert(!apod_wallpaper.UpdateReminderPolicy.ShouldRunAutomaticCheck(settings, now), "Automatic check should be throttled before one day.");
+
+            settings.LastAutomaticUpdateCheckUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(now.AddHours(-2));
+            settings.LastAutomaticUpdateCheckFailedUtc = settings.LastAutomaticUpdateCheckUtc;
+            Assert(apod_wallpaper.UpdateReminderPolicy.ShouldRunAutomaticCheck(settings, now), "Failed automatic check should retry after one hour.");
+
+            settings.AutoCheckUpdatesEnabled = false;
+            Assert(!apod_wallpaper.UpdateReminderPolicy.ShouldRunAutomaticCheck(settings, now), "Disabled automatic checks should not run.");
+            settings.SuppressAutomaticUpdateReminder = true;
+            Assert(!apod_wallpaper.UpdateReminderPolicy.ShouldRunUpdateCheck(settings, now, automatic: true, forceCheck: false),
+                "Automatic update path should be blocked when automatic checks are disabled and reminders are suppressed.");
+            Assert(apod_wallpaper.UpdateReminderPolicy.ShouldRunUpdateCheck(settings, now, automatic: false, forceCheck: true),
+                "Manual force-check path should be allowed even when automatic checks are disabled and reminders are suppressed.");
+
+            settings.AutoCheckUpdatesEnabled = true;
+            settings.SuppressAutomaticUpdateReminder = false;
+            settings.LastUpdateReminderShownUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(now.AddDays(-1));
+            settings.LastUpdateReminderVersion = "1.3.0";
+            Assert(!apod_wallpaper.UpdateReminderPolicy.ShouldShowReminder(settings, "v1.3.0", "1.2.4", now, false), "Same version reminder should respect five day cooldown.");
+            Assert(apod_wallpaper.UpdateReminderPolicy.ShouldShowReminder(settings, "v1.3.1", "1.2.4", now, false), "Newer latest version should bypass old version cooldown.");
+
+            settings.LastUpdateReminderShownUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(now.AddDays(-6));
+            settings.LastUpdateReminderVersion = "1.3.0";
+            Assert(apod_wallpaper.UpdateReminderPolicy.ShouldShowReminder(settings, "v1.3.0", "1.2.4", now, false), "Same version reminder should show after five days.");
+
+            Assert(!apod_wallpaper.UpdateReminderPolicy.ShouldShowReminder(settings, "v1.3.0", "1.2.4", now, true), "Session guard should block a repeated reminder.");
+
+            settings.SuppressAutomaticUpdateReminder = true;
+            settings.AutoCheckUpdatesEnabled = false;
+            Assert(!apod_wallpaper.UpdateReminderPolicy.ShouldShowReminder(settings, "v1.3.1", "1.2.4", now, false), "Do not remind should suppress automatic modal.");
+
+            settings.LastKnownLatestVersion = "v1.3.0";
+            Assert(apod_wallpaper.UpdateReminderPolicy.IsCachedUpdateAvailable(settings, "1.2.4"), "Cached newer version should produce About update status.");
+            Assert(!apod_wallpaper.UpdateReminderPolicy.IsCachedUpdateAvailable(settings, "1.3.0"), "Cached equal version should not produce About update status.");
         }
 
         private static void DisplayTopologySnapshotIsReadOnly()

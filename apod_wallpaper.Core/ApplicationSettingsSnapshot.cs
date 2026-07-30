@@ -25,6 +25,12 @@ namespace apod_wallpaper
         public bool AutoCheckUpdatesEnabled { get; set; }
         public bool SuppressAutomaticUpdateReminder { get; set; }
         public string LastUpdateCheckUtc { get; set; }
+        public string LastAutomaticUpdateCheckUtc { get; set; }
+        public string LastAutomaticUpdateCheckFailedUtc { get; set; }
+        public string LastUpdateReminderShownUtc { get; set; }
+        public string LastUpdateReminderVersion { get; set; }
+        public string LastKnownLatestVersion { get; set; }
+        public string LastKnownLatestReleaseUrl { get; set; }
 
         public ApplicationSettingsSnapshot Clone()
         {
@@ -50,6 +56,12 @@ namespace apod_wallpaper
                 AutoCheckUpdatesEnabled = AutoCheckUpdatesEnabled,
                 SuppressAutomaticUpdateReminder = SuppressAutomaticUpdateReminder,
                 LastUpdateCheckUtc = LastUpdateCheckUtc,
+                LastAutomaticUpdateCheckUtc = LastAutomaticUpdateCheckUtc,
+                LastAutomaticUpdateCheckFailedUtc = LastAutomaticUpdateCheckFailedUtc,
+                LastUpdateReminderShownUtc = LastUpdateReminderShownUtc,
+                LastUpdateReminderVersion = LastUpdateReminderVersion,
+                LastKnownLatestVersion = LastKnownLatestVersion,
+                LastKnownLatestReleaseUrl = LastKnownLatestReleaseUrl,
             };
         }
 

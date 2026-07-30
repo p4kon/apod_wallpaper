@@ -468,18 +468,15 @@ namespace apod_wallpaper
             return ExecuteOperationAsync(async () =>
             {
                 var settings = BuildSettingsSnapshot();
-                if (automatic)
-                {
-                    if (!settings.AutoCheckUpdatesEnabled)
-                        return CreateSkippedUpdateCheckResult(currentVersion, "Automatic update checks are disabled.");
-
-                    var lastCheckUtc = ParseDateTime(settings.LastUpdateCheckUtc);
-                    if (!forceCheck && lastCheckUtc.HasValue && DateTime.UtcNow - lastCheckUtc.Value < TimeSpan.FromDays(1))
-                        return CreateSkippedUpdateCheckResult(currentVersion, "Update check was already completed today.");
-                }
+                if (!UpdateReminderPolicy.ShouldRunUpdateCheck(settings, DateTime.UtcNow, automatic, forceCheck))
+                    return CreateSkippedUpdateCheckResult(
+                        currentVersion,
+                        !settings.AutoCheckUpdatesEnabled || settings.SuppressAutomaticUpdateReminder
+                            ? "Automatic update checks are disabled."
+                            : "Update check was already completed today.");
 
                 var result = await _updateCheckService.CheckLatestReleaseAsync(currentVersion).ConfigureAwait(false);
-                PersistLastUpdateCheckUtc(result.CheckedAtUtc);
+                PersistUpdateCheckResult(result, automatic);
                 return result;
             }, OperationErrorCode.WorkflowFailed, "Unable to check GitHub releases for updates.", retryable: true);
         }
@@ -904,10 +901,24 @@ namespace apod_wallpaper
             };
         }
 
-        private void PersistLastUpdateCheckUtc(DateTime checkedAtUtc)
+        private void PersistUpdateCheckResult(UpdateCheckResult result, bool automatic)
         {
             var snapshot = BuildSettingsSnapshot();
-            snapshot.LastUpdateCheckUtc = checkedAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+            snapshot.LastUpdateCheckUtc = UpdateReminderPolicy.FormatUtc(result.CheckedAtUtc);
+
+            if (automatic)
+            {
+                snapshot.LastAutomaticUpdateCheckUtc = UpdateReminderPolicy.FormatUtc(result.CheckedAtUtc);
+                snapshot.LastAutomaticUpdateCheckFailedUtc = result.Status == UpdateCheckStatus.CouldNotCheck
+                    ? UpdateReminderPolicy.FormatUtc(result.CheckedAtUtc)
+                    : string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.LatestVersion))
+                snapshot.LastKnownLatestVersion = UpdateCheckService.NormalizeVersionText(result.LatestVersion);
+            if (!string.IsNullOrWhiteSpace(result.LatestReleaseUrl))
+                snapshot.LastKnownLatestReleaseUrl = result.LatestReleaseUrl;
+
             SaveSettingsCore(snapshot);
         }
 

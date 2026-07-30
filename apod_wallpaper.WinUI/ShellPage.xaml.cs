@@ -11,7 +11,9 @@ namespace apod_wallpaper.WinUI;
 public sealed partial class ShellPage : Page
 {
     private ShellPageArguments? _arguments;
-    private bool _automaticUpdateCheckStarted;
+    private System.Threading.Tasks.Task? _automaticUpdateCheckTask;
+    private bool _updateDialogOpen;
+    private bool _updateReminderShownThisSession;
     private static readonly SolidColorBrush ActiveNavBrush = new(Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x00, 0x78, 0xD4));
     private static readonly SolidColorBrush InactiveNavBrush = new(Microsoft.UI.Colors.Transparent);
 
@@ -75,7 +77,7 @@ public sealed partial class ShellPage : Page
     {
         LocalizationHelper.ApplyTo(this);
         ApplyNavigationLabels();
-        await TryRunAutomaticUpdateCheckAsync();
+        await TryRunAutomaticUpdateReminderAsync(UpdateCheckTrigger.Startup);
     }
 
     private void NavigateToPreview()
@@ -91,11 +93,13 @@ public sealed partial class ShellPage : Page
     internal void NotifyWindowActivated()
     {
         NotifyCalendarHostReturned();
+        _ = TryRunAutomaticUpdateReminderAsync(UpdateCheckTrigger.WindowActivated);
     }
 
     internal void NotifyRestoredFromTray()
     {
         NotifyCalendarHostReturned();
+        _ = TryRunAutomaticUpdateReminderAsync(UpdateCheckTrigger.RestoredFromTray);
     }
 
     private void NavigateToSettings()
@@ -141,18 +145,26 @@ public sealed partial class ShellPage : Page
         ContentFrame.Navigate(typeof(AboutPage), _arguments?.CreateAboutPageArguments());
     }
 
-    private async System.Threading.Tasks.Task TryRunAutomaticUpdateCheckAsync()
+    private System.Threading.Tasks.Task TryRunAutomaticUpdateReminderAsync(UpdateCheckTrigger trigger)
     {
-        if (_automaticUpdateCheckStarted || _arguments == null)
+        if (_automaticUpdateCheckTask != null && !_automaticUpdateCheckTask.IsCompleted)
+            return _automaticUpdateCheckTask;
+
+        _automaticUpdateCheckTask = RunAutomaticUpdateReminderAsync(trigger);
+        return _automaticUpdateCheckTask;
+    }
+
+    private async System.Threading.Tasks.Task RunAutomaticUpdateReminderAsync(UpdateCheckTrigger trigger)
+    {
+        if (_arguments == null || _updateDialogOpen || _updateReminderShownThisSession)
             return;
 
-        _automaticUpdateCheckStarted = true;
         var settingsResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
         if (!settingsResult.Succeeded || settingsResult.Value == null)
             return;
 
         var settings = settingsResult.Value;
-        if (!settings.AutoCheckUpdatesEnabled)
+        if (!apod_wallpaper.UpdateReminderPolicy.ShouldRunAutomaticCheck(settings, DateTime.UtcNow))
             return;
 
         var currentVersion = AppVersionResolver.ResolveCurrentVersionText();
@@ -160,21 +172,39 @@ public sealed partial class ShellPage : Page
         if (!checkResult.Succeeded || checkResult.Value == null || checkResult.Value.Status != apod_wallpaper.UpdateCheckStatus.UpdateAvailable)
             return;
 
-        if (settings.SuppressAutomaticUpdateReminder)
+        var latestSettingsResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
+        var latestSettings = latestSettingsResult.Succeeded && latestSettingsResult.Value != null
+            ? latestSettingsResult.Value
+            : settings;
+        if (!apod_wallpaper.UpdateReminderPolicy.ShouldShowReminder(latestSettings, checkResult.Value.LatestVersion, currentVersion, DateTime.UtcNow, _updateReminderShownThisSession))
             return;
 
-        var choice = await UpdateNotificationDialog.ShowAsync(XamlRoot, checkResult.Value, includeDoNotRemind: true);
+        _updateDialogOpen = true;
+        UpdateDialogChoice choice;
+        try
+        {
+            choice = await UpdateNotificationDialog.ShowAsync(XamlRoot, checkResult.Value, includeDoNotRemind: true);
+        }
+        finally
+        {
+            _updateDialogOpen = false;
+        }
+
+        _updateReminderShownThisSession = true;
         if (choice == UpdateDialogChoice.OpenRelease)
         {
+            await StoreUpdateReminderChoiceAsync(checkResult.Value, suppressAutomaticReminders: false);
             await OpenReleaseAsync(checkResult.Value);
             return;
         }
 
         if (choice == UpdateDialogChoice.DoNotRemind)
-            await SuppressAutomaticUpdateReminderAsync();
+            await StoreUpdateReminderChoiceAsync(checkResult.Value, suppressAutomaticReminders: true);
+        else
+            await StoreUpdateReminderChoiceAsync(checkResult.Value, suppressAutomaticReminders: false);
     }
 
-    private async System.Threading.Tasks.Task SuppressAutomaticUpdateReminderAsync()
+    private async System.Threading.Tasks.Task StoreUpdateReminderChoiceAsync(apod_wallpaper.UpdateCheckResult result, bool suppressAutomaticReminders)
     {
         if (_arguments == null)
             return;
@@ -184,8 +214,26 @@ public sealed partial class ShellPage : Page
             return;
 
         var settings = settingsResult.Value.Clone();
-        settings.SuppressAutomaticUpdateReminder = true;
-        await _arguments.BackendHost.Backend.SaveSettingsAsync(settings);
+        settings.LastUpdateReminderShownUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(DateTime.UtcNow);
+        settings.LastUpdateReminderVersion = result.LatestVersion;
+        if (!string.IsNullOrWhiteSpace(result.LatestVersion))
+            settings.LastKnownLatestVersion = result.LatestVersion;
+        if (!string.IsNullOrWhiteSpace(result.LatestReleaseUrl))
+            settings.LastKnownLatestReleaseUrl = result.LatestReleaseUrl;
+        if (suppressAutomaticReminders)
+        {
+            settings.AutoCheckUpdatesEnabled = false;
+            settings.SuppressAutomaticUpdateReminder = true;
+        }
+        var saveResult = await _arguments.BackendHost.Backend.SaveSettingsAsync(settings);
+        if (saveResult.Succeeded && suppressAutomaticReminders)
+            await RefreshSettingsPageIfVisibleAsync();
+    }
+
+    private async System.Threading.Tasks.Task RefreshSettingsPageIfVisibleAsync()
+    {
+        if (ContentFrame.Content is SettingsPage settingsPage)
+            await settingsPage.RefreshSettingsFromBackendAsync();
     }
 
     private static async System.Threading.Tasks.Task OpenReleaseAsync(apod_wallpaper.UpdateCheckResult result)
@@ -237,4 +285,11 @@ public sealed partial class ShellPage : Page
                 mainPage.NotifyHostReturnedToCalendar();
         });
     }
+}
+
+internal enum UpdateCheckTrigger
+{
+    Startup,
+    WindowActivated,
+    RestoredFromTray,
 }

@@ -51,8 +51,8 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel>
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Auto-check for updates" />
-                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Check GitHub Releases once per day and notify when a new version is available." TextWrapping="Wrap" />
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Automatically check for updates" />
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="APOD Wallpaper can check GitHub Releases and remind you when a newer version is available." TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch x:Name="UpdateCheckToggle" Grid.Column="1" VerticalAlignment="Center" OffContent="Off" OnContent="On" Toggled="UpdateCheckToggle_Toggled" />
                         </Grid>

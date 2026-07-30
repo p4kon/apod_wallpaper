@@ -44,6 +44,8 @@ namespace apod_wallpaper
                         snapshot.MinimizeToTrayOnClose = true;
                     if (json.IndexOf("AutoCheckUpdatesEnabled", StringComparison.OrdinalIgnoreCase) < 0)
                         snapshot.AutoCheckUpdatesEnabled = true;
+                    if (snapshot.SuppressAutomaticUpdateReminder)
+                        snapshot.AutoCheckUpdatesEnabled = false;
 
                     snapshot.Language = ApplicationSettingsSnapshot.NormalizeLanguage(snapshot.Language);
                     snapshot.TranslationTargetLanguage = ApplicationSettingsSnapshot.NormalizeTranslationTargetLanguage(snapshot.TranslationTargetLanguage);
@@ -104,6 +106,12 @@ namespace apod_wallpaper
                 AutoCheckUpdatesEnabled = true,
                 SuppressAutomaticUpdateReminder = false,
                 LastUpdateCheckUtc = string.Empty,
+                LastAutomaticUpdateCheckUtc = string.Empty,
+                LastAutomaticUpdateCheckFailedUtc = string.Empty,
+                LastUpdateReminderShownUtc = string.Empty,
+                LastUpdateReminderVersion = string.Empty,
+                LastKnownLatestVersion = string.Empty,
+                LastKnownLatestReleaseUrl = string.Empty,
             };
         }
 
