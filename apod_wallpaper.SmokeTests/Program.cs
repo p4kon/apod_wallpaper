@@ -324,6 +324,8 @@ namespace apod_wallpaper.SmokeTests
             settings.LastKnownLatestVersion = "v1.3.0";
             Assert(apod_wallpaper.UpdateReminderPolicy.IsCachedUpdateAvailable(settings, "1.2.4"), "Cached newer version should produce About update status.");
             Assert(!apod_wallpaper.UpdateReminderPolicy.IsCachedUpdateAvailable(settings, "1.3.0"), "Cached equal version should not produce About update status.");
+            settings.LastKnownLatestVersion = "not-a-version";
+            Assert(!apod_wallpaper.UpdateReminderPolicy.IsCachedUpdateAvailable(settings, "1.2.4"), "Invalid cached latest version should not produce About update status.");
         }
 
         private static void DisplayTopologySnapshotIsReadOnly()

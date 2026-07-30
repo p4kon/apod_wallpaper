@@ -169,7 +169,11 @@ public sealed partial class ShellPage : Page
 
         var currentVersion = AppVersionResolver.ResolveCurrentVersionText();
         var checkResult = await _arguments.BackendHost.Backend.CheckForUpdatesAsync(currentVersion, forceCheck: false, automatic: true);
-        if (!checkResult.Succeeded || checkResult.Value == null || checkResult.Value.Status != apod_wallpaper.UpdateCheckStatus.UpdateAvailable)
+        if (!checkResult.Succeeded || checkResult.Value == null)
+            return;
+
+        await RefreshAboutPageUpdateStatusIfVisibleAsync();
+        if (checkResult.Value.Status != apod_wallpaper.UpdateCheckStatus.UpdateAvailable)
             return;
 
         var latestSettingsResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
@@ -228,6 +232,12 @@ public sealed partial class ShellPage : Page
         var saveResult = await _arguments.BackendHost.Backend.SaveSettingsAsync(settings);
         if (saveResult.Succeeded && suppressAutomaticReminders)
             await RefreshSettingsPageIfVisibleAsync();
+    }
+
+    private async System.Threading.Tasks.Task RefreshAboutPageUpdateStatusIfVisibleAsync()
+    {
+        if (ContentFrame.Content is AboutPage aboutPage)
+            await aboutPage.RefreshUpdateStatusFromBackendAsync();
     }
 
     private async System.Threading.Tasks.Task RefreshSettingsPageIfVisibleAsync()

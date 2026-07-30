@@ -2,12 +2,22 @@ using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.System;
 
 namespace apod_wallpaper.WinUI;
 
 public sealed partial class AboutPage : Page
 {
+    private enum UpdateStatusVisualState
+    {
+        None,
+        Checking,
+        UpdateAvailable,
+        UpToDate,
+        CouldNotCheck,
+    }
+
     private static readonly Uri ProjectRepositoryUri = new("https://github.com/p4kon/apod_wallpaper");
     private static readonly Uri OfficialWebsiteUri = new("https://apod_wallpaper.p4kon.com");
     private static readonly Uri SupportUri = new("mailto:p4kon1@gmail.com?subject=APOD%20Wallpaper%20support");
@@ -18,6 +28,7 @@ public sealed partial class AboutPage : Page
     private static readonly Uri NasaApiUri = new("https://api.nasa.gov/");
     private readonly DispatcherTimer _statusDismissTimer = new();
     private AboutPageArguments? _arguments;
+    private UpdateStatusVisualState _updateStatusVisualState = UpdateStatusVisualState.None;
 
     public AboutPage()
     {
@@ -35,14 +46,14 @@ public sealed partial class AboutPage : Page
     {
         base.OnNavigatedTo(e);
         _arguments = e.Parameter as AboutPageArguments;
-        _ = RefreshCachedUpdateStatusAsync();
+        _ = RefreshUpdateStatusFromBackendAsync();
     }
 
     private void AppStrings_LanguageChanged(object? sender, EventArgs e)
     {
         LocalizationHelper.ApplyTo(this);
         PopulateAppInfo();
-        _ = RefreshCachedUpdateStatusAsync();
+        _ = RefreshUpdateStatusFromBackendAsync();
     }
 
     private void AboutPage_Unloaded(object sender, RoutedEventArgs e)
@@ -58,7 +69,7 @@ public sealed partial class AboutPage : Page
     {
         LocalizationHelper.ApplyTo(this);
         PopulateAppInfo();
-        _ = RefreshCachedUpdateStatusAsync();
+        _ = RefreshUpdateStatusFromBackendAsync();
     }
 
     private void PopulateAppInfo()
@@ -111,7 +122,7 @@ public sealed partial class AboutPage : Page
             return;
 
         CheckUpdatesButton.IsEnabled = false;
-        ShowUpdateStatus(AppStrings.Get("Checking..."), transient: false);
+        ShowUpdateStatus(AppStrings.Get("Checking..."), UpdateStatusVisualState.Checking, transient: false);
         ShowAboutStatus(
             InfoBarSeverity.Informational,
             AppStrings.Get("Checking for updates"),
@@ -144,7 +155,7 @@ public sealed partial class AboutPage : Page
     {
         if (result.Status == apod_wallpaper.UpdateCheckStatus.UpdateAvailable)
         {
-            ShowUpdateStatus(AppStrings.Format("Update available: {0}", result.LatestVersion), transient: false);
+            ShowUpdateStatus(AppStrings.Format("Update available: {0}", result.LatestVersion), UpdateStatusVisualState.UpdateAvailable, transient: false);
             ShowAboutStatus(
                 InfoBarSeverity.Warning,
                 AppStrings.Get("Update available"),
@@ -160,7 +171,7 @@ public sealed partial class AboutPage : Page
 
         if (result.Status == apod_wallpaper.UpdateCheckStatus.UpToDate)
         {
-            ShowUpdateStatus(AppStrings.Get("You are up to date"), transient: true);
+            ShowUpdateStatus(AppStrings.Get("You are up to date"), UpdateStatusVisualState.UpToDate, transient: true);
             ShowAboutStatus(
                 InfoBarSeverity.Success,
                 AppStrings.Get("APOD Wallpaper is up to date"),
@@ -169,7 +180,7 @@ public sealed partial class AboutPage : Page
             return;
         }
 
-        ShowUpdateStatus(AppStrings.Get("Could not check updates"), transient: true);
+        ShowUpdateStatus(AppStrings.Get("Could not check updates"), UpdateStatusVisualState.CouldNotCheck, transient: true);
         ShowAboutStatus(
             InfoBarSeverity.Warning,
             AppStrings.Get("Could not check for updates"),
@@ -177,7 +188,7 @@ public sealed partial class AboutPage : Page
             autoDismiss: true);
     }
 
-    private async System.Threading.Tasks.Task RefreshCachedUpdateStatusAsync()
+    internal async System.Threading.Tasks.Task RefreshUpdateStatusFromBackendAsync()
     {
         if (_arguments == null)
             return;
@@ -188,18 +199,46 @@ public sealed partial class AboutPage : Page
 
         var currentVersion = AppVersionResolver.ResolveCurrentVersionText();
         if (apod_wallpaper.UpdateReminderPolicy.IsCachedUpdateAvailable(settingsResult.Value, currentVersion))
-            ShowUpdateStatus(AppStrings.Format("Update available: {0}", settingsResult.Value.LastKnownLatestVersion), transient: false);
+        {
+            ShowUpdateStatus(
+                AppStrings.Format("Update available: {0}", settingsResult.Value.LastKnownLatestVersion),
+                UpdateStatusVisualState.UpdateAvailable,
+                transient: false);
+            return;
+        }
+
+        if (_updateStatusVisualState == UpdateStatusVisualState.UpdateAvailable)
+            HideUpdateStatus();
     }
 
-    private void ShowUpdateStatus(string text, bool transient)
+    private void ShowUpdateStatus(string text, UpdateStatusVisualState visualState, bool transient)
     {
+        _updateStatusVisualState = visualState;
         UpdateStatusTextBlock.Text = text;
+        ToolTipService.SetToolTip(UpdateStatusTextBlock, text);
+        UpdateStatusTextBlock.Foreground = ResolveUpdateStatusBrush(visualState);
         UpdateStatusTextBlock.Visibility = Visibility.Visible;
         if (transient)
         {
             _statusDismissTimer.Stop();
             _statusDismissTimer.Start();
         }
+    }
+
+    private Brush ResolveUpdateStatusBrush(UpdateStatusVisualState visualState)
+    {
+        var resourceKey = visualState switch
+        {
+            UpdateStatusVisualState.Checking => "UpdateStatusCheckingBrush",
+            UpdateStatusVisualState.UpdateAvailable => "UpdateStatusAvailableBrush",
+            UpdateStatusVisualState.UpToDate => "UpdateStatusUpToDateBrush",
+            UpdateStatusVisualState.CouldNotCheck => "UpdateStatusCouldNotCheckBrush",
+            _ => "TextFillColorSecondaryBrush",
+        };
+
+        return Resources.TryGetValue(resourceKey, out var brush) && brush is Brush typedBrush
+            ? typedBrush
+            : (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
     }
 
     private void ShowAboutStatus(InfoBarSeverity severity, string title, string message, bool autoDismiss)
@@ -217,12 +256,16 @@ public sealed partial class AboutPage : Page
     {
         _statusDismissTimer.Stop();
         AboutStatusBar.Visibility = Visibility.Collapsed;
-        if (UpdateStatusTextBlock.Visibility == Visibility.Visible
-            && (string.Equals(UpdateStatusTextBlock.Text, AppStrings.Get("You are up to date"), StringComparison.Ordinal)
-                || string.Equals(UpdateStatusTextBlock.Text, AppStrings.Get("Could not check updates"), StringComparison.Ordinal)))
-        {
-            UpdateStatusTextBlock.Visibility = Visibility.Collapsed;
-        }
+        if (_updateStatusVisualState is UpdateStatusVisualState.UpToDate or UpdateStatusVisualState.CouldNotCheck)
+            HideUpdateStatus();
+    }
+
+    private void HideUpdateStatus()
+    {
+        _updateStatusVisualState = UpdateStatusVisualState.None;
+        UpdateStatusTextBlock.Text = string.Empty;
+        ToolTipService.SetToolTip(UpdateStatusTextBlock, null);
+        UpdateStatusTextBlock.Visibility = Visibility.Collapsed;
     }
 
     private void StatusDismissTimer_Tick(object? sender, object e)

@@ -7,6 +7,13 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <SolidColorBrush x:Key="UpdateStatusCheckingBrush" Color="#B8FFFFFF" />
+        <SolidColorBrush x:Key="UpdateStatusAvailableBrush" Color="#FFF2C94C" />
+        <SolidColorBrush x:Key="UpdateStatusUpToDateBrush" Color="#FF7BD88F" />
+        <SolidColorBrush x:Key="UpdateStatusCouldNotCheckBrush" Color="#FFFFA66B" />
+    </Page.Resources>
+
     <Grid
         x:Name="AboutRoot"
         Padding="24"
@@ -20,7 +27,7 @@
             Grid.Row="0"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
-            MaxWidth="360"
+            MaxWidth="660"
             Spacing="18">
             <Border
                 Width="82"
@@ -48,15 +55,33 @@
 
             <StackPanel HorizontalAlignment="Center" Spacing="10">
                 <Button Width="220" HorizontalAlignment="Center" Click="ProjectRepositoryButton_Click" HorizontalContentAlignment="Center" Content="GitHub Repository" />
-                <Button x:Name="CheckUpdatesButton" Width="220" HorizontalAlignment="Center" Click="CheckUpdatesButton_Click" HorizontalContentAlignment="Center" Content="Check for updates" />
-                <TextBlock
-                    x:Name="UpdateStatusTextBlock"
-                    MaxWidth="260"
-                    HorizontalAlignment="Center"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap"
-                    Visibility="Collapsed" />
+                <Grid Width="660" HorizontalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="220" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button
+                        x:Name="CheckUpdatesButton"
+                        Grid.Column="1"
+                        Width="220"
+                        HorizontalAlignment="Center"
+                        Click="CheckUpdatesButton_Click"
+                        HorizontalContentAlignment="Center"
+                        Content="Check for updates" />
+                    <TextBlock
+                        x:Name="UpdateStatusTextBlock"
+                        Grid.Column="2"
+                        MaxWidth="200"
+                        Margin="14,0,0,0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextAlignment="Left"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap"
+                        Visibility="Collapsed" />
+                </Grid>
                 <Button Width="220" HorizontalAlignment="Center" Click="OfficialWebsiteButton_Click" HorizontalContentAlignment="Center" Content="Official Website" />
                 <Button Width="220" HorizontalAlignment="Center" Click="SupportButton_Click" HorizontalContentAlignment="Center" Content="Contact Support" />
                 <Button Width="220" HorizontalAlignment="Center" Click="PrivacyButton_Click" HorizontalContentAlignment="Center" Content="Privacy Policy" />
