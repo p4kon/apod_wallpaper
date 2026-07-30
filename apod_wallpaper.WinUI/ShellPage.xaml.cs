@@ -232,6 +232,8 @@ public sealed partial class ShellPage : Page
         var saveResult = await _arguments.BackendHost.Backend.SaveSettingsAsync(settings);
         if (saveResult.Succeeded && suppressAutomaticReminders)
             await RefreshSettingsPageIfVisibleAsync();
+        if (saveResult.Succeeded)
+            await RefreshAboutPageUpdateStatusIfVisibleAsync();
     }
 
     private async System.Threading.Tasks.Task RefreshAboutPageUpdateStatusIfVisibleAsync()

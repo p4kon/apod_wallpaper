@@ -79,6 +79,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Update check compares release versions", UpdateCheckComparesReleaseVersions);
                 Run("Update check defaults to automatic checks enabled", UpdateCheckDefaultsToAutomaticChecksEnabled);
                 Run("Update reminder policy respects cooldowns", UpdateReminderPolicyRespectsCooldowns);
+                Run("About update status preserves cached updates after failures", AboutUpdateStatusPreservesCachedUpdatesAfterFailures);
                 Run("Random APOD settings and sources normalize", RandomApodSettingsAndSourcesNormalize);
                 Run("Downloaded APOD date scan ignores smart artifacts", DownloadedApodDateScanIgnoresSmartArtifacts);
                 Run("Favorite rotation source defaults to latest", FavoriteRotationSourceDefaultsToLatest);
@@ -323,9 +324,29 @@ namespace apod_wallpaper.SmokeTests
 
             settings.LastKnownLatestVersion = "v1.3.0";
             Assert(apod_wallpaper.UpdateReminderPolicy.IsCachedUpdateAvailable(settings, "1.2.4"), "Cached newer version should produce About update status.");
+            var cachedStatus = apod_wallpaper.UpdateReminderPolicy.GetCachedUpdateAvailability(settings, "1.2.4");
+            Assert(cachedStatus.Kind == apod_wallpaper.CachedUpdateAvailabilityKind.UpdateAvailable, "Cached status model should report an available update.");
+            Assert(cachedStatus.LatestVersion == "1.3.0", "Cached status model should normalize v-prefixed latest versions.");
+            var reloadedCachedStatus = apod_wallpaper.UpdateReminderPolicy.GetCachedUpdateAvailability(settings.Clone(), "1.2.4");
+            Assert(reloadedCachedStatus.Kind == apod_wallpaper.CachedUpdateAvailabilityKind.UpdateAvailable, "Cached status should survive a settings snapshot reload.");
             Assert(!apod_wallpaper.UpdateReminderPolicy.IsCachedUpdateAvailable(settings, "1.3.0"), "Cached equal version should not produce About update status.");
             settings.LastKnownLatestVersion = "not-a-version";
-            Assert(!apod_wallpaper.UpdateReminderPolicy.IsCachedUpdateAvailable(settings, "1.2.4"), "Invalid cached latest version should not produce About update status.");
+            Assert(apod_wallpaper.UpdateReminderPolicy.GetCachedUpdateAvailability(settings, "1.2.4").Kind == apod_wallpaper.CachedUpdateAvailabilityKind.None,
+                "Invalid cached latest version should not produce About update status.");
+            settings.LastKnownLatestVersion = "v1.3.0";
+            settings.AutoCheckUpdatesEnabled = false;
+            settings.SuppressAutomaticUpdateReminder = true;
+            Assert(apod_wallpaper.UpdateReminderPolicy.GetCachedUpdateAvailability(settings, "1.2.4").Kind == apod_wallpaper.CachedUpdateAvailabilityKind.UpdateAvailable,
+                "Do not remind should not hide cached About update status.");
+        }
+
+        private static void AboutUpdateStatusPreservesCachedUpdatesAfterFailures()
+        {
+            var sourcePath = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "AboutPage.xaml.cs");
+            var source = File.ReadAllText(sourcePath);
+            Assert(source.Contains("RefreshUpdateStatusFromBackendAsync()"), "About page should expose a lightweight cached status refresh.");
+            Assert(source.Contains("TryShowPersistentUpdateStatusAsync(hideStalePersistentStatus: true)"), "About page refresh should re-read persisted cached update state.");
+            Assert(source.Contains("if (!await TryShowPersistentUpdateStatusAsync())"), "Manual check failures should keep cached update status when it is still available.");
         }
 
         private static void DisplayTopologySnapshotIsReadOnly()

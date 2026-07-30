@@ -3,6 +3,33 @@ using System.Globalization;
 
 namespace apod_wallpaper
 {
+    public enum CachedUpdateAvailabilityKind
+    {
+        None,
+        UpdateAvailable,
+    }
+
+    public sealed class CachedUpdateAvailability
+    {
+        public static readonly CachedUpdateAvailability None = new CachedUpdateAvailability(CachedUpdateAvailabilityKind.None, string.Empty, string.Empty, string.Empty);
+
+        public CachedUpdateAvailability(CachedUpdateAvailabilityKind kind, string currentVersion, string latestVersion, string releaseUrl)
+        {
+            Kind = kind;
+            CurrentVersion = currentVersion ?? string.Empty;
+            LatestVersion = latestVersion ?? string.Empty;
+            ReleaseUrl = releaseUrl ?? string.Empty;
+        }
+
+        public CachedUpdateAvailabilityKind Kind { get; }
+
+        public string CurrentVersion { get; }
+
+        public string LatestVersion { get; }
+
+        public string ReleaseUrl { get; }
+    }
+
     public static class UpdateReminderPolicy
     {
         public static readonly TimeSpan AutomaticCheckInterval = TimeSpan.FromDays(1);
@@ -62,9 +89,20 @@ namespace apod_wallpaper
 
         public static bool IsCachedUpdateAvailable(ApplicationSettingsSnapshot settings, string currentVersion)
         {
-            return settings != null
-                && !string.IsNullOrWhiteSpace(settings.LastKnownLatestVersion)
-                && UpdateCheckService.CompareReleaseVersions(settings.LastKnownLatestVersion, currentVersion) > 0;
+            return GetCachedUpdateAvailability(settings, currentVersion).Kind == CachedUpdateAvailabilityKind.UpdateAvailable;
+        }
+
+        public static CachedUpdateAvailability GetCachedUpdateAvailability(ApplicationSettingsSnapshot settings, string currentVersion)
+        {
+            var normalizedCurrent = UpdateCheckService.NormalizeVersionText(currentVersion);
+            if (settings == null || string.IsNullOrWhiteSpace(settings.LastKnownLatestVersion))
+                return new CachedUpdateAvailability(CachedUpdateAvailabilityKind.None, normalizedCurrent, string.Empty, string.Empty);
+
+            var normalizedLatest = UpdateCheckService.NormalizeVersionText(settings.LastKnownLatestVersion);
+            if (UpdateCheckService.CompareReleaseVersions(normalizedLatest, normalizedCurrent) <= 0)
+                return new CachedUpdateAvailability(CachedUpdateAvailabilityKind.None, normalizedCurrent, normalizedLatest, settings.LastKnownLatestReleaseUrl);
+
+            return new CachedUpdateAvailability(CachedUpdateAvailabilityKind.UpdateAvailable, normalizedCurrent, normalizedLatest, settings.LastKnownLatestReleaseUrl);
         }
 
         public static string FormatUtc(DateTime value)

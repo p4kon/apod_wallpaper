@@ -135,6 +135,9 @@ public sealed partial class AboutPage : Page
             var result = await _arguments.BackendHost.Backend.CheckForUpdatesAsync(currentVersion, forceCheck: true, automatic: false);
             if (!result.Succeeded || result.Value == null)
             {
+                if (!await TryShowPersistentUpdateStatusAsync())
+                    ShowUpdateStatus(AppStrings.Get("Could not check updates"), UpdateStatusVisualState.CouldNotCheck, transient: true);
+
                 ShowAboutStatus(
                     InfoBarSeverity.Error,
                     AppStrings.Get("Could not check for updates"),
@@ -180,7 +183,8 @@ public sealed partial class AboutPage : Page
             return;
         }
 
-        ShowUpdateStatus(AppStrings.Get("Could not check updates"), UpdateStatusVisualState.CouldNotCheck, transient: true);
+        if (!await TryShowPersistentUpdateStatusAsync())
+            ShowUpdateStatus(AppStrings.Get("Could not check updates"), UpdateStatusVisualState.CouldNotCheck, transient: true);
         ShowAboutStatus(
             InfoBarSeverity.Warning,
             AppStrings.Get("Could not check for updates"),
@@ -190,25 +194,33 @@ public sealed partial class AboutPage : Page
 
     internal async System.Threading.Tasks.Task RefreshUpdateStatusFromBackendAsync()
     {
+        await TryShowPersistentUpdateStatusAsync(hideStalePersistentStatus: true);
+    }
+
+    private async System.Threading.Tasks.Task<bool> TryShowPersistentUpdateStatusAsync(bool hideStalePersistentStatus = false)
+    {
         if (_arguments == null)
-            return;
+            return false;
 
         var settingsResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
         if (!settingsResult.Succeeded || settingsResult.Value == null)
-            return;
+            return false;
 
         var currentVersion = AppVersionResolver.ResolveCurrentVersionText();
-        if (apod_wallpaper.UpdateReminderPolicy.IsCachedUpdateAvailable(settingsResult.Value, currentVersion))
+        var cachedStatus = apod_wallpaper.UpdateReminderPolicy.GetCachedUpdateAvailability(settingsResult.Value, currentVersion);
+        if (cachedStatus.Kind == apod_wallpaper.CachedUpdateAvailabilityKind.UpdateAvailable)
         {
             ShowUpdateStatus(
-                AppStrings.Format("Update available: {0}", settingsResult.Value.LastKnownLatestVersion),
+                AppStrings.Format("Update available: {0}", cachedStatus.LatestVersion),
                 UpdateStatusVisualState.UpdateAvailable,
                 transient: false);
-            return;
+            return true;
         }
 
-        if (_updateStatusVisualState == UpdateStatusVisualState.UpdateAvailable)
+        if (hideStalePersistentStatus && _updateStatusVisualState == UpdateStatusVisualState.UpdateAvailable)
             HideUpdateStatus();
+
+        return false;
     }
 
     private void ShowUpdateStatus(string text, UpdateStatusVisualState visualState, bool transient)
