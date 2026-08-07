@@ -156,33 +156,67 @@ public sealed partial class ShellPage : Page
 
     private async System.Threading.Tasks.Task RunAutomaticUpdateReminderAsync(UpdateCheckTrigger trigger)
     {
-        if (_arguments == null || _updateDialogOpen || _updateReminderShownThisSession)
+        LogUpdateReminderDiagnostic(trigger, "trigger");
+        if (_arguments == null)
+        {
+            LogUpdateReminderDiagnostic(trigger, "skip:no-arguments");
             return;
+        }
+
+        if (_updateDialogOpen)
+        {
+            LogUpdateReminderDiagnostic(trigger, "skip:dialog-open");
+            return;
+        }
+
+        if (_updateReminderShownThisSession)
+        {
+            LogUpdateReminderDiagnostic(trigger, "skip:shown-this-session");
+            return;
+        }
 
         var settingsResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
         if (!settingsResult.Succeeded || settingsResult.Value == null)
+        {
+            LogUpdateReminderDiagnostic(trigger, "skip:settings-unavailable");
             return;
+        }
 
         var settings = settingsResult.Value;
         if (!apod_wallpaper.UpdateReminderPolicy.ShouldRunAutomaticCheck(settings, DateTime.UtcNow))
+        {
+            LogUpdateReminderDiagnostic(trigger, BuildAutomaticSkipReason(settings), settings);
             return;
+        }
 
         var currentVersion = AppVersionResolver.ResolveCurrentVersionText();
+        LogUpdateReminderDiagnostic(trigger, "network-check:start", settings, currentVersion: currentVersion);
         var checkResult = await _arguments.BackendHost.Backend.CheckForUpdatesAsync(currentVersion, forceCheck: false, automatic: true);
         if (!checkResult.Succeeded || checkResult.Value == null)
+        {
+            LogUpdateReminderDiagnostic(trigger, "network-check:failed", settings, currentVersion: currentVersion);
             return;
+        }
 
+        LogUpdateReminderDiagnostic(trigger, "network-check:complete", settings, checkResult.Value, currentVersion);
         await RefreshAboutPageUpdateStatusIfVisibleAsync();
         if (checkResult.Value.Status != apod_wallpaper.UpdateCheckStatus.UpdateAvailable)
+        {
+            LogUpdateReminderDiagnostic(trigger, "skip:no-update", settings, checkResult.Value, currentVersion);
             return;
+        }
 
         var latestSettingsResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
         var latestSettings = latestSettingsResult.Succeeded && latestSettingsResult.Value != null
             ? latestSettingsResult.Value
             : settings;
         if (!apod_wallpaper.UpdateReminderPolicy.ShouldShowReminder(latestSettings, checkResult.Value.LatestVersion, currentVersion, DateTime.UtcNow, _updateReminderShownThisSession))
+        {
+            LogUpdateReminderDiagnostic(trigger, "skip:reminder-policy", latestSettings, checkResult.Value, currentVersion);
             return;
+        }
 
+        LogUpdateReminderDiagnostic(trigger, "modal:show", latestSettings, checkResult.Value, currentVersion);
         _updateDialogOpen = true;
         UpdateDialogChoice choice;
         try
@@ -195,6 +229,7 @@ public sealed partial class ShellPage : Page
         }
 
         _updateReminderShownThisSession = true;
+        LogUpdateReminderDiagnostic(trigger, "modal:choice:" + choice, latestSettings, checkResult.Value, currentVersion);
         if (choice == UpdateDialogChoice.OpenRelease)
         {
             await StoreUpdateReminderChoiceAsync(checkResult.Value, suppressAutomaticReminders: false);
@@ -218,15 +253,7 @@ public sealed partial class ShellPage : Page
             return;
 
         var settings = settingsResult.Value.Clone();
-        System.Diagnostics.Debug.WriteLine(
-            string.Format(
-                System.Globalization.CultureInfo.InvariantCulture,
-                "[UpdateStatus] Reminder choice before save; suppressChoice={0}; cachedLatest={1}; releaseUrlEmpty={2}; autoCheck={3}; suppressReminder={4}",
-                suppressAutomaticReminders,
-                settings.LastKnownLatestVersion,
-                string.IsNullOrWhiteSpace(settings.LastKnownLatestReleaseUrl),
-                settings.AutoCheckUpdatesEnabled,
-                settings.SuppressAutomaticUpdateReminder));
+        LogUpdateReminderDiagnostic(UpdateCheckTrigger.WindowActivated, "choice-save:before suppress=" + suppressAutomaticReminders, settings, result, result.CurrentVersion);
         settings.LastUpdateReminderShownUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(DateTime.UtcNow);
         settings.LastUpdateReminderVersion = result.LatestVersion;
         if (!string.IsNullOrWhiteSpace(result.LatestVersion))
@@ -244,16 +271,7 @@ public sealed partial class ShellPage : Page
             var afterSaveResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
             if (afterSaveResult.Succeeded && afterSaveResult.Value != null)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    string.Format(
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        "[UpdateStatus] Reminder choice after save; suppressChoice={0}; cachedLatest={1}; releaseUrlEmpty={2}; reminderVersion={3}; autoCheck={4}; suppressReminder={5}",
-                        suppressAutomaticReminders,
-                        afterSaveResult.Value.LastKnownLatestVersion,
-                        string.IsNullOrWhiteSpace(afterSaveResult.Value.LastKnownLatestReleaseUrl),
-                        afterSaveResult.Value.LastUpdateReminderVersion,
-                        afterSaveResult.Value.AutoCheckUpdatesEnabled,
-                        afterSaveResult.Value.SuppressAutomaticUpdateReminder));
+                LogUpdateReminderDiagnostic(UpdateCheckTrigger.WindowActivated, "choice-save:after suppress=" + suppressAutomaticReminders, afterSaveResult.Value, result, result.CurrentVersion);
             }
         }
         if (saveResult.Succeeded && suppressAutomaticReminders)
@@ -280,6 +298,44 @@ public sealed partial class ShellPage : Page
             return;
 
         await Launcher.LaunchUriAsync(new System.Uri(result.LatestReleaseUrl));
+    }
+
+    private static string BuildAutomaticSkipReason(apod_wallpaper.ApplicationSettingsSnapshot settings)
+    {
+        if (!settings.AutoCheckUpdatesEnabled)
+            return "skip:auto-disabled";
+
+        if (settings.SuppressAutomaticUpdateReminder)
+            return "skip:suppressed";
+
+        return "skip:throttled";
+    }
+
+    private static void LogUpdateReminderDiagnostic(
+        UpdateCheckTrigger trigger,
+        string stage,
+        apod_wallpaper.ApplicationSettingsSnapshot? settings = null,
+        apod_wallpaper.UpdateCheckResult? result = null,
+        string? currentVersion = null)
+    {
+        var message = string.Format(
+            System.Globalization.CultureInfo.InvariantCulture,
+            "[UpdateReminder] trigger={0}; stage={1}; current={2}; latestKnown={3}; latestChecked={4}; releaseUrlKnown={5}; autoCheck={6}; suppress={7}; lastAutoCheck={8}; lastAutoFailed={9}; lastReminderShown={10}; lastReminderVersion={11}; status={12}",
+            trigger,
+            stage,
+            currentVersion ?? string.Empty,
+            settings?.LastKnownLatestVersion ?? string.Empty,
+            result?.LatestVersion ?? string.Empty,
+            !string.IsNullOrWhiteSpace(settings?.LastKnownLatestReleaseUrl ?? result?.LatestReleaseUrl),
+            settings?.AutoCheckUpdatesEnabled,
+            settings?.SuppressAutomaticUpdateReminder,
+            settings?.LastAutomaticUpdateCheckUtc ?? string.Empty,
+            settings?.LastAutomaticUpdateCheckFailedUtc ?? string.Empty,
+            settings?.LastUpdateReminderShownUtc ?? string.Empty,
+            settings?.LastUpdateReminderVersion ?? string.Empty,
+            result?.Status.ToString() ?? string.Empty);
+        System.Diagnostics.Debug.WriteLine(message);
+        apod_wallpaper.AppLogger.Info(message);
     }
 
     private void SetActiveButton(Button activeButton)

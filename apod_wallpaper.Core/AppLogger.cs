@@ -4,7 +4,7 @@ using System.Text;
 
 namespace apod_wallpaper
 {
-    internal static class AppLogger
+    public static class AppLogger
     {
         private static readonly object SyncRoot = new object();
         private static string _logDirectoryOverride;

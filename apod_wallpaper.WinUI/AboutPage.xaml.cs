@@ -121,6 +121,7 @@ public sealed partial class AboutPage : Page
         if (_arguments == null)
             return;
 
+        LogManualUpdateDiagnostic("manual-check:start");
         CheckUpdatesButton.IsEnabled = false;
         ShowUpdateStatus(AppStrings.Get("Checking..."), UpdateStatusVisualState.Checking, transient: false);
         ShowAboutStatus(
@@ -132,9 +133,11 @@ public sealed partial class AboutPage : Page
         try
         {
             var currentVersion = AppVersionResolver.ResolveCurrentVersionText();
+            LogManualUpdateDiagnostic("manual-check:network", currentVersion: currentVersion);
             var result = await _arguments.BackendHost.Backend.CheckForUpdatesAsync(currentVersion, forceCheck: true, automatic: false);
             if (!result.Succeeded || result.Value == null)
             {
+                LogManualUpdateDiagnostic("manual-check:failed", currentVersion: currentVersion);
                 if (!await TryShowPersistentUpdateStatusAsync())
                     ShowUpdateStatus(AppStrings.Get("Could not check updates"), UpdateStatusVisualState.CouldNotCheck, transient: true);
 
@@ -146,6 +149,7 @@ public sealed partial class AboutPage : Page
                 return;
             }
 
+            LogManualUpdateDiagnostic("manual-check:complete", result.Value, currentVersion);
             await HandleManualUpdateCheckResultAsync(result.Value);
         }
         finally
@@ -174,6 +178,9 @@ public sealed partial class AboutPage : Page
 
         if (result.Status == apod_wallpaper.UpdateCheckStatus.UpToDate)
         {
+            if (await TryShowPersistentUpdateStatusAsync())
+                return;
+
             ShowUpdateStatus(AppStrings.Get("You are up to date"), UpdateStatusVisualState.UpToDate, transient: true);
             ShowAboutStatus(
                 InfoBarSeverity.Success,
@@ -240,11 +247,27 @@ public sealed partial class AboutPage : Page
         ToolTipService.SetToolTip(UpdateStatusTextBlock, text);
         UpdateStatusTextBlock.Foreground = ResolveUpdateStatusBrush(visualState);
         UpdateStatusTextBlock.Visibility = Visibility.Visible;
+        if (!transient && visualState == UpdateStatusVisualState.UpdateAvailable)
+            _statusDismissTimer.Stop();
         if (transient)
         {
             _statusDismissTimer.Stop();
             _statusDismissTimer.Start();
         }
+    }
+
+    private static void LogManualUpdateDiagnostic(string stage, apod_wallpaper.UpdateCheckResult? result = null, string? currentVersion = null)
+    {
+        var message = string.Format(
+            System.Globalization.CultureInfo.InvariantCulture,
+            "[UpdateReminder] trigger=ManualAboutCheck; stage={0}; current={1}; latestChecked={2}; releaseUrlKnown={3}; status={4}",
+            stage,
+            currentVersion ?? string.Empty,
+            result?.LatestVersion ?? string.Empty,
+            !string.IsNullOrWhiteSpace(result?.LatestReleaseUrl),
+            result?.Status.ToString() ?? string.Empty);
+        System.Diagnostics.Debug.WriteLine(message);
+        apod_wallpaper.AppLogger.Info(message);
     }
 
     private Brush ResolveUpdateStatusBrush(UpdateStatusVisualState visualState)

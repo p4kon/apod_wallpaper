@@ -79,6 +79,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Update check compares release versions", UpdateCheckComparesReleaseVersions);
                 Run("Update check defaults to automatic checks enabled", UpdateCheckDefaultsToAutomaticChecksEnabled);
                 Run("Update reminder policy respects cooldowns", UpdateReminderPolicyRespectsCooldowns);
+                Run("About update status uses persisted cache", AboutUpdateStatusUsesPersistedCache);
                 Run("Update check persistence keeps cached latest after dialog choices", UpdateCheckPersistenceKeepsCachedLatestAfterDialogChoices);
                 Run("About update status preserves cached updates after failures", AboutUpdateStatusPreservesCachedUpdatesAfterFailures);
                 Run("Random APOD settings and sources normalize", RandomApodSettingsAndSourcesNormalize);
@@ -88,6 +89,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("Display topology snapshot is read only", DisplayTopologySnapshotIsReadOnly);
                 Run("Month calendar keeps stable day visuals", MonthCalendarKeepsStableDayVisuals);
                 Run("Favorites preview uses a single open gesture path", FavoritesPreviewUsesSingleOpenGesturePath);
+                Run("Update reminder diagnostics avoid secrets", UpdateReminderDiagnosticsAvoidSecrets);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
@@ -348,6 +350,61 @@ namespace apod_wallpaper.SmokeTests
             Assert(source.Contains("RefreshUpdateStatusFromBackendAsync()"), "About page should expose a lightweight cached status refresh.");
             Assert(source.Contains("TryShowPersistentUpdateStatusAsync(hideStalePersistentStatus: true)"), "About page refresh should re-read persisted cached update state.");
             Assert(source.Contains("if (!await TryShowPersistentUpdateStatusAsync())"), "Manual check failures should keep cached update status when it is still available.");
+            Assert(source.Contains("if (await TryShowPersistentUpdateStatusAsync())"), "Manual up-to-date or transient paths must not hide cached newer update status.");
+            Assert(source.Contains("visualState == UpdateStatusVisualState.UpdateAvailable"), "Persistent update available text should cancel transient status dismissal.");
+        }
+
+        private static void AboutUpdateStatusUsesPersistedCache()
+        {
+            const string CurrentVersion = "1.3.1";
+            const string LatestVersion = "1.3.2";
+            const string ReleaseUrl = "https://github.com/p4kon/apod_wallpaper/releases/tag/v1.3.2";
+            var now = new DateTime(2026, 8, 7, 12, 0, 0, DateTimeKind.Utc);
+            var settings = CreateDefaultSettingsSnapshot();
+            settings.LastKnownLatestVersion = LatestVersion;
+            settings.LastKnownLatestReleaseUrl = ReleaseUrl;
+
+            AssertAboutShowsCachedUpdate(settings, CurrentVersion, LatestVersion, "Found update should show in About.");
+
+            var later = settings.Clone();
+            later.LastUpdateReminderShownUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(now);
+            later.LastUpdateReminderVersion = LatestVersion;
+            AssertAboutShowsCachedUpdate(later, CurrentVersion, LatestVersion, "Later should not hide cached About update status.");
+
+            var openRelease = settings.Clone();
+            openRelease.LastUpdateReminderShownUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(now);
+            openRelease.LastUpdateReminderVersion = LatestVersion;
+            AssertAboutShowsCachedUpdate(openRelease, CurrentVersion, LatestVersion, "Open release should not hide cached About update status.");
+
+            var doNotRemind = settings.Clone();
+            doNotRemind.AutoCheckUpdatesEnabled = false;
+            doNotRemind.SuppressAutomaticUpdateReminder = true;
+            doNotRemind.LastUpdateReminderShownUtc = apod_wallpaper.UpdateReminderPolicy.FormatUtc(now);
+            doNotRemind.LastUpdateReminderVersion = LatestVersion;
+            AssertAboutShowsCachedUpdate(doNotRemind, CurrentVersion, LatestVersion, "Do not remind should not hide cached About update status.");
+
+            var autoDisabled = settings.Clone();
+            autoDisabled.AutoCheckUpdatesEnabled = false;
+            AssertAboutShowsCachedUpdate(autoDisabled, CurrentVersion, LatestVersion, "Auto disabled should not hide cached About update status.");
+
+            var suppressTrue = settings.Clone();
+            suppressTrue.SuppressAutomaticUpdateReminder = true;
+            AssertAboutShowsCachedUpdate(suppressTrue, CurrentVersion, LatestVersion, "Suppressed reminder should not hide cached About update status.");
+
+            var reloaded = settings.Clone();
+            AssertAboutShowsCachedUpdate(reloaded, CurrentVersion, LatestVersion, "Cached update status should survive settings reload.");
+
+            Assert(apod_wallpaper.UpdateReminderPolicy.GetCachedUpdateAvailability(settings, LatestVersion).Kind == apod_wallpaper.CachedUpdateAvailabilityKind.None,
+                "Current version equal to cached latest should hide About update status.");
+            Assert(apod_wallpaper.UpdateReminderPolicy.GetCachedUpdateAvailability(settings, "1.3.3").Kind == apod_wallpaper.CachedUpdateAvailabilityKind.None,
+                "Current version newer than cached latest should hide About update status.");
+        }
+
+        private static void AssertAboutShowsCachedUpdate(apod_wallpaper.ApplicationSettingsSnapshot settings, string currentVersion, string latestVersion, string message)
+        {
+            var status = apod_wallpaper.UpdateReminderPolicy.GetCachedUpdateAvailability(settings, currentVersion);
+            Assert(status.Kind == apod_wallpaper.CachedUpdateAvailabilityKind.UpdateAvailable, message);
+            Assert(status.LatestVersion == latestVersion, "About cached update status should expose the normalized latest version.");
         }
 
         private static void UpdateCheckPersistenceKeepsCachedLatestAfterDialogChoices()
@@ -473,10 +530,9 @@ namespace apod_wallpaper.SmokeTests
                 "Favorites preview must have one authoritative tile open handler.");
             Assert(favoritesSource.IndexOf("_previewOpenInProgress", StringComparison.Ordinal) >= 0,
                 "Favorites preview must guard against duplicate open requests from one input gesture.");
-            Assert(favoritesSource.IndexOf("AppStrings.Get(\"Set as wallpaper\")", StringComparison.Ordinal) >= 0,
-                "Favorites context menu must localize the Set as wallpaper action.");
-            Assert(favoritesSource.IndexOf("AppStrings.Get(\"Remove from favorites\")", StringComparison.Ordinal) >= 0,
-                "Favorites context menu must localize the Remove from favorites action.");
+            Assert(favoritesSource.IndexOf("FavoriteContextMenuFactory.Create", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("FavoriteContextMenuFactory.Create", StringComparison.Ordinal) >= 0,
+                "Favorites page and fullscreen preview must use the same context menu factory.");
             Assert(favoritesSource.IndexOf("SetFavoriteAsWallpaperAsync", StringComparison.Ordinal) >= 0 &&
                 favoritesSource.IndexOf("ApplyDayAsync(item.Date.Date, wallpaperStyle)", StringComparison.Ordinal) >= 0,
                 "Favorites context menu must apply the selected favorite through the backend workflow.");
@@ -488,8 +544,8 @@ namespace apod_wallpaper.SmokeTests
                 "Favorites preview must use the captured backdrop as the root background for the first visible frame.");
             Assert(previewSource.IndexOf("public async Task ShowPreviewAsync()", StringComparison.Ordinal) >= 0,
                 "Favorites preview must prepare the first image frame before showing the window.");
-            Assert(previewSource.IndexOf("await PreparePreviewImageAsync();", StringComparison.Ordinal) >= 0 &&
-                previewSource.IndexOf("await PreparePreviewImageAsync();", StringComparison.Ordinal) < previewSource.IndexOf("AppWindow.Show(false);", StringComparison.Ordinal),
+            Assert(previewSource.IndexOf("await ShowCurrentItemAsync();", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("await ShowCurrentItemAsync();", StringComparison.Ordinal) < previewSource.IndexOf("AppWindow.Show(false);", StringComparison.Ordinal),
                 "Favorites preview must load the image before the off-screen AppWindow.Show call.");
             Assert(previewSource.IndexOf("CreateHiddenWindowBounds", StringComparison.Ordinal) < 0 &&
                 previewSource.IndexOf("BringToForeground(\"hidden\")", StringComparison.Ordinal) < 0,
@@ -504,7 +560,67 @@ namespace apod_wallpaper.SmokeTests
                 "Favorites preview close fade-out must stay short but smooth.");
             Assert(previewSource.IndexOf("_root.KeyDown += Root_KeyDown;", StringComparison.Ordinal) >= 0 &&
                 previewSource.IndexOf("private async void Root_KeyDown", StringComparison.Ordinal) >= 0,
-                "Favorites preview must close from keyboard input.");
+                "Favorites preview must handle keyboard input.");
+            Assert(previewSource.IndexOf("VirtualKey.Escape", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("VirtualKey.Space", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("VirtualKey.Left", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("VirtualKey.Right", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("VirtualKey.Number0", StringComparison.Ordinal) >= 0,
+                "Favorites preview must support close, previous/next, and reset keyboard shortcuts.");
+            Assert(previewSource.IndexOf("e.Handled = true;\r\n        await ClosePreviewAsync();", StringComparison.Ordinal) < 0 ||
+                previewSource.IndexOf("if (e.Key == VirtualKey.Escape || e.Key == VirtualKey.Space)", StringComparison.Ordinal) >= 0,
+                "Favorites preview must not close on arbitrary keyboard input.");
+            Assert(previewSource.IndexOf("MinZoom = 0.4", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("MaxZoom = 2.0", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("PointerWheelChanged", StringComparison.Ordinal) >= 0,
+                "Favorites preview must keep bounded mouse-wheel zoom.");
+            Assert(previewSource.IndexOf("CapturePointer", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("ReleasePointerCapture(e.Pointer)", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("DragThreshold = 6", StringComparison.Ordinal) >= 0,
+                "Favorites preview must use a drag threshold and release only the active pointer capture.");
+
+            var pointerReleasedIndex = previewSource.IndexOf("private async void Root_PointerReleased", StringComparison.Ordinal);
+            var dragSnapshotIndex = previewSource.IndexOf("var wasDragging = _isDragging;", pointerReleasedIndex, StringComparison.Ordinal);
+            var pointerReleaseIndex = previewSource.IndexOf("_root.ReleasePointerCapture(e.Pointer);", pointerReleasedIndex, StringComparison.Ordinal);
+            Assert(pointerReleasedIndex >= 0 && dragSnapshotIndex > pointerReleasedIndex && pointerReleaseIndex > dragSnapshotIndex,
+                "Favorites preview must snapshot drag state before releasing pointer capture so capture-lost cannot turn a drag into a click.");
+
+            var imageViewportIndex = previewSource.IndexOf("private Grid BuildImageViewport", StringComparison.Ordinal);
+            var surfaceIndex = previewSource.IndexOf("private Grid BuildSurface", StringComparison.Ordinal);
+            var infoTextIndex = previewSource.IndexOf("private static TextBlock BuildInfoText", StringComparison.Ordinal);
+            Assert(imageViewportIndex >= 0 && surfaceIndex > imageViewportIndex && infoTextIndex > surfaceIndex,
+                "Favorites preview must use transparent grid surfaces for the image canvas.");
+            var imageSurfaceSource = previewSource.Substring(imageViewportIndex, infoTextIndex - imageViewportIndex);
+            Assert(imageSurfaceSource.IndexOf("FromArgb(255, 0, 0, 0)", StringComparison.Ordinal) < 0,
+                "Favorites preview image canvas must not paint black letterbox bars around the image.");
+            Assert(previewSource.IndexOf("UpdateSurfaceSizeForBitmap(bitmap)", StringComparison.Ordinal) >= 0,
+                "Favorites preview must size its base image surface from the bitmap aspect ratio.");
+            Assert(previewSource.IndexOf("_imageViewport.RenderTransform = _imageTransform;", StringComparison.Ordinal) >= 0,
+                "Favorites preview must transform the full image hit-test surface when zooming and panning.");
+            Assert(previewSource.IndexOf("private double ResolveViewportWidth()", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("private double ResolveViewportHeight()", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("_root.ActualWidth > 0", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("_root.ActualHeight > 0", StringComparison.Ordinal) >= 0,
+                "Favorites preview fit and pan bounds must use the fullscreen XAML viewport instead of the old fixed image frame.");
+            Assert(previewSource.IndexOf("menu.ShowAt(_root, e.GetPosition(_root));", StringComparison.Ordinal) >= 0,
+                "Favorites preview context menu must open at the right-click pointer position.");
+            var pointerMovedIndex = previewSource.IndexOf("private void Root_PointerMoved", StringComparison.Ordinal);
+            var pointerMovedInfoIndex = previewSource.IndexOf("ShowInfoPanel();", pointerMovedIndex, StringComparison.Ordinal);
+            var pointerMovedPressedGuardIndex = previewSource.IndexOf("if (!_pointerPressed)", pointerMovedIndex, StringComparison.Ordinal);
+            Assert(pointerMovedIndex >= 0 && pointerMovedInfoIndex > pointerMovedIndex &&
+                pointerMovedPressedGuardIndex > pointerMovedInfoIndex,
+                "Favorites preview info panel must reappear on ordinary pointer movement, not only during a drag.");
+            var infoPanelIndex = previewSource.IndexOf("private static Border BuildInfoPanel", StringComparison.Ordinal);
+            var showCurrentItemIndex = previewSource.IndexOf("private async Task ShowCurrentItemAsync", StringComparison.Ordinal);
+            var infoPanelSource = previewSource.Substring(infoPanelIndex, showCurrentItemIndex - infoPanelIndex);
+            Assert(infoPanelIndex >= 0 && showCurrentItemIndex > infoPanelIndex &&
+                infoPanelSource.IndexOf("IsHitTestVisible = false", StringComparison.Ordinal) < 0 &&
+                previewSource.IndexOf("InfoPanel_PointerPressed", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("InfoPanel_PointerReleased", StringComparison.Ordinal) >= 0,
+                "Favorites preview info panel must consume clicks instead of passing them through and closing the viewer.");
+            Assert(previewSource.IndexOf("BuildOverlayButton", StringComparison.Ordinal) < 0 &&
+                previewSource.IndexOf("CalendarButton_Click", StringComparison.Ordinal) < 0,
+                "Favorites preview must not show old top corner overlay buttons.");
             Assert(previewSource.IndexOf("graphics.FillRectangle(tint", StringComparison.Ordinal) < 0,
                 "Favorites preview must animate darkening instead of baking the tint into the captured backdrop.");
             Assert(previewSource.IndexOf("AppWindow.MoveAndResize(CreateWarmupBounds());", StringComparison.Ordinal) >= 0 &&
@@ -525,6 +641,24 @@ namespace apod_wallpaper.SmokeTests
             Assert(previewSource.IndexOf("WmMouseActivate", StringComparison.Ordinal) >= 0 &&
                 previewSource.IndexOf("RemoveMouseActivateGuard", StringComparison.Ordinal) >= 0,
                 "Favorites preview must keep a first-click guard with cleanup.");
+
+            var menuFactoryPath = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "FavoriteContextMenuFactory.cs");
+            var menuFactorySource = File.ReadAllText(menuFactoryPath);
+            Assert(menuFactorySource.IndexOf("AppStrings.Get(\"Set as wallpaper\")", StringComparison.Ordinal) >= 0 &&
+                menuFactorySource.IndexOf("AppStrings.Get(\"Open favorite in Calendar\")", StringComparison.Ordinal) >= 0 &&
+                menuFactorySource.IndexOf("AppStrings.Get(\"Open in folder\")", StringComparison.Ordinal) >= 0 &&
+                menuFactorySource.IndexOf("AppStrings.Get(\"Remove from favorites\")", StringComparison.Ordinal) >= 0,
+                "Shared favorites context menu must localize every visible command.");
+        }
+
+        private static void UpdateReminderDiagnosticsAvoidSecrets()
+        {
+            var shellSource = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "ShellPage.xaml.cs"));
+            var aboutSource = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "AboutPage.xaml.cs"));
+            Assert(shellSource.Contains("[UpdateReminder]"), "Automatic update reminders must write diagnostic log entries.");
+            Assert(aboutSource.Contains("trigger=ManualAboutCheck"), "Manual About update checks must write diagnostic log entries.");
+            Assert(!shellSource.Contains("NasaApiKey") && !aboutSource.Contains("NasaApiKey"), "Update diagnostics must not log NASA API keys.");
+            Assert(!shellSource.Contains("ImagesDirectoryPath") && !aboutSource.Contains("ImagesDirectoryPath"), "Update diagnostics must not log user storage paths.");
         }
 
         private static void ApodPageUrlBuilderIsDeterministic()

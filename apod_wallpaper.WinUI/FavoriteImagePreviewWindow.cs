@@ -1,11 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Globalization;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Text;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -19,6 +24,8 @@ using Microsoft.UI.Xaml.Shapes;
 using Windows.Graphics;
 using Windows.Storage;
 using Windows.Storage.Streams;
+using Windows.System;
+using Windows.UI.Core;
 using WinRT.Interop;
 using DrawingBitmap = System.Drawing.Bitmap;
 using DrawingGraphics = System.Drawing.Graphics;
@@ -44,47 +51,83 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private const int SurfaceFadeInMs = 150;
     private const int NativeWindowFadeInMs = 120;
     private const int CloseFadeOutMs = 80;
+    private const double MinZoom = 0.4;
+    private const double MaxZoom = 2.0;
+    private const double WheelZoomStep = 0.12;
+    private const double DragThreshold = 6;
+    private const int SingleClickCloseDelayMs = 260;
     private static readonly bool CapturePreviewStartupFrames = false;
 
-    private readonly DateTime _date;
-    private readonly Action<DateTime> _openInCalendar;
-    private readonly string _imagePath;
-    private readonly BitmapImage _previewBitmap;
+    private readonly FavoriteImageActions _actions;
+    private readonly List<apod_wallpaper.FavoriteApodItem> _items;
     private readonly Grid _root;
     private readonly Rectangle _tintLayer;
-    private readonly Border _surface;
+    private readonly Grid _surface;
+    private readonly Grid _imageViewport;
+    private readonly WinUIImage _previewImage;
+    private readonly CompositeTransform _imageTransform;
     private readonly ScaleTransform _surfaceScale;
+    private readonly Border _infoPanel;
+    private readonly TextBlock _infoText;
+    private readonly DispatcherTimer _infoPanelTimer = new();
     private readonly IntPtr _hwnd;
     private readonly RectInt32 _workArea;
     private WndProc? _windowProc;
     private IntPtr _previousWindowProc;
-    private bool _imagePrepared;
+    private BitmapImage? _previewBitmap;
+    private int _currentIndex;
+    private double _zoom = 1;
+    private double _panX;
+    private double _panY;
+    private double _startPanX;
+    private double _startPanY;
+    private Windows.Foundation.Point _pressPoint;
+    private Windows.Foundation.Point _lastClickPoint;
+    private DateTime _lastClickUtc = DateTime.MinValue;
+    private CancellationTokenSource? _singleClickCloseCts;
+    private bool _pointerPressed;
+    private bool _pointerStartedOnImage;
+    private bool _isDragging;
     private bool _isClosing;
     private bool _openAnimationStarted;
 
-    public FavoriteImagePreviewWindow(string imagePath, DateTime date, Action<DateTime> openInCalendar)
+    public FavoriteImagePreviewWindow(
+        IReadOnlyList<apod_wallpaper.FavoriteApodItem> items,
+        DateTime initialDate,
+        FavoriteImageActions actions)
     {
-        _date = date.Date;
-        _openInCalendar = openInCalendar;
-        _imagePath = imagePath;
+        _items = items
+            .Where(item => !string.IsNullOrWhiteSpace(item.ImagePath) && IOFile.Exists(item.ImagePath))
+            .OrderByDescending(item => item.Date)
+            .ToList();
+        _currentIndex = Math.Max(0, _items.FindIndex(item => item.Date.Date == initialDate.Date));
+        _actions = actions;
 
         ExtendsContentIntoTitleBar = true;
         AppWindow.SetIcon("Assets/AppIcon.ico");
         _hwnd = WindowNative.GetWindowHandle(this);
         _workArea = ResolveWorkArea();
-        _previewBitmap = new BitmapImage
-        {
-            DecodePixelWidth = PreviewDecodePixelWidth,
-        };
 
         _surfaceScale = new ScaleTransform
         {
             ScaleX = 0.96,
             ScaleY = 0.96,
         };
+        _imageTransform = new CompositeTransform();
+        _previewImage = new WinUIImage
+        {
+            Stretch = Stretch.Uniform,
+        };
 
+        _imageViewport = BuildImageViewport();
+        _imageViewport.RenderTransform = _imageTransform;
+        _imageViewport.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
         _tintLayer = BuildTintLayer();
         _surface = BuildSurface();
+        _infoText = BuildInfoText();
+        _infoPanel = BuildInfoPanel(_infoText);
+        _infoPanel.PointerPressed += InfoPanel_PointerPressed;
+        _infoPanel.PointerReleased += InfoPanel_PointerReleased;
         _root = new Grid
         {
             Background = BuildBackdropBrush(_workArea),
@@ -94,10 +137,20 @@ internal sealed class FavoriteImagePreviewWindow : Window
             {
                 _tintLayer,
                 _surface,
+                _infoPanel,
             },
         };
-        _root.Tapped += Root_Tapped;
+        _root.PointerPressed += Root_PointerPressed;
+        _root.PointerMoved += Root_PointerMoved;
+        _root.PointerReleased += Root_PointerReleased;
+        _root.PointerCanceled += Root_PointerCanceled;
+        _root.PointerCaptureLost += Root_PointerCaptureLost;
+        _root.PointerWheelChanged += Root_PointerWheelChanged;
         _root.KeyDown += Root_KeyDown;
+        _root.SizeChanged += Root_SizeChanged;
+
+        _infoPanelTimer.Interval = TimeSpan.FromSeconds(3);
+        _infoPanelTimer.Tick += InfoPanelTimer_Tick;
 
         Content = _root;
         SetTitleBar(new Grid { Height = 0 });
@@ -107,7 +160,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
     public async Task ShowPreviewAsync()
     {
-        await PreparePreviewImageAsync();
+        await ShowCurrentItemAsync();
         AppWindow.MoveAndResize(CreateWarmupBounds());
         AppWindow.Show(false);
         await WaitForRenderPassesAsync(2);
@@ -116,95 +169,99 @@ internal sealed class FavoriteImagePreviewWindow : Window
         BringToForeground("visible");
         _root.Focus(FocusState.Programmatic);
         BeginOpenAnimation();
+        ShowInfoPanel();
         await FadeInNativeWindowAsync();
     }
 
-    private async Task PreparePreviewImageAsync()
+    private Grid BuildImageViewport()
     {
-        if (_imagePrepared)
-            return;
+        var viewport = new Grid
+        {
+            Children = { _previewImage },
+        };
+        viewport.RightTapped += ImageViewport_RightTapped;
+        AutomationProperties.SetName(viewport, AppStrings.Get("Preview favorite image"));
+        return viewport;
+    }
 
-        _imagePrepared = true;
+    private Grid BuildSurface()
+    {
+        return new Grid
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Opacity = 0,
+            RenderTransform = _surfaceScale,
+            RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5),
+            Children = { _imageViewport },
+        };
+    }
+
+    private static TextBlock BuildInfoText()
+    {
+        return new TextBlock
+        {
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.NoWrap,
+            Foreground = new SolidColorBrush(WinUIColor.FromArgb(255, 245, 245, 245)),
+        };
+    }
+
+    private static Border BuildInfoPanel(TextBlock text)
+    {
+        return new Border
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(24),
+            Padding = new Thickness(14, 8, 14, 8),
+            CornerRadius = new CornerRadius(18),
+            Background = new SolidColorBrush(WinUIColor.FromArgb(178, 20, 20, 24)),
+            Opacity = 0,
+            Child = text,
+        };
+    }
+
+    private async Task ShowCurrentItemAsync()
+    {
+        if (_items.Count == 0)
+        {
+            await ClosePreviewAsync();
+            return;
+        }
+
+        _currentIndex = NormalizeIndex(_currentIndex);
+        var item = CurrentItem;
+        var bitmap = new BitmapImage
+        {
+            DecodePixelWidth = PreviewDecodePixelWidth,
+        };
+
         try
         {
-            var file = await StorageFile.GetFileFromPathAsync(_imagePath);
+            var file = await StorageFile.GetFileFromPathAsync(item.ImagePath);
             using IRandomAccessStream stream = await file.OpenReadAsync();
-            await _previewBitmap.SetSourceAsync(stream);
+            await bitmap.SetSourceAsync(stream);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"Favorite preview image preload failed: {ex.Message}");
-            _previewBitmap.UriSource = new Uri(_imagePath, UriKind.Absolute);
+            bitmap.UriSource = new Uri(item.ImagePath, UriKind.Absolute);
         }
+
+        _previewBitmap = bitmap;
+        _previewImage.Source = bitmap;
+        UpdateSurfaceSizeForBitmap(bitmap);
+        ResetZoomAndPan();
+        UpdateInfoText();
+        ShowInfoPanel();
     }
 
-    private Border BuildSurface()
-    {
-        var image = new WinUIImage
-        {
-            Source = _previewBitmap,
-            Stretch = Stretch.Uniform,
-        };
-
-        var calendarButton = BuildOverlayButton("\uE787", AppStrings.Get("Open favorite in Calendar"));
-        calendarButton.HorizontalAlignment = HorizontalAlignment.Left;
-        calendarButton.Click += CalendarButton_Click;
-
-        var closeButton = BuildOverlayButton("\uE711", AppStrings.Get("Close preview"));
-        closeButton.HorizontalAlignment = HorizontalAlignment.Right;
-        closeButton.Click += async (_, _) => await ClosePreviewAsync();
-
-        var grid = new Grid
-        {
-            Children =
-            {
-                image,
-                calendarButton,
-                closeButton,
-            },
-        };
-
-        var surface = new Border
-        {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Background = new SolidColorBrush(WinUIColor.FromArgb(255, 0, 0, 0)),
-            Child = grid,
-            CornerRadius = new CornerRadius(14),
-            Opacity = 0,
-            RenderTransform = _surfaceScale,
-            RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5),
-        };
-        surface.Tapped += Surface_Tapped;
-        return surface;
-    }
-
-    private static Button BuildOverlayButton(string glyph, string name)
-    {
-        var button = new Button
-        {
-            Width = 38,
-            Height = 38,
-            Margin = new Thickness(16),
-            Padding = new Thickness(0),
-            VerticalAlignment = VerticalAlignment.Top,
-            Content = new FontIcon
-            {
-                Glyph = glyph,
-                FontSize = 15,
-                FontWeight = FontWeights.SemiBold,
-            },
-        };
-        ToolTipService.SetToolTip(button, name);
-        AutomationProperties.SetName(button, name);
-        return button;
-    }
+    private apod_wallpaper.FavoriteApodItem CurrentItem => _items[_currentIndex];
 
     private void ConfigureWindow()
     {
-        _surface.MaxWidth = Math.Max(420, _workArea.Width * SurfaceScreenRatio);
-        _surface.MaxHeight = Math.Max(320, _workArea.Height * SurfaceScreenRatio);
-
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.SetBorderAndTitleBar(false, false);
@@ -218,40 +275,390 @@ internal sealed class FavoriteImagePreviewWindow : Window
         AppWindow.MoveAndResize(_workArea);
     }
 
-    private async void Root_Tapped(object sender, TappedRoutedEventArgs e)
+    private void Root_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (IsWithin(_surface, e.OriginalSource as DependencyObject))
+        var point = e.GetCurrentPoint(_root);
+        if (!point.Properties.IsLeftButtonPressed)
             return;
 
-        await ClosePreviewAsync();
+        _singleClickCloseCts?.Cancel();
+        _pointerPressed = true;
+        _pointerStartedOnImage = IsWithin(_imageViewport, e.OriginalSource as DependencyObject);
+        _isDragging = false;
+        _pressPoint = point.Position;
+        _startPanX = _panX;
+        _startPanY = _panY;
+        _root.CapturePointer(e.Pointer);
+        e.Handled = true;
     }
 
-    private async void Surface_Tapped(object sender, TappedRoutedEventArgs e)
+    private void Root_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (IsWithinButton(e.OriginalSource as DependencyObject))
+        ShowInfoPanel();
+
+        if (!_pointerPressed)
+            return;
+
+        var point = e.GetCurrentPoint(_root);
+        if (!point.Properties.IsLeftButtonPressed)
+            return;
+
+        var deltaX = point.Position.X - _pressPoint.X;
+        var deltaY = point.Position.Y - _pressPoint.Y;
+        var distance = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+        if (distance >= DragThreshold)
+            _isDragging = true;
+
+        if (_isDragging && _pointerStartedOnImage && _zoom > 1)
+        {
+            _panX = _startPanX + deltaX;
+            _panY = _startPanY + deltaY;
+            ClampPan();
+            ApplyImageTransform();
+            ShowInfoPanel();
+        }
+
+        e.Handled = true;
+    }
+
+    private void InfoPanel_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _singleClickCloseCts?.Cancel();
+        ShowInfoPanel();
+        e.Handled = true;
+    }
+
+    private void InfoPanel_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        ShowInfoPanel();
+        e.Handled = true;
+    }
+
+    private async void Root_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_pointerPressed)
+            return;
+
+        var wasDragging = _isDragging;
+        _pointerPressed = false;
+        _pointerStartedOnImage = false;
+        _isDragging = false;
+        _root.ReleasePointerCapture(e.Pointer);
+        e.Handled = true;
+
+        if (wasDragging)
+        {
+            _lastClickUtc = DateTime.MinValue;
+            return;
+        }
+
+        await HandleSimpleClickAsync(e.GetCurrentPoint(_root).Position);
+    }
+
+    private void Root_PointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        ResetPointerGesture();
+    }
+
+    private void Root_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        ResetPointerGesture();
+    }
+
+    private void ResetPointerGesture()
+    {
+        _pointerPressed = false;
+        _pointerStartedOnImage = false;
+        _isDragging = false;
+    }
+
+    private async Task HandleSimpleClickAsync(Windows.Foundation.Point point)
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastClickUtc).TotalMilliseconds <= SingleClickCloseDelayMs &&
+            Distance(point, _lastClickPoint) <= DragThreshold)
+        {
+            _singleClickCloseCts?.Cancel();
+            _lastClickUtc = DateTime.MinValue;
+            ResetZoomAndPan();
+            ShowInfoPanel();
+            return;
+        }
+
+        _lastClickUtc = now;
+        _lastClickPoint = point;
+        var cts = new CancellationTokenSource();
+        _singleClickCloseCts = cts;
+        try
+        {
+            await Task.Delay(SingleClickCloseDelayMs, cts.Token);
+            if (!cts.IsCancellationRequested)
+                await ClosePreviewAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private void Root_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (!IsWithin(_imageViewport, e.OriginalSource as DependencyObject))
+            return;
+
+        var delta = e.GetCurrentPoint(_root).Properties.MouseWheelDelta;
+        if (delta == 0)
+            return;
+
+        var zoomDelta = delta > 0 ? WheelZoomStep : -WheelZoomStep;
+        SetZoom(_zoom + zoomDelta);
+        ShowInfoPanel();
+        e.Handled = true;
+    }
+
+    private void ImageViewport_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (_items.Count == 0)
             return;
 
         e.Handled = true;
-        await ClosePreviewAsync();
-    }
-
-    private async void CalendarButton_Click(object sender, RoutedEventArgs e)
-    {
-        var date = _date;
-        var openInCalendar = _openInCalendar;
-        await ClosePreviewAsync();
-        openInCalendar(date);
+        ShowInfoPanel();
+        var menu = FavoriteContextMenuFactory.Create(CurrentItem, new FavoriteImageActions(
+            _actions.SetAsWallpaperAsync,
+            OpenCurrentItemInCalendar,
+            _actions.OpenInFolder,
+            RemoveCurrentItemFromFavoritesAsync));
+        menu.ShowAt(_root, e.GetPosition(_root));
     }
 
     private async void Root_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        e.Handled = true;
+        if (e.Key == VirtualKey.Escape || e.Key == VirtualKey.Space)
+        {
+            e.Handled = true;
+            await ClosePreviewAsync();
+            return;
+        }
+
+        if (e.Key == VirtualKey.Left || e.Key == VirtualKey.A)
+        {
+            e.Handled = true;
+            await ShowPreviousAsync();
+            return;
+        }
+
+        if (e.Key == VirtualKey.Right || e.Key == VirtualKey.D)
+        {
+            e.Handled = true;
+            await ShowNextAsync();
+            return;
+        }
+
+        if (e.Key == VirtualKey.Number0 && IsControlKeyDown())
+        {
+            e.Handled = true;
+            ResetZoomAndPan();
+            ShowInfoPanel();
+        }
+    }
+
+    private static bool IsControlKeyDown()
+    {
+        var state = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
+        return (state & CoreVirtualKeyStates.Down) == CoreVirtualKeyStates.Down;
+    }
+
+    private async Task ShowPreviousAsync()
+    {
+        if (_items.Count == 0)
+            return;
+
+        _currentIndex = NormalizeIndex(_currentIndex - 1);
+        await ShowCurrentItemAsync();
+    }
+
+    private async Task ShowNextAsync()
+    {
+        if (_items.Count == 0)
+            return;
+
+        _currentIndex = NormalizeIndex(_currentIndex + 1);
+        await ShowCurrentItemAsync();
+    }
+
+    private void OpenCurrentItemInCalendar(apod_wallpaper.FavoriteApodItem item)
+    {
+        _ = OpenCurrentItemInCalendarAsync(item);
+    }
+
+    private async Task OpenCurrentItemInCalendarAsync(apod_wallpaper.FavoriteApodItem item)
+    {
         await ClosePreviewAsync();
+        _actions.OpenInCalendar(item);
+    }
+
+    private async Task<bool> RemoveCurrentItemFromFavoritesAsync(apod_wallpaper.FavoriteApodItem item)
+    {
+        var removed = await _actions.RemoveFromFavoritesAsync(item);
+        if (!removed)
+            return false;
+
+        var removedIndex = _items.FindIndex(candidate => candidate.Date.Date == item.Date.Date);
+        if (removedIndex >= 0)
+            _items.RemoveAt(removedIndex);
+
+        if (_items.Count == 0)
+        {
+            await ClosePreviewAsync();
+            return true;
+        }
+
+        _currentIndex = Math.Min(Math.Max(0, removedIndex), _items.Count - 1);
+        await ShowCurrentItemAsync();
+        return true;
+    }
+
+    private void SetZoom(double value)
+    {
+        _zoom = Math.Clamp(value, MinZoom, MaxZoom);
+        if (_zoom <= 1)
+        {
+            _panX = 0;
+            _panY = 0;
+        }
+
+        ClampPan();
+        ApplyImageTransform();
+        UpdateInfoText();
+    }
+
+    private void ResetZoomAndPan()
+    {
+        _zoom = 1;
+        _panX = 0;
+        _panY = 0;
+        ApplyImageTransform();
+        UpdateInfoText();
+    }
+
+    private void UpdateSurfaceSizeForBitmap(BitmapImage bitmap)
+    {
+        var viewportWidth = ResolveViewportWidth();
+        var viewportHeight = ResolveViewportHeight();
+        var bitmapWidth = bitmap.PixelWidth > 0 ? bitmap.PixelWidth : viewportWidth;
+        var bitmapHeight = bitmap.PixelHeight > 0 ? bitmap.PixelHeight : viewportHeight;
+        var fitScale = Math.Min(
+            (viewportWidth * SurfaceScreenRatio) / bitmapWidth,
+            (viewportHeight * SurfaceScreenRatio) / bitmapHeight);
+
+        _surface.Width = Math.Max(1, bitmapWidth * fitScale);
+        _surface.Height = Math.Max(1, bitmapHeight * fitScale);
+    }
+
+    private double ResolveViewportWidth()
+    {
+        return Math.Max(1, _root.ActualWidth > 0 ? _root.ActualWidth : _workArea.Width);
+    }
+
+    private double ResolveViewportHeight()
+    {
+        return Math.Max(1, _root.ActualHeight > 0 ? _root.ActualHeight : _workArea.Height);
+    }
+
+    private void ClampPan()
+    {
+        var bounds = ResolvePanBounds();
+        _panX = Math.Clamp(_panX, -bounds.X, bounds.X);
+        _panY = Math.Clamp(_panY, -bounds.Y, bounds.Y);
+    }
+
+    private Windows.Foundation.Point ResolvePanBounds()
+    {
+        var viewportWidth = ResolveViewportWidth();
+        var viewportHeight = ResolveViewportHeight();
+        var surfaceWidth = Math.Max(1, _surface.ActualWidth > 0 ? _surface.ActualWidth : _surface.Width);
+        var surfaceHeight = Math.Max(1, _surface.ActualHeight > 0 ? _surface.ActualHeight : _surface.Height);
+        var renderedWidth = surfaceWidth * _zoom;
+        var renderedHeight = surfaceHeight * _zoom;
+        return new Windows.Foundation.Point(
+            Math.Max(0, (renderedWidth - viewportWidth) / 2),
+            Math.Max(0, (renderedHeight - viewportHeight) / 2));
+    }
+
+    private void Root_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_previewBitmap == null)
+            return;
+
+        UpdateSurfaceSizeForBitmap(_previewBitmap);
+        ClampPan();
+        ApplyImageTransform();
+    }
+
+    private void ApplyImageTransform()
+    {
+        _imageTransform.ScaleX = _zoom;
+        _imageTransform.ScaleY = _zoom;
+        _imageTransform.TranslateX = _panX;
+        _imageTransform.TranslateY = _panY;
+    }
+
+    private void UpdateInfoText()
+    {
+        if (_items.Count == 0)
+            return;
+
+        _infoText.Text = string.Format(
+            CultureInfo.InvariantCulture,
+            "{0}   {1}%   {2}/{3}",
+            CurrentItem.Date.ToString("dd MMM yyyy", AppStrings.DateCulture),
+            Math.Round(_zoom * 100),
+            _currentIndex + 1,
+            _items.Count);
+    }
+
+    private void ShowInfoPanel()
+    {
+        _infoPanelTimer.Stop();
+        AnimateOpacity(_infoPanel, 1, 100);
+        _infoPanelTimer.Start();
+    }
+
+    private void InfoPanelTimer_Tick(object? sender, object e)
+    {
+        _infoPanelTimer.Stop();
+        AnimateOpacity(_infoPanel, 0, 180);
     }
 
     private void FavoriteImagePreviewWindow_Closed(object sender, WindowEventArgs args)
     {
+        _singleClickCloseCts?.Cancel();
+        _infoPanelTimer.Stop();
+        _infoPanelTimer.Tick -= InfoPanelTimer_Tick;
+        _infoPanel.PointerPressed -= InfoPanel_PointerPressed;
+        _infoPanel.PointerReleased -= InfoPanel_PointerReleased;
+        _root.SizeChanged -= Root_SizeChanged;
         RemoveMouseActivateGuard();
+    }
+
+    private static double Distance(Windows.Foundation.Point first, Windows.Foundation.Point second)
+    {
+        var deltaX = first.X - second.X;
+        var deltaY = first.Y - second.Y;
+        return Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+    }
+
+    private int NormalizeIndex(int index)
+    {
+        if (_items.Count == 0)
+            return 0;
+
+        if (index < 0)
+            return _items.Count - 1;
+
+        if (index >= _items.Count)
+            return 0;
+
+        return index;
     }
 
     private static bool IsWithin(DependencyObject parent, DependencyObject? child)
@@ -259,19 +666,6 @@ internal sealed class FavoriteImagePreviewWindow : Window
         while (child != null)
         {
             if (ReferenceEquals(parent, child))
-                return true;
-
-            child = VisualTreeHelper.GetParent(child);
-        }
-
-        return false;
-    }
-
-    private static bool IsWithinButton(DependencyObject? child)
-    {
-        while (child != null)
-        {
-            if (child is Button)
                 return true;
 
             child = VisualTreeHelper.GetParent(child);
@@ -291,48 +685,45 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
     private void AnimateOpen()
     {
-        var tintOpacityAnimation = new DoubleAnimation
-        {
-            To = 1,
-            Duration = new Duration(TimeSpan.FromMilliseconds(BackgroundFadeInMs)),
-            EnableDependentAnimation = true,
-        };
-        Storyboard.SetTarget(tintOpacityAnimation, _tintLayer);
-        Storyboard.SetTargetProperty(tintOpacityAnimation, "Opacity");
-
-        var surfaceOpacityAnimation = new DoubleAnimation
-        {
-            To = 1,
-            Duration = new Duration(TimeSpan.FromMilliseconds(SurfaceFadeInMs)),
-            EnableDependentAnimation = true,
-        };
-        Storyboard.SetTarget(surfaceOpacityAnimation, _surface);
-        Storyboard.SetTargetProperty(surfaceOpacityAnimation, "Opacity");
-
-        var scaleXAnimation = new DoubleAnimation
-        {
-            To = 1,
-            Duration = new Duration(TimeSpan.FromMilliseconds(SurfaceFadeInMs)),
-            EnableDependentAnimation = true,
-        };
-        Storyboard.SetTarget(scaleXAnimation, _surfaceScale);
-        Storyboard.SetTargetProperty(scaleXAnimation, "ScaleX");
-
-        var scaleYAnimation = new DoubleAnimation
-        {
-            To = 1,
-            Duration = new Duration(TimeSpan.FromMilliseconds(SurfaceFadeInMs)),
-            EnableDependentAnimation = true,
-        };
-        Storyboard.SetTarget(scaleYAnimation, _surfaceScale);
-        Storyboard.SetTargetProperty(scaleYAnimation, "ScaleY");
-
         var storyboard = new Storyboard();
-        storyboard.Children.Add(tintOpacityAnimation);
-        storyboard.Children.Add(surfaceOpacityAnimation);
-        storyboard.Children.Add(scaleXAnimation);
-        storyboard.Children.Add(scaleYAnimation);
+        storyboard.Children.Add(CreateOpacityAnimation(_tintLayer, 1, BackgroundFadeInMs));
+        storyboard.Children.Add(CreateOpacityAnimation(_surface, 1, SurfaceFadeInMs));
+        storyboard.Children.Add(CreateScaleAnimation(_surfaceScale, "ScaleX", 1, SurfaceFadeInMs));
+        storyboard.Children.Add(CreateScaleAnimation(_surfaceScale, "ScaleY", 1, SurfaceFadeInMs));
         storyboard.Begin();
+    }
+
+    private static void AnimateOpacity(UIElement target, double to, int durationMs)
+    {
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(CreateOpacityAnimation(target, to, durationMs));
+        storyboard.Begin();
+    }
+
+    private static DoubleAnimation CreateOpacityAnimation(UIElement target, double to, int durationMs)
+    {
+        var animation = new DoubleAnimation
+        {
+            To = to,
+            Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, "Opacity");
+        return animation;
+    }
+
+    private static DoubleAnimation CreateScaleAnimation(ScaleTransform target, string property, double to, int durationMs)
+    {
+        var animation = new DoubleAnimation
+        {
+            To = to,
+            Duration = new Duration(TimeSpan.FromMilliseconds(durationMs)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, property);
+        return animation;
     }
 
     private RectInt32 CreateWarmupBounds()
@@ -469,13 +860,9 @@ internal sealed class FavoriteImagePreviewWindow : Window
             return;
 
         _isClosing = true;
-        await AnimateCloseAsync();
+        _singleClickCloseCts?.Cancel();
+        await FadeOutNativeWindowAsync();
         Close();
-    }
-
-    private Task AnimateCloseAsync()
-    {
-        return FadeOutNativeWindowAsync();
     }
 
     private async Task FadeInNativeWindowAsync()

@@ -31,6 +31,7 @@ public sealed partial class FavoritesPage : Page
     private int _loadVersion;
     private bool _isApplyingFavoriteWallpaper;
     private bool _previewOpenInProgress;
+    private FavoriteImageActions? _favoriteActions;
 
     public FavoritesPage()
     {
@@ -287,7 +288,7 @@ public sealed partial class FavoritesPage : Page
         try
         {
             _previewOpenInProgress = true;
-            window = new FavoriteImagePreviewWindow(item.ImagePath, item.Date.Date, date => _arguments?.OpenFavoriteDate(date));
+            window = new FavoriteImagePreviewWindow(_favoriteItems, item.Date.Date, GetFavoriteActions());
             OpenPreviewWindows.Add(window);
             window.Closed += (_, _) =>
             {
@@ -307,41 +308,17 @@ public sealed partial class FavoritesPage : Page
 
     private void ShowFavoriteContextMenu(FrameworkElement target, apod_wallpaper.FavoriteApodItem item)
     {
-        var menu = new MenuFlyout();
-        var setWallpaperItem = new MenuFlyoutItem
-        {
-            Text = AppStrings.Get("Set as wallpaper"),
-            Icon = new FontIcon { Glyph = "\uE771" },
-        };
-        setWallpaperItem.Click += async (_, _) => await SetFavoriteAsWallpaperAsync(item);
-
-        var openCalendarItem = new MenuFlyoutItem
-        {
-            Text = AppStrings.Get("Open favorite in Calendar"),
-            Icon = new FontIcon { Glyph = "\uE787" },
-        };
-        openCalendarItem.Click += (_, _) => _arguments?.OpenFavoriteDate(item.Date.Date);
-
-        var openFolderItem = new MenuFlyoutItem
-        {
-            Text = AppStrings.Get("Open in folder"),
-            Icon = new FontIcon { Glyph = "\uE838" },
-        };
-        openFolderItem.Click += (_, _) => OpenImageInFolder(item.ImagePath);
-
-        var removeFavoriteItem = new MenuFlyoutItem
-        {
-            Text = AppStrings.Get("Remove from favorites"),
-            Icon = new FontIcon { Glyph = "\uE711" },
-        };
-        removeFavoriteItem.Click += async (_, _) => await RemoveFavoriteAsync(item.Date.Date, null);
-
-        menu.Items.Add(setWallpaperItem);
-        menu.Items.Add(openCalendarItem);
-        menu.Items.Add(openFolderItem);
-        menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(removeFavoriteItem);
+        var menu = FavoriteContextMenuFactory.Create(item, GetFavoriteActions());
         menu.ShowAt(target);
+    }
+
+    private FavoriteImageActions GetFavoriteActions()
+    {
+        return _favoriteActions ??= new FavoriteImageActions(
+            SetFavoriteAsWallpaperAsync,
+            item => _arguments?.OpenFavoriteDate(item.Date.Date),
+            item => OpenImageInFolder(item.ImagePath),
+            item => RemoveFavoriteAsync(item.Date.Date, null));
     }
 
     private static void OpenImageInFolder(string? imagePath)
@@ -365,10 +342,10 @@ public sealed partial class FavoritesPage : Page
         await RemoveFavoriteAsync(date.Date, removeButton);
     }
 
-    private async Task RemoveFavoriteAsync(DateTime date, Button? removeButton)
+    private async Task<bool> RemoveFavoriteAsync(DateTime date, Button? removeButton)
     {
         if (_arguments == null)
-            return;
+            return false;
 
         if (removeButton != null)
             removeButton.IsEnabled = false;
@@ -378,7 +355,7 @@ public sealed partial class FavoritesPage : Page
         {
             if (removeButton != null)
                 removeButton.IsEnabled = true;
-            return;
+            return false;
         }
 
         await FadeOutFavoriteItemAsync(date.Date);
@@ -388,6 +365,7 @@ public sealed partial class FavoritesPage : Page
         RemoveFavoriteGridItem(date.Date);
         EmptyFavoritesPanel.Visibility = _favoriteItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         FavoritesGridView.Visibility = _favoriteItems.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        return true;
     }
 
     private async Task SetFavoriteAsWallpaperAsync(apod_wallpaper.FavoriteApodItem item)
