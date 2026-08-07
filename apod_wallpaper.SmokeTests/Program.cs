@@ -571,9 +571,33 @@ namespace apod_wallpaper.SmokeTests
                 previewSource.IndexOf("if (e.Key == VirtualKey.Escape || e.Key == VirtualKey.Space)", StringComparison.Ordinal) >= 0,
                 "Favorites preview must not close on arbitrary keyboard input.");
             Assert(previewSource.IndexOf("MinZoom = 0.4", StringComparison.Ordinal) >= 0 &&
-                previewSource.IndexOf("MaxZoom = 2.0", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("MaxZoom = 5.0", StringComparison.Ordinal) >= 0 &&
                 previewSource.IndexOf("PointerWheelChanged", StringComparison.Ordinal) >= 0,
                 "Favorites preview must keep bounded mouse-wheel zoom.");
+            Assert(previewSource.IndexOf("MinWheelZoomStep = 0.025", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("MaxWheelZoomStep = 0.125", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("SlowWheelNotchesPerSecond = 5", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("FastWheelNotchesPerSecond = 20", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("instantaneousSpeed = Math.Abs(signedNotches) * 1000d / elapsedMs", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("_smoothedWheelSpeed += (instantaneousSpeed - _smoothedWheelSpeed) * WheelSpeedSmoothingFactor", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("(clampedSpeed - SlowWheelNotchesPerSecond) /", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("Math.Pow(1 + zoomStep, signedNotches)", StringComparison.Ordinal) >= 0,
+                "Favorites preview wheel zoom must map measured wheel speed to a smooth 2.5-12.5 percent step.");
+            Assert(previewSource.IndexOf("direction != _lastWheelDirection", StringComparison.Ordinal) >= 0,
+                "Favorites preview wheel speed must reset when the user reverses zoom direction.");
+            Assert(previewSource.IndexOf("if (!IsWithin(_imageViewport, e.OriginalSource", StringComparison.Ordinal) < 0 &&
+                previewSource.IndexOf("ResolveZoomAnchor(point.Position", StringComparison.Ordinal) >= 0,
+                "Favorites preview wheel zoom must work across the fullscreen viewer and resolve an image-aware anchor.");
+            Assert(previewSource.IndexOf("anchor.X - ((anchor.X - _targetPanX) * zoomRatio)", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("anchor.Y - ((anchor.Y - _targetPanY) * zoomRatio)", StringComparison.Ordinal) >= 0,
+                "Favorites preview zoom must preserve the image point beneath the pointer.");
+            Assert(previewSource.IndexOf("CompositionTarget.Rendering += ZoomAnimation_Rendering;", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("CompositionTarget.Rendering -= ZoomAnimation_Rendering;", StringComparison.Ordinal) >= 0,
+                "Favorites preview zoom smoothing must attach and detach its render callback.");
+            Assert(previewSource.IndexOf("StorageFile.GetFileFromPathAsync(item.ImagePath)", StringComparison.Ordinal) >= 0 &&
+                previewSource.IndexOf("PreviewDecodePixelWidth", StringComparison.Ordinal) < 0 &&
+                previewSource.IndexOf("DecodePixelWidth =", StringComparison.Ordinal) < 0,
+                "Favorites fullscreen preview must decode the full local image instead of the thumbnail or a capped 1800 px bitmap.");
             Assert(previewSource.IndexOf("CapturePointer", StringComparison.Ordinal) >= 0 &&
                 previewSource.IndexOf("ReleasePointerCapture(e.Pointer)", StringComparison.Ordinal) >= 0 &&
                 previewSource.IndexOf("DragThreshold = 6", StringComparison.Ordinal) >= 0,

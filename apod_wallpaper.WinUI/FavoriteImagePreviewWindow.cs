@@ -44,7 +44,6 @@ namespace apod_wallpaper.WinUI;
 internal sealed class FavoriteImagePreviewWindow : Window
 {
     private const double SurfaceScreenRatio = 0.74;
-    private const int PreviewDecodePixelWidth = 1800;
     private const double BackdropScale = 0.11;
     private const byte BackdropTintAlpha = 96;
     private const int BackgroundFadeInMs = 100;
@@ -52,8 +51,18 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private const int NativeWindowFadeInMs = 120;
     private const int CloseFadeOutMs = 80;
     private const double MinZoom = 0.4;
-    private const double MaxZoom = 2.0;
-    private const double WheelZoomStep = 0.12;
+    private const double MaxZoom = 5.0;
+    private const double WheelDeltaPerNotch = 120;
+    private const double MinWheelZoomStep = 0.025;
+    private const double MaxWheelZoomStep = 0.125;
+    private const double SlowWheelNotchesPerSecond = 5;
+    private const double FastWheelNotchesPerSecond = 20;
+    private const double WheelSpeedSmoothingFactor = 0.5;
+    private const double WheelBurstResetMs = 350;
+    private const double ZoomSmoothingTimeConstantMs = 32;
+    private const double ZoomCompletionEpsilon = 0.0015;
+    private const double PanCompletionEpsilon = 0.5;
+    private const double MaxAnimationFrameGapMs = 50;
     private const double DragThreshold = 6;
     private const int SingleClickCloseDelayMs = 260;
     private static readonly bool CapturePreviewStartupFrames = false;
@@ -77,10 +86,17 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private BitmapImage? _previewBitmap;
     private int _currentIndex;
     private double _zoom = 1;
+    private double _targetZoom = 1;
     private double _panX;
     private double _panY;
+    private double _targetPanX;
+    private double _targetPanY;
+    private double _smoothedWheelSpeed;
     private double _startPanX;
     private double _startPanY;
+    private long _lastWheelInputTimestamp;
+    private long _lastZoomFrameTimestamp;
+    private int _lastWheelDirection;
     private Windows.Foundation.Point _pressPoint;
     private Windows.Foundation.Point _lastClickPoint;
     private DateTime _lastClickUtc = DateTime.MinValue;
@@ -90,6 +106,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
     private bool _isDragging;
     private bool _isClosing;
     private bool _openAnimationStarted;
+    private bool _zoomAnimationRunning;
 
     public FavoriteImagePreviewWindow(
         IReadOnlyList<apod_wallpaper.FavoriteApodItem> items,
@@ -233,10 +250,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
         _currentIndex = NormalizeIndex(_currentIndex);
         var item = CurrentItem;
-        var bitmap = new BitmapImage
-        {
-            DecodePixelWidth = PreviewDecodePixelWidth,
-        };
+        var bitmap = new BitmapImage();
 
         try
         {
@@ -281,6 +295,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
         if (!point.Properties.IsLeftButtonPressed)
             return;
 
+        StopZoomAnimation(snapToTarget: true);
         _singleClickCloseCts?.Cancel();
         _pointerPressed = true;
         _pointerStartedOnImage = IsWithin(_imageViewport, e.OriginalSource as DependencyObject);
@@ -314,6 +329,9 @@ internal sealed class FavoriteImagePreviewWindow : Window
             _panX = _startPanX + deltaX;
             _panY = _startPanY + deltaY;
             ClampPan();
+            _targetZoom = _zoom;
+            _targetPanX = _panX;
+            _targetPanY = _panY;
             ApplyImageTransform();
             ShowInfoPanel();
         }
@@ -402,17 +420,84 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
     private void Root_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
-        if (!IsWithin(_imageViewport, e.OriginalSource as DependencyObject))
-            return;
-
-        var delta = e.GetCurrentPoint(_root).Properties.MouseWheelDelta;
+        var point = e.GetCurrentPoint(_root);
+        var delta = point.Properties.MouseWheelDelta;
         if (delta == 0)
             return;
 
-        var zoomDelta = delta > 0 ? WheelZoomStep : -WheelZoomStep;
-        SetZoom(_zoom + zoomDelta);
+        var signedNotches = delta / WheelDeltaPerNotch;
+        var zoomStep = ResolveAdaptiveWheelZoomStep(signedNotches);
+        var nextZoom = Math.Clamp(
+            _targetZoom * Math.Pow(1 + zoomStep, signedNotches),
+            MinZoom,
+            MaxZoom);
+        var zoomRatio = nextZoom / _targetZoom;
+        var anchor = ResolveZoomAnchor(point.Position, e.OriginalSource as DependencyObject);
+
+        _targetPanX = anchor.X - ((anchor.X - _targetPanX) * zoomRatio);
+        _targetPanY = anchor.Y - ((anchor.Y - _targetPanY) * zoomRatio);
+        _targetZoom = nextZoom;
+        if (_targetZoom <= 1)
+        {
+            _targetPanX = 0;
+            _targetPanY = 0;
+        }
+
+        ClampPan(ref _targetPanX, ref _targetPanY, _targetZoom);
+        StartZoomAnimation();
         ShowInfoPanel();
         e.Handled = true;
+    }
+
+    private double ResolveAdaptiveWheelZoomStep(double signedNotches)
+    {
+        var now = Stopwatch.GetTimestamp();
+        var elapsedMs = ElapsedMilliseconds(_lastWheelInputTimestamp, now);
+        var direction = Math.Sign(signedNotches);
+
+        if (elapsedMs >= WheelBurstResetMs || direction != _lastWheelDirection)
+        {
+            _smoothedWheelSpeed = SlowWheelNotchesPerSecond;
+        }
+        else
+        {
+            elapsedMs = Math.Max(1, elapsedMs);
+            var instantaneousSpeed = Math.Abs(signedNotches) * 1000d / elapsedMs;
+            _smoothedWheelSpeed += (instantaneousSpeed - _smoothedWheelSpeed) * WheelSpeedSmoothingFactor;
+        }
+
+        var clampedSpeed = Math.Clamp(
+            _smoothedWheelSpeed,
+            SlowWheelNotchesPerSecond,
+            FastWheelNotchesPerSecond);
+        var normalizedSpeed = (clampedSpeed - SlowWheelNotchesPerSecond) /
+            (FastWheelNotchesPerSecond - SlowWheelNotchesPerSecond);
+        var zoomStep = MinWheelZoomStep +
+            ((MaxWheelZoomStep - MinWheelZoomStep) * normalizedSpeed);
+
+        _lastWheelInputTimestamp = now;
+        _lastWheelDirection = direction;
+        return zoomStep;
+    }
+
+    private Windows.Foundation.Point ResolveZoomAnchor(
+        Windows.Foundation.Point pointerPosition,
+        DependencyObject? originalSource)
+    {
+        if (!IsWithin(_imageViewport, originalSource))
+            return new Windows.Foundation.Point(0, 0);
+
+        return new Windows.Foundation.Point(
+            pointerPosition.X - (ResolveViewportWidth() / 2),
+            pointerPosition.Y - (ResolveViewportHeight() / 2));
+    }
+
+    private static double ElapsedMilliseconds(long startTimestamp, long endTimestamp)
+    {
+        if (startTimestamp <= 0 || endTimestamp <= startTimestamp)
+            return double.PositiveInfinity;
+
+        return (endTimestamp - startTimestamp) * 1000d / Stopwatch.Frequency;
     }
 
     private void ImageViewport_RightTapped(object sender, RightTappedRoutedEventArgs e)
@@ -517,25 +602,77 @@ internal sealed class FavoriteImagePreviewWindow : Window
         return true;
     }
 
-    private void SetZoom(double value)
+    private void StartZoomAnimation()
     {
-        _zoom = Math.Clamp(value, MinZoom, MaxZoom);
-        if (_zoom <= 1)
-        {
-            _panX = 0;
-            _panY = 0;
-        }
+        if (_zoomAnimationRunning)
+            return;
 
+        _zoomAnimationRunning = true;
+        _lastZoomFrameTimestamp = Stopwatch.GetTimestamp();
+        CompositionTarget.Rendering += ZoomAnimation_Rendering;
+    }
+
+    private void ZoomAnimation_Rendering(object? sender, object e)
+    {
+        var now = Stopwatch.GetTimestamp();
+        var elapsedMs = Math.Min(
+            MaxAnimationFrameGapMs,
+            Math.Max(1, ElapsedMilliseconds(_lastZoomFrameTimestamp, now)));
+        _lastZoomFrameTimestamp = now;
+        var blend = 1 - Math.Exp(-elapsedMs / ZoomSmoothingTimeConstantMs);
+
+        _zoom += (_targetZoom - _zoom) * blend;
+        _panX += (_targetPanX - _panX) * blend;
+        _panY += (_targetPanY - _panY) * blend;
         ClampPan();
         ApplyImageTransform();
         UpdateInfoText();
+
+        if (Math.Abs(_targetZoom - _zoom) <= ZoomCompletionEpsilon &&
+            Math.Abs(_targetPanX - _panX) <= PanCompletionEpsilon &&
+            Math.Abs(_targetPanY - _panY) <= PanCompletionEpsilon)
+        {
+            StopZoomAnimation(snapToTarget: true);
+        }
+    }
+
+    private void StopZoomAnimation(bool snapToTarget)
+    {
+        if (_zoomAnimationRunning)
+        {
+            CompositionTarget.Rendering -= ZoomAnimation_Rendering;
+            _zoomAnimationRunning = false;
+        }
+
+        if (snapToTarget)
+        {
+            _zoom = _targetZoom;
+            _panX = _targetPanX;
+            _panY = _targetPanY;
+            ClampPan();
+            ApplyImageTransform();
+            UpdateInfoText();
+        }
+        else
+        {
+            _targetZoom = _zoom;
+            _targetPanX = _panX;
+            _targetPanY = _panY;
+        }
     }
 
     private void ResetZoomAndPan()
     {
+        StopZoomAnimation(snapToTarget: false);
         _zoom = 1;
+        _targetZoom = 1;
         _panX = 0;
         _panY = 0;
+        _targetPanX = 0;
+        _targetPanY = 0;
+        _smoothedWheelSpeed = 0;
+        _lastWheelInputTimestamp = 0;
+        _lastWheelDirection = 0;
         ApplyImageTransform();
         UpdateInfoText();
     }
@@ -566,19 +703,24 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
     private void ClampPan()
     {
-        var bounds = ResolvePanBounds();
-        _panX = Math.Clamp(_panX, -bounds.X, bounds.X);
-        _panY = Math.Clamp(_panY, -bounds.Y, bounds.Y);
+        ClampPan(ref _panX, ref _panY, _zoom);
     }
 
-    private Windows.Foundation.Point ResolvePanBounds()
+    private void ClampPan(ref double panX, ref double panY, double zoom)
+    {
+        var bounds = ResolvePanBounds(zoom);
+        panX = Math.Clamp(panX, -bounds.X, bounds.X);
+        panY = Math.Clamp(panY, -bounds.Y, bounds.Y);
+    }
+
+    private Windows.Foundation.Point ResolvePanBounds(double zoom)
     {
         var viewportWidth = ResolveViewportWidth();
         var viewportHeight = ResolveViewportHeight();
         var surfaceWidth = Math.Max(1, _surface.ActualWidth > 0 ? _surface.ActualWidth : _surface.Width);
         var surfaceHeight = Math.Max(1, _surface.ActualHeight > 0 ? _surface.ActualHeight : _surface.Height);
-        var renderedWidth = surfaceWidth * _zoom;
-        var renderedHeight = surfaceHeight * _zoom;
+        var renderedWidth = surfaceWidth * zoom;
+        var renderedHeight = surfaceHeight * zoom;
         return new Windows.Foundation.Point(
             Math.Max(0, (renderedWidth - viewportWidth) / 2),
             Math.Max(0, (renderedHeight - viewportHeight) / 2));
@@ -591,6 +733,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
         UpdateSurfaceSizeForBitmap(_previewBitmap);
         ClampPan();
+        ClampPan(ref _targetPanX, ref _targetPanY, _targetZoom);
         ApplyImageTransform();
     }
 
@@ -631,6 +774,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
 
     private void FavoriteImagePreviewWindow_Closed(object sender, WindowEventArgs args)
     {
+        StopZoomAnimation(snapToTarget: false);
         _singleClickCloseCts?.Cancel();
         _infoPanelTimer.Stop();
         _infoPanelTimer.Tick -= InfoPanelTimer_Tick;
@@ -860,6 +1004,7 @@ internal sealed class FavoriteImagePreviewWindow : Window
             return;
 
         _isClosing = true;
+        StopZoomAnimation(snapToTarget: false);
         _singleClickCloseCts?.Cancel();
         await FadeOutNativeWindowAsync();
         Close();
