@@ -298,6 +298,65 @@ namespace apod_wallpaper.SmokeTests
             }
         }
 
+        private sealed class RecordingApodSource : apod_wallpaper.IApodClient
+        {
+            internal readonly List<string> Calls = new List<string>();
+            internal readonly apod_wallpaper.ApodEntry Entry = new apod_wallpaper.ApodEntry();
+            internal DateTime Start;
+            internal DateTime End;
+            internal string Key;
+            internal Exception Failure;
+            internal readonly TaskCompletionSource<apod_wallpaper.ApodEntry> Pending =
+                new TaskCompletionSource<apod_wallpaper.ApodEntry>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public apod_wallpaper.ApodEntry GetEntry(DateTime date)
+            {
+                Calls.Add("single"); Start = date;
+                if (Failure != null) throw Failure;
+                return Entry;
+            }
+            public Task<apod_wallpaper.ApodEntry> GetEntryAsync(DateTime date)
+            { Calls.Add("single_async"); Start = date; return Pending.Task; }
+            public apod_wallpaper.ApodEntry GetLatestEntry() { Calls.Add("latest"); return Entry; }
+            public Task<apod_wallpaper.ApodEntry> GetLatestEntryAsync()
+            { Calls.Add("latest_async"); return Task.FromResult(Entry); }
+            public IReadOnlyList<apod_wallpaper.ApodEntry> GetEntries(DateTime startDate, DateTime endDate)
+            { Calls.Add("range"); Start = startDate; End = endDate; return new[] { Entry }; }
+            public Task<IReadOnlyList<apod_wallpaper.ApodEntry>> GetEntriesAsync(DateTime startDate, DateTime endDate)
+            { Calls.Add("range_async"); Start = startDate; End = endDate; return Task.FromResult<IReadOnlyList<apod_wallpaper.ApodEntry>>(new[] { Entry }); }
+            public Task<apod_wallpaper.ApiKeyValidationState> ValidateApiKeyAsync(string apiKey)
+            { Calls.Add("validate"); Key = apiKey; return Task.FromResult(apod_wallpaper.ApiKeyValidationState.Unknown); }
+        }
+
+        private static async Task ApodFacadePreservesContractsAsync()
+        {
+            var source = new RecordingApodSource();
+            apod_wallpaper.IApodClient client = new apod_wallpaper.ApodClient(source);
+            var start = new DateTime(2026, 9, 1, 12, 30, 0);
+            var end = start.AddDays(20);
+            Assert(ReferenceEquals(client.GetEntry(start), source.Entry) && source.Start == start, "Sync date and result must pass through unchanged.");
+            var pending = client.GetEntryAsync(end);
+            Assert(!pending.IsCompleted && source.Start == end, "Async source must not be blocked or replaced by sync work.");
+            source.Pending.SetResult(source.Entry);
+            Assert(ReferenceEquals(await pending, source.Entry), "Async result must be preserved.");
+            Assert(ReferenceEquals(client.GetLatestEntry(), source.Entry), "Latest sync result.");
+            Assert(ReferenceEquals(await client.GetLatestEntryAsync(), source.Entry), "Latest async result.");
+            Assert(ReferenceEquals(client.GetEntries(start, end)[0], source.Entry) && source.Start == start && source.End == end, "Sync range contract.");
+            Assert(ReferenceEquals((await client.GetEntriesAsync(start, end))[0], source.Entry) && source.Start == start && source.End == end, "Async range contract.");
+            Assert(await client.ValidateApiKeyAsync("test-key") == apod_wallpaper.ApiKeyValidationState.Unknown && source.Key == "test-key", "Validation remains source-owned.");
+            Assert(string.Join(",", source.Calls) == "single,single_async,latest,latest_async,range,range_async,validate", "Every operation must route once to the matching source method.");
+            var failure = new IOException("source failure");
+            source.Failure = failure;
+            try { client.GetEntry(start); throw new InvalidOperationException("Failure was swallowed."); }
+            catch (IOException ex) { Assert(ReferenceEquals(ex, failure), "Do not replace errors or try a hidden legacy fallback."); }
+            var failingSource = new RecordingApodSource();
+            failingSource.Pending.SetException(failure);
+            client = new apod_wallpaper.ApodClient(failingSource);
+            await ExpectScienceFailureAsync<IOException>(client.GetEntryAsync(start));
+            Assert(failingSource.Calls.Count == 1, "Async failure must not trigger retry/fallback.");
+            try { new apod_wallpaper.ApodClient(null); throw new InvalidOperationException("Null source accepted."); }
+            catch (ArgumentNullException) { }
+        }
+
         [STAThread]
         private static int Main()
         {
@@ -381,6 +440,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science transport bounds and errors", () => NasaScienceTransportBoundsAsync().GetAwaiter().GetResult());
                 Run("NASA Science shared request cancellation", () => NasaScienceTransportSharesRequestsAsync().GetAwaiter().GetResult());
                 Run("NASA Science body timeout and concurrency", () => NasaScienceTransportBodyAndConcurrencyAsync().GetAwaiter().GetResult());
+                Run("APOD facade preserves source contracts", () => ApodFacadePreservesContractsAsync().GetAwaiter().GetResult());
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."

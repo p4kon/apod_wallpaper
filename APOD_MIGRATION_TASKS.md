@@ -19,7 +19,10 @@
 | NASA-01 | Pure JSON parser, date URL builder, offline fixtures/tests | NASA-00 | Done |
 | NASA-02 | Раздельные preview/original, проверка CDN и качества | NASA-01 | Done |
 | NASA-03 | Ограниченный transport, отмена, ошибки, in-flight guard | NASA-01 | Done |
-| NASA-04 | Подключение source за IApodClient, сохранение legacy | NASA-02, NASA-03 | To Do |
+| NASA-04 | Подключение source за IApodClient, сохранение legacy | NASA-02, NASA-03 | In Progress |
+| NASA-04a | Выделение legacy и совместимый фасад | NASA-03 | Done |
+| NASA-04b | Sync transport без async-to-sync bridge и новый IApodClient adapter | NASA-04a | To Do |
+| NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04b, NASA-05, NASA-06, NASA-07 | To Do |
 | NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04 | To Do |
 | NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04, NASA-05 | To Do |
 | NASA-07 | Совместимость существующих range запросов и пагинация | NASA-04 | To Do |
@@ -104,6 +107,12 @@ Live отдельно: compiled source с настоящим HttpClient полу
 ## NASA-04: совместимый фасад
 
 Сохранить sync и async методы IApodClient и их возвращаемые значения. Изолировать старый ApodClient как legacy реализацию без изменений ее поведения; новый фасад делегирует основному source. Не вводить .Result/.Wait/.GetAwaiter().GetResult() мосты. Fallback должен иметь явную политику и общий бюджет, а не бесконечные повторы. Personal API key остается настройкой legacy источника, а не обязательным ключом нового.
+
+NASA-04a (2026-09-29): старый клиент перенесен в `LegacyApodClient.cs`, содержимое проверено сравнением с HEAD: изменено только имя класса. `ApodClient` теперь совместимый фасад с внутренним constructor injection для IApodClient. Все семь методов передают параметры, результаты и исключения выбранному source, не добавляют retry/fallback и не блокируют Task. Публичный контракт IApodClient не менялся. Default пока явно LegacyApodClient: новый JSON source еще не используется приложением.
+
+Причина разделения: граф вызовов подтвердил sync путь GetEntryByDate -> preview/download/apply/latest и sync GetEntries для month status. NASA-03 предоставляет только async transport. Переключение только GetEntryAsync оставило бы разное поведение в разных сценариях; блокирующий Task bridge противоречит договоренности. Дополнительно PostUrl/SourcePreviewUrl/SourceOriginalUrl пока живут только в ApodScienceRecord и не сохраняются через существующий entry/cache. Поэтому NASA-04 остается In Progress. NASA-04b готовит native sync transport и adapter, NASA-05/06/07 могут работать с ним до production switch; их зависимость от NASA-04 означает NASA-04b, а не завершение NASA-04c. Итоговое переключение выполняется после этих зависимостей, без циклической очереди задач.
+
+Проверки NASA-04a: новая группа smoke сначала упала на NotImplementedException, затем прошла. Проверены все семь делегируемых методов, неизменность дат включая time component, pending async result, sync/async ошибки без fallback, null source. Полный `dotnet build apod_wallpaper.sln -c Release`: 0 warnings / 0 errors, smoke tests passed. Это проверка сохранения контрактов, не подтверждение завершения миграции. UI, scheduler, settings, version, installer и remote не менялись.
 
 ## NASA-05: ссылки и кеш
 
