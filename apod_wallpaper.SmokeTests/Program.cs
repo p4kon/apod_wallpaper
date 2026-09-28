@@ -38,8 +38,8 @@ namespace apod_wallpaper.SmokeTests
             var parsed = apod_wallpaper.ApodScienceParser.Parse(ScienceFixture("image"), new DateTime(2026, 9, 27));
             var entry = parsed.Entry;
             Assert(entry.HasImage && entry.MediaType == "image", "Primary image should be available.");
-            Assert(entry.PreviewImageUrl.EndsWith("?fit=clip&w=800"), "Preview must use decoded src, not article URL.");
-            Assert(entry.BestImageUrl.EndsWith("?fit=clip&w=4298"), "Original must use primary image link, not metadata or explanation.");
+            Assert(entry.PreviewImageUrl.EndsWith("?w=800&h=800&fit=clip"), "Preview must be bounded without cropping.");
+            Assert(entry.BestImageUrl == "https://assets.science.nasa.gov/content/dam/science/cds/apod/andromeda.jpg", "Original must bypass CDN default resizing.");
             Assert(parsed.PostUrl.Contains("/image-article/"), "Canonical article URL must remain separate.");
             Assert(entry.Title == "Andromeda & stars", "Title entities must be decoded.");
             Assert(entry.Copyright == "A & B", "Credits must be plain text.");
@@ -52,6 +52,51 @@ namespace apod_wallpaper.SmokeTests
             var entry = apod_wallpaper.ApodScienceParser.Parse(ScienceFixture("archive"), new DateTime(1995, 6, 16)).Entry;
             Assert(entry.BestImageUrl.EndsWith("/e_lens.gif"), "Archive must use real GIF, not news-thumbnail.");
             Assert(entry.PreviewImageUrl == entry.BestImageUrl, "Identical source URLs are valid; do not invent a thumbnail.");
+        }
+
+        private static string ScienceImageFixtureUrls(string preview, string original)
+        {
+            return ScienceFixture("image")
+                .Replace("https://assets.science.nasa.gov/dynamicimage/assets/science/cds/apod/andromeda.jpg?fit=clip&amp;w=800", preview)
+                .Replace("https://assets.science.nasa.gov/dynamicimage/assets/science/cds/apod/andromeda.jpg?fit=clip&amp;w=4298", original);
+        }
+
+        private static void NasaSciencePreviewPolicyPreservesOtherSources()
+        {
+            foreach (var url in new[]
+            {
+                "https://example.org/nebula.jpg",
+                "https://assets.science.nasa.gov.evil.example/dynamicimage/assets/science/nebula.jpg",
+                "https://assets.science.nasa.gov/unknown/nebula.jpg",
+                "https://assets.science.nasa.gov/content/dam/science/nebula.gif",
+                "https://assets.science.nasa.gov/dynamicimage/assets/science/nebula.webp",
+                "https://assets.science.nasa.gov/dynamicimage/assets/science/nebula.jpg?token=signature",
+                "https://assets.science.nasa.gov/dynamicimage/assets/science/nebula.jpg?fit=crop",
+                "https://assets.science.nasa.gov/dynamicimage/assets/science/nebula.jpg?w=400&w=800",
+                "https://assets.science.nasa.gov/content/dam/science/nebula.png?download=1"
+            })
+            {
+                var entry = apod_wallpaper.ApodScienceParser.Parse(ScienceImageFixtureUrls(url, url), new DateTime(2026, 9, 27)).Entry;
+                Assert(entry.Url == url && entry.HdUrl == url, "Unverified hosts, formats and parameters must stay unchanged: " + url);
+            }
+        }
+
+        private static void NasaSciencePreviewPolicyHandlesStaticAssets()
+        {
+            const string original = "https://assets.science.nasa.gov/content/dam/science/missions/webb/nebula.png";
+            var parsed = apod_wallpaper.ApodScienceParser.Parse(ScienceImageFixtureUrls(original, original), new DateTime(2026, 9, 27));
+            Assert(parsed.Entry.HdUrl == original, "Static asset original must stay untouched.");
+            Assert(parsed.Entry.Url == "https://assets.science.nasa.gov/dynamicimage/assets/science/missions/webb/nebula.png?w=800&h=800&fit=clip", "Static PNG should receive a bounded CDN preview.");
+        }
+
+        private static void NasaSciencePreviewPolicyKeepsSeparateAssets()
+        {
+            const string preview = "https://assets.science.nasa.gov/dynamicimage/assets/science/annotated.jpg";
+            const string original = "https://assets.science.nasa.gov/dynamicimage/assets/science/original.jpg";
+            var parsed = apod_wallpaper.ApodScienceParser.Parse(ScienceImageFixtureUrls(preview, original), new DateTime(2026, 9, 27));
+            Assert(parsed.Entry.Url.Contains("/annotated.jpg?w=800&h=800&fit=clip"), "Keep the source preview variant.");
+            Assert(parsed.Entry.HdUrl == "https://assets.science.nasa.gov/content/dam/science/original.jpg", "Never substitute preview variant for original.");
+            Assert(parsed.SourcePreviewUrl == preview && parsed.SourceOriginalUrl == original, "Keep original source links for explicit integration-time fallback.");
         }
 
         private static void NasaScienceRejectsVideoPosters()
@@ -171,6 +216,9 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science rejects video posters as images", NasaScienceRejectsVideoPosters);
                 Run("NASA Science handles text-only pages", NasaScienceHandlesTextOnly);
                 Run("NASA Science rejects invalid payloads", NasaScienceRejectsInvalidPayloads);
+                Run("NASA Science preview preserves other sources", NasaSciencePreviewPolicyPreservesOtherSources);
+                Run("NASA Science preview handles static assets", NasaSciencePreviewPolicyHandlesStaticAssets);
+                Run("NASA Science preview keeps separate variants", NasaSciencePreviewPolicyKeepsSeparateAssets);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."

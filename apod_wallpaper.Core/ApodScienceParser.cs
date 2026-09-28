@@ -11,14 +11,18 @@ namespace apod_wallpaper
 {
     internal sealed class ApodScienceRecord
     {
-        public ApodScienceRecord(ApodEntry entry, string postUrl)
+        public ApodScienceRecord(ApodEntry entry, string postUrl, string sourcePreviewUrl = null, string sourceOriginalUrl = null)
         {
             Entry = entry;
             PostUrl = postUrl;
+            SourcePreviewUrl = sourcePreviewUrl;
+            SourceOriginalUrl = sourceOriginalUrl;
         }
 
         public ApodEntry Entry { get; }
         public string PostUrl { get; }
+        public string SourcePreviewUrl { get; }
+        public string SourceOriginalUrl { get; }
     }
 
     internal static class ApodScienceParser
@@ -125,9 +129,9 @@ namespace apod_wallpaper
                         original = ValidateImageUrl(href, postUrl);
                 }
                 entry.MediaType = "image";
-                entry.Url = preview;
-                entry.HdUrl = original;
-                return new ApodScienceRecord(entry, postUrl);
+                entry.Url = ApodScienceImageUrls.GetPreviewUrl(preview);
+                entry.HdUrl = ApodScienceImageUrls.GetOriginalUrl(original);
+                return new ApodScienceRecord(entry, postUrl, preview, original);
             }
             catch (SerializationException ex)
             {

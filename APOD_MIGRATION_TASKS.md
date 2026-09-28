@@ -17,7 +17,7 @@
 |---|---|---|---|
 | NASA-00 | Журнал и границы миграции | - | Done |
 | NASA-01 | Pure JSON parser, date URL builder, offline fixtures/tests | NASA-00 | Done |
-| NASA-02 | Раздельные preview/original, проверка CDN и качества | NASA-01 | To Do |
+| NASA-02 | Раздельные preview/original, проверка CDN и качества | NASA-01 | Done |
 | NASA-03 | Ограниченный transport, отмена, ошибки, in-flight guard | NASA-01 | To Do |
 | NASA-04 | Подключение source за IApodClient, сохранение legacy | NASA-02, NASA-03 | To Do |
 | NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04 | To Do |
@@ -60,6 +60,28 @@
 ## NASA-02: preview/original
 
 В исследованной выборке из 10 image-постов src=href, поэтому нельзя обещать low-res только по img/src. Проверить server-side resize на NASA CDN по настоящим pixel dimensions/размеру ответа; не выдумывать URL для content/dam и сторонних host. Не менять original URL ради preview. При отсутствии server preview допустим original с ограниченным decode и кешем, но это не экономия сетевого трафика. Проверить большие, вертикальные, ultra-wide и GIF изображения. Нужна отдельная проверка перед интеграцией.
+
+Результат (2026-09-29): добавлен pure helper `ApodScienceImageUrls`, подключен только к новому parser. Для проверенного NASA namespace JPEG/PNG формируется preview по маршруту `dynamicimage/assets/science/` с query `w=800&h=800&fit=clip` и оригинал по маршруту `content/dam/science/` без resizing. HdUrl никогда не заменяется URL preview. `ApodScienceRecord.SourcePreviewUrl/SourceOriginalUrl` сохраняют исходные ссылки отдельно. Legacy/production source еще не переключен.
+
+Обнаружена дополнительная проблема NASA: dynamicimage без query по умолчанию уменьшает файл, поэтому href из primary HTML не всегда максимальное разрешение. Соответствие двух маршрутов проверено реальными GET и декодированием bytes в памяти, файлы в проект не сохранялись:
+
+| Изображение | Полный content/dam файл | CDN preview 800x800 fit=clip |
+|---|---|---|
+| M31Before_Scherer_4298.jpg | 4298x3394; 2 938 690 bytes | 800x631; 143 142 bytes |
+| Aurora_over_Fall.jpg | 1536x2048; 2 350 581 bytes | 600x800; 72 498 bytes |
+| VelaSNR-3_bigCedic.jpg (2015) | 2000x1327; 1 288 891 bytes | 800x531; 161 418 bytes |
+| STScI-01KX6D0XBHSYP7Q1EM5QTC43RP.png | 3505x3505; 17 298 985 bytes | 800x800; 858 836 bytes |
+| e_lens.gif (1995) | 204x204; 5 775 bytes | HTTP 404; преобразование GIF отключено |
+
+Для M31 dynamicimage без параметров дал только 1280x1010 (376 276 bytes); даже вариант w=4298&h=3394&fit=clip дал 4298x3391, а не точные размеры исходного файла. Поэтому для download выбран прямой asset, не вариант CDN с большими размерами. Это проверка размера/формата, не доказательство неизменности CDN на всех датах. Визуальная проверка ultrawide/viewer остается в NASA-08; в проверенной live-выборке ultrawide не найден.
+
+Решения: mapping применяется только к точному HTTPS host assets.science.nasa.gov, двум проверенным path prefixes и JPEG/PNG. GIF/WebP, неизвестные host/path/query, query у static asset, подписи, дубли параметров, fit=crop и fragments остаются без изменения. Это проверенное соответствие namespace, не универсальная замена URL любых NASA файлов. Preview и original варианты сохраняют разные имена файлов, если таковы src/href. Не вводился новый пакет и не менялись csproj.
+
+TDD: три проверки сначала упали на старом поведении, после реализации все smoke прошли. Добавлены проверки static PNG, разных preview/original файлов, сохранения source URLs и девяти случаев, которые нельзя переписывать. Старые проверки video/text-only/GIF/чужой даты остаются зелеными.
+
+Итоговая проверка NASA-02: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, smoke tests passed. Installer, version и push не выполнялись.
+
+Обязательство интеграции NASA-03/04/08: обработать 404/не-image response сформированного asset URL с ограниченным fallback к сохраненному source URL; для preview допустим исходник, для download нельзя молча выдавать уменьшенный dynamicimage за full-resolution original. Source URLs не терять при последующем кешировании. Helper сам не делает сеть и не гарантирует существование всех вычисленных адресов.
 
 ## NASA-03: transport
 
