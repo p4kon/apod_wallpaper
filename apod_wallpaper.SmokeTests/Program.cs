@@ -139,6 +139,165 @@ namespace apod_wallpaper.SmokeTests
             }
         }
 
+        private static apod_wallpaper.ApodScienceResponse ScienceResponse(int status = 200, string json = null,
+            string type = "application/json", long? length = null, TimeSpan? retry = null)
+        {
+            return new apod_wallpaper.ApodScienceResponse(status,
+                new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json ?? ScienceFixture("image"))), type, length, retry);
+        }
+
+        private static async Task ExpectScienceFailureAsync<T>(Task task) where T : Exception
+        {
+            try { await task; }
+            catch (T) { return; }
+            throw new InvalidOperationException("Expected " + typeof(T).Name);
+        }
+
+        private static async Task NasaScienceTransportBoundsAsync()
+        {
+            var date = new DateTime(2026, 9, 27);
+            var calls = 0;
+            var source = new apod_wallpaper.ApodScienceSource((uri, ct) =>
+            {
+                calls++;
+                Assert(uri.AbsoluteUri == apod_wallpaper.ApodScienceParser.BuildUrl(date), "Only date JSON, without key or image requests.");
+                return Task.FromResult(ScienceResponse());
+            });
+            Assert((await source.GetEntryAsync(date)).Entry.HasImage, "Valid JSON must parse.");
+            using (var cancelled = new CancellationTokenSource())
+            {
+                cancelled.Cancel();
+                await ExpectScienceFailureAsync<OperationCanceledException>(source.GetEntryAsync(date, cancelled.Token));
+            }
+            Assert(calls == 1, "Pre-cancelled request must not send.");
+            foreach (var status in new[] { 301, 302, 403, 500, 503 })
+            {
+                source = new apod_wallpaper.ApodScienceSource((uri, ct) => Task.FromResult(ScienceResponse(status)));
+                await ExpectScienceFailureAsync<apod_wallpaper.ApodScienceRequestException>(source.GetEntryAsync(date));
+            }
+            source = new apod_wallpaper.ApodScienceSource((uri, ct) => Task.FromResult(ScienceResponse(404)));
+            await ExpectScienceFailureAsync<apod_wallpaper.ApodEntryUnavailableException>(source.GetEntryAsync(date));
+            foreach (var response in new[] { ScienceResponse(type: "text/html"), ScienceResponse(json: "{}"),
+                ScienceResponse(length: 1048577), ScienceResponse(json: new string('x', 1048577)),
+                ScienceResponse(json: ScienceFixture("image").Replace("2026-09-27", "2026-09-26")) })
+            {
+                source = new apod_wallpaper.ApodScienceSource((uri, ct) => Task.FromResult(response));
+                await ExpectScienceFailureAsync<InvalidDataException>(source.GetEntryAsync(date));
+            }
+            source = new apod_wallpaper.ApodScienceSource(async (uri, ct) =>
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+                return ScienceResponse();
+            }, TimeSpan.FromMilliseconds(100));
+            await ExpectScienceFailureAsync<TimeoutException>(source.GetEntryAsync(date));
+            var now = new DateTime(2026, 9, 29, 0, 0, 0, DateTimeKind.Utc);
+            calls = 0;
+            source = new apod_wallpaper.ApodScienceSource((uri, ct) =>
+            { calls++; return Task.FromResult(ScienceResponse(429, retry: TimeSpan.FromMinutes(2))); }, utcNow: () => now);
+            await ExpectScienceFailureAsync<apod_wallpaper.ApodScienceRequestException>(source.GetEntryAsync(date));
+            await ExpectScienceFailureAsync<apod_wallpaper.ApodScienceRequestException>(source.GetEntryAsync(date.AddDays(-1)));
+            Assert(calls == 1, "Retry-After must stop requests across dates.");
+            now = now.AddMinutes(2);
+            await ExpectScienceFailureAsync<apod_wallpaper.ApodScienceRequestException>(source.GetEntryAsync(date));
+            Assert(calls == 2, "Retry must be allowed after cooldown.");
+        }
+
+        private static async Task NasaScienceTransportSharesRequestsAsync()
+        {
+            var date = new DateTime(2026, 9, 27);
+            var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var calls = 0;
+            var source = new apod_wallpaper.ApodScienceSource(async (uri, ct) =>
+            { Interlocked.Increment(ref calls); await gate.Task; ct.ThrowIfCancellationRequested(); return ScienceResponse(); });
+            using (var cancel = new CancellationTokenSource())
+            {
+                var first = source.GetEntryAsync(date, cancel.Token);
+                var second = source.GetEntryAsync(date);
+                var third = source.GetEntryAsync(date);
+                cancel.Cancel();
+                await ExpectScienceFailureAsync<OperationCanceledException>(first);
+                gate.SetResult(true);
+                var records = await Task.WhenAll(second, third);
+                Assert(calls == 1, "Concurrent same-date requests must share the network.");
+                Assert(!ReferenceEquals(records[0].Entry, records[1].Entry), "Consumers must not share mutable entries.");
+            }
+            var stopped = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            source = new apod_wallpaper.ApodScienceSource(async (uri, ct) =>
+            {
+                try { await Task.Delay(Timeout.Infinite, ct); }
+                finally { stopped.TrySetResult(true); }
+                return ScienceResponse();
+            });
+            using (var cancel = new CancellationTokenSource())
+            {
+                var pending = source.GetEntryAsync(date, cancel.Token);
+                cancel.Cancel();
+                await ExpectScienceFailureAsync<OperationCanceledException>(pending);
+                Assert(await Task.WhenAny(stopped.Task, Task.Delay(2000)) == stopped.Task, "Last waiter cancellation must stop network.");
+            }
+        }
+
+        private sealed class SlowScienceStream : MemoryStream
+        {
+            internal bool Disposed;
+            public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+                return 0;
+            }
+            protected override void Dispose(bool disposing) { Disposed = true; base.Dispose(disposing); }
+        }
+
+        private static async Task NasaScienceTransportBodyAndConcurrencyAsync()
+        {
+            var date = new DateTime(2026, 9, 27);
+            var stream = new SlowScienceStream();
+            var source = new apod_wallpaper.ApodScienceSource((uri, ct) => Task.FromResult(
+                new apod_wallpaper.ApodScienceResponse(200, stream)), TimeSpan.FromMilliseconds(100));
+            await ExpectScienceFailureAsync<TimeoutException>(source.GetEntryAsync(date));
+            Assert(stream.Disposed, "Timed-out response body must be disposed.");
+
+            var calls = 0;
+            var active = 0;
+            var peak = 0;
+            var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            source = new apod_wallpaper.ApodScienceSource(async (uri, ct) =>
+            {
+                Interlocked.Increment(ref calls);
+                var count = Interlocked.Increment(ref active);
+                lock (release) peak = Math.Max(peak, count);
+                try { await release.Task; }
+                finally { Interlocked.Decrement(ref active); }
+                return ScienceResponse(404);
+            });
+            var requests = Enumerable.Range(0, 5).Select(i => source.GetEntryAsync(date.AddDays(-i))).ToArray();
+            Assert(calls == 2, "Only two distinct dates may enter the transport before slots release.");
+            release.SetResult(true);
+            foreach (var task in requests) await ExpectScienceFailureAsync<apod_wallpaper.ApodEntryUnavailableException>(task);
+            Assert(calls == 5 && peak <= 2, "Queued requests must complete within concurrency limit.");
+            await ExpectScienceFailureAsync<apod_wallpaper.ApodEntryUnavailableException>(source.GetEntryAsync(date));
+            Assert(calls == 6, "Failed flight must not be cached forever.");
+
+            calls = 0;
+            using (var cancel = new CancellationTokenSource())
+            using (var queuedCancel = new CancellationTokenSource())
+            {
+                source = new apod_wallpaper.ApodScienceSource(async (uri, ct) =>
+                {
+                    Interlocked.Increment(ref calls);
+                    await Task.Delay(Timeout.Infinite, ct);
+                    return ScienceResponse();
+                });
+                requests = Enumerable.Range(0, 2).Select(i => source.GetEntryAsync(date.AddDays(-i), cancel.Token)).ToArray();
+                var queued = source.GetEntryAsync(date.AddDays(-2), queuedCancel.Token);
+                queuedCancel.Cancel();
+                await ExpectScienceFailureAsync<OperationCanceledException>(queued);
+                cancel.Cancel();
+                foreach (var task in requests) await ExpectScienceFailureAsync<OperationCanceledException>(task);
+                Assert(calls == 2, "Cancelled queued requests must not send.");
+            }
+        }
+
         [STAThread]
         private static int Main()
         {
@@ -219,6 +378,9 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science preview preserves other sources", NasaSciencePreviewPolicyPreservesOtherSources);
                 Run("NASA Science preview handles static assets", NasaSciencePreviewPolicyHandlesStaticAssets);
                 Run("NASA Science preview keeps separate variants", NasaSciencePreviewPolicyKeepsSeparateAssets);
+                Run("NASA Science transport bounds and errors", () => NasaScienceTransportBoundsAsync().GetAwaiter().GetResult());
+                Run("NASA Science shared request cancellation", () => NasaScienceTransportSharesRequestsAsync().GetAwaiter().GetResult());
+                Run("NASA Science body timeout and concurrency", () => NasaScienceTransportBodyAndConcurrencyAsync().GetAwaiter().GetResult());
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."

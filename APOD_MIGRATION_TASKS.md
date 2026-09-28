@@ -18,7 +18,7 @@
 | NASA-00 | Журнал и границы миграции | - | Done |
 | NASA-01 | Pure JSON parser, date URL builder, offline fixtures/tests | NASA-00 | Done |
 | NASA-02 | Раздельные preview/original, проверка CDN и качества | NASA-01 | Done |
-| NASA-03 | Ограниченный transport, отмена, ошибки, in-flight guard | NASA-01 | To Do |
+| NASA-03 | Ограниченный transport, отмена, ошибки, in-flight guard | NASA-01 | Done |
 | NASA-04 | Подключение source за IApodClient, сохранение legacy | NASA-02, NASA-03 | To Do |
 | NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04 | To Do |
 | NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04, NASA-05 | To Do |
@@ -86,6 +86,20 @@ TDD: три проверки сначала упали на старом пов�
 ## NASA-03: transport
 
 GET JSON с bounded body и общим timeout, корректные 404/429/5xx и schema errors, cancellation, ограниченная concurrency и отсутствие повторной загрузки одной даты. Никаких ключей в запросе нового источника/логах. /html и JSON не являются независимыми сервисами. Не переносить старые 30-second retry chains. Проверки fake transport; реальные запросы отдельно от offline smoke.
+
+Результат (2026-09-29): добавлен `ApodScienceSource`. Один GET без API key, cookies и автоматических redirect; HttpClient переиспользуется. Общий сетевой бюджет 8 секунд включает очередь, headers и body. JSON ограничен 1 MiB decompressed bytes независимо от Content-Length, проверяется content type, затем вызывается существующий pure parser с exact-date validation. Image bytes transport не загружает.
+
+Одновременно выполняются максимум два запроса разных дат на экземпляр source. Запросы одной даты делят текущую сетевую операцию, но каждый получает собственную mutable ApodEntry. Отмена одного ожидающего не отменяет остальных; отмена последнего останавливает общий запрос. Завершенные/ошибочные операции удаляются из in-flight registry, metadata cache здесь не вводится. При интеграции NASA-04 source должен переиспользоваться, а не создаваться на каждый запрос.
+
+Ошибки: HTTP 404 -> ApodEntryUnavailableException только для запрошенной даты; 3xx/403/5xx -> ApodScienceRequestException, timeout отдельно от пользовательской отмены. Ошибочная схема/чужая дата не становятся available. Для 429 учитывается Retry-After (delta или HTTP date); при отсутствии header пауза 1 минута, невалидное отрицательное/нулевое значение дает минимум 1 секунду. Пауза общая для дат одного source, проверяется перед отправкой после очереди. Уже отправленные запросы не отзываются при получении 429 другим запросом. Автоматических повторов и скрытого обращения к legacy/html нет; постоянный negative cache по 404 не создается.
+
+Проверки: первые две новые группы smoke сначала упали на NotImplementedException (RED), затем прошли. Третья группа добавлена для body timeout и concurrency. Offline покрыты valid JSON, pre-cancel без сети, redirects, 403/404/500/503/429, Retry-After across dates, неверный MIME/schema/date, oversized declared/actual body, timeout headers/body, освобождение body, dedup и независимость результатов, отмена одного/всех ожидающих, concurrency=2, отмена очереди и повтор после ошибки. Тестовый transport не требует изменений csproj или новых dependencies.
+
+Live отдельно: compiled source с настоящим HttpClient получил 2026-09-27 как image примерно за 1175 ms, 2012-03-12 как other за 948 ms. Это единичные измерения, не обещание скорости. 1995-06-17 проверен как отсутствующая публикация. Никаких image downloads, изменений пользовательского кеша или обоев при live-проверке не было.
+
+Решения: default 8 секунд и concurrency=2 выбраны как ограниченный стартовый бюджет, не как гарантированная скорость NASA; без автоматической retry chain. Microsoft отдельно указывает, что ResponseHeadersRead не покрывает timeout чтения content: https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpcompletionoption . Поэтому body ограничен собственным token и dispose при отмене. Production ApodClient, scheduler и UI не изменены; CDN image fallback остается задачей NASA-04/08.
+
+Итог: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, smoke tests passed. Installer/version/push не выполнялись.
 
 ## NASA-04: совместимый фасад
 
