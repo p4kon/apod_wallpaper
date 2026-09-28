@@ -21,7 +21,7 @@
 | NASA-03 | Ограниченный transport, отмена, ошибки, in-flight guard | NASA-01 | Done |
 | NASA-04 | Подключение source за IApodClient, сохранение legacy | NASA-02, NASA-03 | In Progress |
 | NASA-04a | Выделение legacy и совместимый фасад | NASA-03 | Done |
-| NASA-04b | Sync transport без async-to-sync bridge и новый IApodClient adapter | NASA-04a | To Do |
+| NASA-04b | Sync transport без async-to-sync bridge и новый IApodClient adapter | NASA-04a | Done |
 | NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04b, NASA-05, NASA-06, NASA-07 | To Do |
 | NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04 | To Do |
 | NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04, NASA-05 | To Do |
@@ -115,6 +115,14 @@ NASA-04a (2026-09-29): старый клиент перенесен в `LegacyAp
 Проверки NASA-04a: новая группа smoke сначала упала на NotImplementedException, затем прошла. Проверены все семь делегируемых методов, неизменность дат включая time component, pending async result, sync/async ошибки без fallback, null source. Полный `dotnet build apod_wallpaper.sln -c Release`: 0 warnings / 0 errors, smoke tests passed. Это проверка сохранения контрактов, не подтверждение завершения миграции. UI, scheduler, settings, version, installer и remote не менялись.
 
 ## NASA-05: ссылки и кеш
+
+Результат NASA-04b (2026-09-29): `ApodScienceSource.GetEntry` выполняет native sync GET и Stream.Read, без Task.Result/Wait/GetAwaiter bridge. В net8 используется HttpClient.Send, в net48 отдельный compatibility HttpWebRequest с Abort по cancellation. Общие с async: semaphore на две операции, Retry-After cooldown, HTTP/MIME/размер validation, ограничение decompressed bytes и UTF-8 decode. Общий cancellation budget включает очередь, headers и body; body dispose прерывает зависшее чтение. Для net48 остается платформенная оговорка Microsoft: DNS resolution может превысить заданный Timeout; жесткую 8-секундную гарантию на net48 не заявляем. Основное приложение работает на net8.
+
+Добавлен staged `ApodScienceClient : IApodClient`: sync/async дата идут через новый source, ошибки не запускают legacy fallback. Latest/range пока явно делегируются legacy до NASA-06/07; API-key validation остается только в legacy. Default ApodClient не переключен. Адаптер пока возвращает Entry из record; перенос PostUrl/source URLs в сохраняемую модель обязателен в NASA-05 до production activation.
+
+Проверки NASA-04b: тест sync bounds сначала упал на stub, после реализации прошел; добавлены sync body timeout, общий sync->async Retry-After и маршрутизация staged adapter. Проверены 302/403/404/500/503, invalid MIME/schema, declared/streamed oversize, pre-cancel, headers/body timeout, отсутствие legacy fallback при ошибке даты. Полный Release build: 0 warnings / 0 errors, smoke tests passed. Live compiled net8 sync transport: 2026-09-27=image (1458 ms), 2012-03-12=other (792 ms), 1995-06-17=ApodEntryUnavailableException (740 ms). Это отдельные измерения, не гарантия latency. Image bytes не скачивались.
+
+Обязательное перед NASA-04c: проверить/устранить дубли одной даты при смешанных sync+async и одновременных sync вызовах. На этом шаге in-flight sharing NASA-03 сохраняется только для async; общая concurrency и cooldown уже распространяются на оба пути. Не подменять этот пункт blocking Task bridge. Также не забыть CDN fallback из NASA-02. Документация платформы: https://learn.microsoft.com/en-us/dotnet/api/system.net.httpwebrequest.timeout и https://learn.microsoft.com/en-us/dotnet/api/system.net.httpwebrequest.abort . Installer/version/remote не менялись.
 
 Сохранить canonical PostUrl в entry/cache и вернуть его через GetPostUrl/OpenPost, workflow results и NASA button. Старые записи без поля читаются. Не менять yyyy-MM-dd filenames, пути библиотеки, favorites и local files. Ошибка обновления remote metadata не удаляет старые данные. About NASA link обновить при интеграции; copy/translate получают plain text.
 

@@ -50,6 +50,7 @@ namespace apod_wallpaper
         private readonly Dictionary<DateTime, Flight> _flights = new Dictionary<DateTime, Flight>();
         private readonly SemaphoreSlim _slots = new SemaphoreSlim(2, 2);
         private readonly Func<Uri, CancellationToken, Task<ApodScienceResponse>> _send;
+        private readonly Func<Uri, CancellationToken, ApodScienceResponse> _sendSync;
         private readonly Func<DateTime> _utcNow;
         private readonly TimeSpan _timeout;
         private DateTime _retryNotBeforeUtc;
@@ -64,13 +65,142 @@ namespace apod_wallpaper
         }
 
         internal ApodScienceSource(Func<Uri, CancellationToken, Task<ApodScienceResponse>> send = null,
-            TimeSpan? timeout = null, Func<DateTime> utcNow = null)
+            TimeSpan? timeout = null, Func<DateTime> utcNow = null,
+            Func<Uri, CancellationToken, ApodScienceResponse> sendSync = null)
         {
             _send = send ?? SendAsync;
+            _sendSync = sendSync ?? Send;
             _timeout = timeout ?? TimeSpan.FromSeconds(8);
             if (_timeout <= TimeSpan.Zero || _timeout.TotalMilliseconds > int.MaxValue)
                 throw new ArgumentOutOfRangeException(nameof(timeout));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
+        }
+
+        internal ApodScienceRecord GetEntry(DateTime date, CancellationToken token = default(CancellationToken))
+        {
+            token.ThrowIfCancellationRequested();
+            using (var budget = CancellationTokenSource.CreateLinkedTokenSource(token))
+            {
+                budget.CancelAfter(_timeout);
+                var entered = false;
+                try
+                {
+                    _slots.Wait(budget.Token);
+                    entered = true;
+                    CheckCooldown();
+                    using (var response = _sendSync(new Uri(ApodScienceParser.BuildUrl(date)), budget.Token))
+                    {
+                        budget.Token.ThrowIfCancellationRequested();
+                        ValidateResponse(response, date.Date);
+                        using (budget.Token.Register(response.Dispose))
+                        using (var bytes = new MemoryStream())
+                        {
+                            var buffer = new byte[8192];
+                            int count;
+                            while ((count = response.Body.Read(buffer, 0, buffer.Length)) != 0)
+                            {
+                                budget.Token.ThrowIfCancellationRequested();
+                                AppendBytes(bytes, buffer, count);
+                            }
+                            budget.Token.ThrowIfCancellationRequested();
+                            return ApodScienceParser.Parse(Decode(bytes), date.Date);
+                        }
+                    }
+                }
+                catch (Exception ex) when (budget.IsCancellationRequested &&
+                    (ex is OperationCanceledException || ex is IOException || ex is ObjectDisposedException || ex is WebException))
+                {
+                    token.ThrowIfCancellationRequested();
+                    throw new TimeoutException("NASA Science metadata request timed out.", ex);
+                }
+                finally { if (entered) _slots.Release(); }
+            }
+        }
+
+        private static ApodScienceResponse Send(Uri uri, CancellationToken token)
+        {
+#if NET48
+            // net48 has no HttpClient.Send. Keep its compatibility path genuinely synchronous.
+            var request = (HttpWebRequest)WebRequest.Create(uri);
+            request.Method = "GET";
+            request.Accept = "application/json";
+            request.AllowAutoRedirect = false;
+            request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+            request.Timeout = 8000;
+            request.ReadWriteTimeout = 8000;
+            var abort = token.Register(request.Abort);
+            HttpWebResponse response = null;
+            try
+            {
+                try { response = (HttpWebResponse)request.GetResponse(); }
+                catch (WebException ex) when (ex.Response is HttpWebResponse)
+                { response = (HttpWebResponse)ex.Response; }
+                TimeSpan? retry = null;
+                if (System.Net.Http.Headers.RetryConditionHeaderValue.TryParse(response.Headers["Retry-After"], out var retryHeader))
+                    retry = retryHeader.Delta ?? (retryHeader.Date - DateTimeOffset.UtcNow);
+                return new ApodScienceResponse((int)response.StatusCode, response.GetResponseStream(),
+                    response.ContentType.Split(';')[0].Trim(), response.ContentLength, retry,
+                    () => { abort.Dispose(); response.Dispose(); });
+            }
+            catch { abort.Dispose(); response?.Dispose(); throw; }
+#else
+            using (var request = new HttpRequestMessage(HttpMethod.Get, uri))
+            {
+                request.Headers.Accept.ParseAdd("application/json");
+                var response = Client.Value.Send(request, HttpCompletionOption.ResponseHeadersRead, token);
+                try
+                {
+                    var retry = response.Headers.RetryAfter?.Delta
+                        ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow);
+                    var body = response.StatusCode == HttpStatusCode.OK ? response.Content.ReadAsStream(token) : Stream.Null;
+                    return new ApodScienceResponse((int)response.StatusCode, body,
+                        response.Content.Headers.ContentType?.MediaType, response.Content.Headers.ContentLength, retry, response.Dispose);
+                }
+                catch { response.Dispose(); throw; }
+            }
+#endif
+        }
+
+        private void CheckCooldown()
+        {
+            lock (_gate)
+                if (_utcNow() < _retryNotBeforeUtc) throw new ApodScienceRequestException(429);
+        }
+
+        private void ValidateResponse(ApodScienceResponse response, DateTime date)
+        {
+            if (response.Status == 429)
+            {
+                var delay = response.RetryAfter ?? TimeSpan.FromMinutes(1);
+                if (delay < TimeSpan.FromSeconds(1)) delay = TimeSpan.FromSeconds(1);
+                lock (_gate)
+                {
+                    var now = _utcNow();
+                    var until = delay > DateTime.MaxValue - now ? DateTime.MaxValue : now.Add(delay);
+                    if (until > _retryNotBeforeUtc) _retryNotBeforeUtc = until;
+                }
+            }
+            if (response.Status == 404)
+                throw new ApodEntryUnavailableException(date, "NASA Science publication was not found.");
+            if (response.Status != 200) throw new ApodScienceRequestException(response.Status);
+            var type = response.ContentType ?? string.Empty;
+            if (!string.Equals(type, "application/json", StringComparison.OrdinalIgnoreCase)
+                && !(type.StartsWith("application/", StringComparison.OrdinalIgnoreCase) && type.EndsWith("+json", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("NASA Science did not return JSON.");
+            if (response.ContentLength > MaximumBodyBytes)
+                throw new InvalidDataException("NASA Science JSON exceeds the size limit.");
+        }
+
+        private static void AppendBytes(MemoryStream bytes, byte[] buffer, int count)
+        {
+            if (bytes.Length + count > MaximumBodyBytes)
+                throw new InvalidDataException("NASA Science JSON exceeds the size limit.");
+            bytes.Write(buffer, 0, count);
+        }
+
+        private static string Decode(MemoryStream bytes)
+        {
+            return new UTF8Encoding(false, true).GetString(bytes.ToArray()).TrimStart('\uFEFF');
         }
 
         internal async Task<ApodScienceRecord> GetEntryAsync(DateTime date, CancellationToken token = default(CancellationToken))
@@ -157,32 +287,12 @@ namespace apod_wallpaper
                 {
                     await _slots.WaitAsync(token).ConfigureAwait(false);
                     entered = true;
-                    lock (_gate)
-                        if (_utcNow() < _retryNotBeforeUtc) throw new ApodScienceRequestException(429);
+                    CheckCooldown();
 
                     using (var response = await _send(new Uri(ApodScienceParser.BuildUrl(date)), token).ConfigureAwait(false))
                     {
                         token.ThrowIfCancellationRequested();
-                        if (response.Status == 429)
-                        {
-                            var delay = response.RetryAfter ?? TimeSpan.FromMinutes(1);
-                            if (delay < TimeSpan.FromSeconds(1)) delay = TimeSpan.FromSeconds(1);
-                            lock (_gate)
-                            {
-                                var now = _utcNow();
-                                var until = delay > DateTime.MaxValue - now ? DateTime.MaxValue : now.Add(delay);
-                                if (until > _retryNotBeforeUtc) _retryNotBeforeUtc = until;
-                            }
-                        }
-                        if (response.Status == 404)
-                            throw new ApodEntryUnavailableException(date, "NASA Science publication was not found.");
-                        if (response.Status != 200) throw new ApodScienceRequestException(response.Status);
-                        var type = response.ContentType ?? string.Empty;
-                        if (!string.Equals(type, "application/json", StringComparison.OrdinalIgnoreCase)
-                            && !(type.StartsWith("application/", StringComparison.OrdinalIgnoreCase) && type.EndsWith("+json", StringComparison.OrdinalIgnoreCase)))
-                            throw new InvalidDataException("NASA Science did not return JSON.");
-                        if (response.ContentLength > MaximumBodyBytes)
-                            throw new InvalidDataException("NASA Science JSON exceeds the size limit.");
+                        ValidateResponse(response, date);
 
                         // ResponseHeadersRead does not cover body timeout/size. Bound decompressed bytes too.
                         using (token.Register(response.Dispose))
@@ -193,12 +303,10 @@ namespace apod_wallpaper
                             while ((count = await response.Body.ReadAsync(buffer, 0, buffer.Length, token).ConfigureAwait(false)) != 0)
                             {
                                 token.ThrowIfCancellationRequested();
-                                if (bytes.Length + count > MaximumBodyBytes)
-                                    throw new InvalidDataException("NASA Science JSON exceeds the size limit.");
-                                bytes.Write(buffer, 0, count);
+                                AppendBytes(bytes, buffer, count);
                             }
                             token.ThrowIfCancellationRequested();
-                            return new UTF8Encoding(false, true).GetString(bytes.ToArray()).TrimStart('\uFEFF');
+                            return Decode(bytes);
                         }
                     }
                 }

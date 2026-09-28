@@ -357,6 +357,103 @@ namespace apod_wallpaper.SmokeTests
             catch (ArgumentNullException) { }
         }
 
+        private static void NasaScienceSyncTransportBounds()
+        {
+            var date = new DateTime(2026, 9, 27);
+            var calls = 0;
+            var source = new apod_wallpaper.ApodScienceSource(sendSync: (uri, token) =>
+            {
+                calls++;
+                Assert(uri.AbsoluteUri == apod_wallpaper.ApodScienceParser.BuildUrl(date), "Sync must request exact date JSON.");
+                return ScienceResponse();
+            });
+            Assert(source.GetEntry(date).Entry.HasImage, "Sync must parse valid JSON.");
+            using (var cancel = new CancellationTokenSource())
+            {
+                cancel.Cancel();
+                try { source.GetEntry(date, cancel.Token); throw new InvalidOperationException("Cancellation ignored."); }
+                catch (OperationCanceledException) { }
+            }
+            Assert(calls == 1, "Pre-cancel must not send.");
+            foreach (var status in new[] { 302, 403, 500, 503 })
+            {
+                source = new apod_wallpaper.ApodScienceSource(sendSync: (uri, token) => ScienceResponse(status));
+                try { source.GetEntry(date); throw new InvalidOperationException("HTTP error accepted."); }
+                catch (apod_wallpaper.ApodScienceRequestException ex) { Assert(ex.Status == status, "Preserve HTTP status."); }
+            }
+            source = new apod_wallpaper.ApodScienceSource(sendSync: (uri, token) => ScienceResponse(404));
+            try { source.GetEntry(date); throw new InvalidOperationException("Missing date accepted."); }
+            catch (apod_wallpaper.ApodEntryUnavailableException) { }
+            foreach (var response in new[] { ScienceResponse(type: "text/html"), ScienceResponse(json: "{}"),
+                ScienceResponse(length: 1048577), ScienceResponse(json: new string('x', 1048577)) })
+            {
+                source = new apod_wallpaper.ApodScienceSource(sendSync: (uri, token) => response);
+                try { source.GetEntry(date); throw new InvalidOperationException("Invalid JSON accepted."); }
+                catch (InvalidDataException) { }
+            }
+            source = new apod_wallpaper.ApodScienceSource(timeout: TimeSpan.FromMilliseconds(100), sendSync: (uri, token) =>
+            {
+                token.WaitHandle.WaitOne();
+                token.ThrowIfCancellationRequested();
+                return ScienceResponse();
+            });
+            try { source.GetEntry(date); throw new InvalidOperationException("Timeout ignored."); }
+            catch (TimeoutException) { }
+        }
+
+        private sealed class BlockingScienceStream : MemoryStream
+        {
+            private readonly ManualResetEventSlim _closed = new ManualResetEventSlim(false);
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                if (!_closed.Wait(TimeSpan.FromSeconds(2))) throw new InvalidOperationException("Body timeout did not dispose stream.");
+                throw new ObjectDisposedException(nameof(BlockingScienceStream));
+            }
+            protected override void Dispose(bool disposing) { _closed.Set(); base.Dispose(disposing); }
+        }
+
+        private static async Task NasaScienceSyncAndAdapterAsync()
+        {
+            var date = new DateTime(2026, 9, 27);
+            var source = new apod_wallpaper.ApodScienceSource(timeout: TimeSpan.FromMilliseconds(100),
+                sendSync: (uri, token) => new apod_wallpaper.ApodScienceResponse(200, new BlockingScienceStream()));
+            try { source.GetEntry(date); throw new InvalidOperationException("Body timeout ignored."); }
+            catch (TimeoutException) { }
+            var now = DateTime.UtcNow;
+            var calls = 0;
+            source = new apod_wallpaper.ApodScienceSource(
+                send: (uri, token) => { calls++; return Task.FromResult(ScienceResponse()); },
+                utcNow: () => now,
+                sendSync: (uri, token) => { calls++; return ScienceResponse(429, retry: TimeSpan.FromMinutes(2)); });
+            try { source.GetEntry(date); throw new InvalidOperationException("429 accepted."); }
+            catch (apod_wallpaper.ApodScienceRequestException) { }
+            await ExpectScienceFailureAsync<apod_wallpaper.ApodScienceRequestException>(source.GetEntryAsync(date));
+            Assert(calls == 1, "Sync Retry-After must also block async requests.");
+            now = now.AddMinutes(2);
+            Assert((await source.GetEntryAsync(date)).Entry.HasImage && calls == 2, "Async must resume after sync cooldown.");
+
+            var legacy = new RecordingApodSource();
+            source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => Task.FromResult(ScienceResponse()),
+                sendSync: (uri, token) => ScienceResponse());
+            apod_wallpaper.IApodClient client = new apod_wallpaper.ApodClient(new apod_wallpaper.ApodScienceClient(source, legacy));
+            Assert(client.GetEntry(date).ResolvedFromSource == "nasa_science", "Sync date must use new source.");
+            Assert((await client.GetEntryAsync(date)).ResolvedFromSource == "nasa_science", "Async date must use new source.");
+            Assert(legacy.Calls.Count == 0, "Date calls must not contact legacy/API key validation.");
+            client.GetLatestEntry();
+            await client.GetLatestEntryAsync();
+            client.GetEntries(date, date);
+            await client.GetEntriesAsync(date, date);
+            await client.ValidateApiKeyAsync("test-key");
+            Assert(string.Join(",", legacy.Calls) == "latest,latest_async,range,range_async,validate", "Unmigrated operations must use explicit compatibility delegation.");
+            source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => Task.FromResult(ScienceResponse(503)),
+                sendSync: (uri, token) => ScienceResponse(503));
+            client = new apod_wallpaper.ApodScienceClient(source, legacy);
+            try { client.GetEntry(date); throw new InvalidOperationException("Failure swallowed."); }
+            catch (apod_wallpaper.ApodScienceRequestException) { }
+            await ExpectScienceFailureAsync<apod_wallpaper.ApodScienceRequestException>(client.GetEntryAsync(date));
+            Assert(legacy.Calls.Count == 5, "Failed dates must not trigger legacy retry chains.");
+        }
+
         [STAThread]
         private static int Main()
         {
@@ -441,6 +538,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science shared request cancellation", () => NasaScienceTransportSharesRequestsAsync().GetAwaiter().GetResult());
                 Run("NASA Science body timeout and concurrency", () => NasaScienceTransportBodyAndConcurrencyAsync().GetAwaiter().GetResult());
                 Run("APOD facade preserves source contracts", () => ApodFacadePreservesContractsAsync().GetAwaiter().GetResult());
+                Run("NASA Science synchronous transport bounds", NasaScienceSyncTransportBounds);
+                Run("NASA Science sync body, shared cooldown and staged adapter", () => NasaScienceSyncAndAdapterAsync().GetAwaiter().GetResult());
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
