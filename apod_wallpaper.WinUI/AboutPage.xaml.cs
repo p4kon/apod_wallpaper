@@ -24,7 +24,7 @@ public sealed partial class AboutPage : Page
     private static readonly Uri PrivacyPolicyUri = new("https://apod_wallpaper.p4kon.com/privacy.html");
     private static readonly Uri LicenseUri = new("https://github.com/p4kon/apod_wallpaper/blob/main/LICENSE");
     private static readonly Uri ThirdPartyNoticesUri = new("https://github.com/p4kon/apod_wallpaper/blob/main/THIRD_PARTY_NOTICES.md");
-    private static readonly Uri NasaApodUri = new("https://apod.nasa.gov/apod/");
+    private static readonly Uri NasaApodUri = new("https://science.nasa.gov/apod/");
     private static readonly Uri NasaApiUri = new("https://api.nasa.gov/");
     private readonly DispatcherTimer _statusDismissTimer = new();
     private AboutPageArguments? _arguments;

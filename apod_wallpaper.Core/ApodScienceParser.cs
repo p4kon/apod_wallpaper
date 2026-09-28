@@ -96,6 +96,7 @@ namespace apod_wallpaper
                 var entry = new ApodEntry
                 {
                     Date = document.Date,
+                    PostUrl = postUrl,
                     Title = title,
                     Explanation = explanation,
                     Copyright = PlainText(document.Copyright ?? document.Credit),
@@ -131,6 +132,8 @@ namespace apod_wallpaper
                 entry.MediaType = "image";
                 entry.Url = ApodScienceImageUrls.GetPreviewUrl(preview);
                 entry.HdUrl = ApodScienceImageUrls.GetOriginalUrl(original);
+                entry.SourcePreviewUrl = preview;
+                entry.SourceOriginalUrl = original;
                 return new ApodScienceRecord(entry, postUrl, preview, original);
             }
             catch (SerializationException ex)
@@ -156,12 +159,20 @@ namespace apod_wallpaper
 
         private static string ValidatePostUrl(string value)
         {
+            var normalized = NormalizePostUrl(value);
+            if (normalized == null)
+                throw new InvalidDataException("NASA Science canonical URL is invalid.");
+            return normalized;
+        }
+
+        internal static string NormalizePostUrl(string value)
+        {
             Uri uri;
             if (!Uri.TryCreate(value, UriKind.Absolute, out uri) || uri.Scheme != Uri.UriSchemeHttps ||
                 !string.Equals(uri.Host, "science.nasa.gov", StringComparison.OrdinalIgnoreCase) ||
                 !uri.IsDefaultPort || !string.IsNullOrEmpty(uri.UserInfo) ||
                 !uri.AbsolutePath.StartsWith("/image-article/", StringComparison.Ordinal))
-                throw new InvalidDataException("NASA Science canonical URL is invalid.");
+                return null;
             return uri.AbsoluteUri;
         }
 

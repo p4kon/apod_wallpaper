@@ -48,8 +48,7 @@ namespace apod_wallpaper
                 _entriesByDate.TryGetValue(key, out existing);
 
                 var cachedEntry = ApodCachedEntry.FromEntry(entry);
-                if (existing != null)
-                    cachedEntry.LocalImagePath = existing.LocalImagePath;
+                cachedEntry.PreserveLocalAndSourceMetadata(existing);
 
                 _entriesByDate[key] = cachedEntry;
                 Save();
@@ -75,8 +74,7 @@ namespace apod_wallpaper
                     _entriesByDate.TryGetValue(key, out existing);
 
                     var cachedEntry = ApodCachedEntry.FromEntry(entry);
-                    if (existing != null)
-                        cachedEntry.LocalImagePath = existing.LocalImagePath;
+                    cachedEntry.PreserveLocalAndSourceMetadata(existing);
 
                     _entriesByDate[key] = cachedEntry;
                     changed = true;

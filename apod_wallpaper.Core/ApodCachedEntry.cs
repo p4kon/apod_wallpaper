@@ -45,6 +45,27 @@ namespace apod_wallpaper
         [DataMember(Order = 13)]
         public bool LocalFileExistsAtLastCheck { get; set; }
 
+        [DataMember(Order = 14, EmitDefaultValue = false)]
+        public string PostUrl { get; set; }
+
+        [DataMember(Order = 15, EmitDefaultValue = false)]
+        public string SourcePreviewUrl { get; set; }
+
+        [DataMember(Order = 16, EmitDefaultValue = false)]
+        public string SourceOriginalUrl { get; set; }
+
+        internal void PreserveLocalAndSourceMetadata(ApodCachedEntry previous)
+        {
+            if (previous == null) return;
+            LocalImagePath = previous.LocalImagePath;
+            if (string.IsNullOrWhiteSpace(PostUrl)) PostUrl = previous.PostUrl;
+            // Fallback links belong to a particular asset, not just to its publication date.
+            if (string.IsNullOrWhiteSpace(SourcePreviewUrl) && string.Equals(Url, previous.Url, StringComparison.Ordinal))
+                SourcePreviewUrl = previous.SourcePreviewUrl;
+            if (string.IsNullOrWhiteSpace(SourceOriginalUrl) && string.Equals(HdUrl, previous.HdUrl, StringComparison.Ordinal))
+                SourceOriginalUrl = previous.SourceOriginalUrl;
+        }
+
         public static ApodCachedEntry FromEntry(ApodEntry entry)
         {
             return new ApodCachedEntry
@@ -56,6 +77,9 @@ namespace apod_wallpaper
                 MediaType = entry.MediaType,
                 Explanation = entry.Explanation,
                 Copyright = entry.Copyright,
+                PostUrl = entry.PostUrl,
+                SourcePreviewUrl = entry.SourcePreviewUrl,
+                SourceOriginalUrl = entry.SourceOriginalUrl,
                 CachedAtUtc = DateTime.UtcNow,
                 LastVerifiedUtc = DateTime.UtcNow,
                 Source = entry.ResolvedFromSource,
@@ -74,6 +98,9 @@ namespace apod_wallpaper
                 MediaType = MediaType,
                 Explanation = Explanation,
                 Copyright = Copyright,
+                PostUrl = PostUrl,
+                SourcePreviewUrl = SourcePreviewUrl,
+                SourceOriginalUrl = SourceOriginalUrl,
                 ResolvedFromSource = Source,
                 IsFallbackImage = IsFallbackImage,
             };

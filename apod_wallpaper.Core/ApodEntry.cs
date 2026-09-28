@@ -27,6 +27,15 @@ namespace apod_wallpaper
         [DataMember(Name = "copyright")]
         public string Copyright { get; set; }
 
+        [DataMember(Name = "post_url", EmitDefaultValue = false)]
+        public string PostUrl { get; set; }
+
+        [DataMember(Name = "source_preview_url", EmitDefaultValue = false)]
+        public string SourcePreviewUrl { get; set; }
+
+        [DataMember(Name = "source_original_url", EmitDefaultValue = false)]
+        public string SourceOriginalUrl { get; set; }
+
         [IgnoreDataMember]
         public string ResolvedFromSource { get; set; }
 

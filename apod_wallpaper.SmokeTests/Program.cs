@@ -454,6 +454,65 @@ namespace apod_wallpaper.SmokeTests
             Assert(legacy.Calls.Count == 5, "Failed dates must not trigger legacy retry chains.");
         }
 
+        private static void ScienceMetadataLinksPersist()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "apod_science_cache_" + Guid.NewGuid().ToString("N"));
+            var snapshot = CaptureSettings();
+            apod_wallpaper.FileStorage.SetApplicationDataDirectoryOverride(root);
+            apod_wallpaper.FileStorage.SetSessionImagesDirectory(root);
+            try
+            {
+                var date = new DateTime(2026, 9, 27);
+                var parsed = apod_wallpaper.ApodScienceParser.Parse(ScienceFixture("image"), date);
+                Assert(parsed.Entry.PostUrl == parsed.PostUrl, "Canonical URL must survive record-to-entry boundary.");
+                Assert(parsed.Entry.SourcePreviewUrl == parsed.SourcePreviewUrl && parsed.Entry.SourceOriginalUrl == parsed.SourceOriginalUrl,
+                    "Source image URLs must survive record-to-entry boundary.");
+                var cache = new apod_wallpaper.ApodMetadataCache();
+                cache.Upsert(parsed.Entry);
+                var restored = new apod_wallpaper.ApodMetadataCache().Get(date).ToEntry();
+                Assert(restored.PostUrl == parsed.PostUrl && restored.SourcePreviewUrl == parsed.SourcePreviewUrl && restored.SourceOriginalUrl == parsed.SourceOriginalUrl,
+                    "Disk cache must roundtrip all new links.");
+                var legacy = new apod_wallpaper.ApodEntry { Date = parsed.Entry.Date, Url = parsed.Entry.Url, HdUrl = parsed.Entry.HdUrl, MediaType = "image" };
+                cache.Upsert(legacy);
+                restored = new apod_wallpaper.ApodMetadataCache().Get(date).ToEntry();
+                Assert(restored.PostUrl == parsed.PostUrl && restored.SourceOriginalUrl == parsed.SourceOriginalUrl, "Legacy refresh must not erase known links for unchanged media.");
+                legacy.Url = "https://example.org/other.jpg";
+                legacy.HdUrl = legacy.Url;
+                cache.UpsertRange(new[] { legacy });
+                restored = new apod_wallpaper.ApodMetadataCache().Get(date).ToEntry();
+                Assert(restored.PostUrl == parsed.PostUrl && restored.SourceOriginalUrl == null && restored.SourcePreviewUrl == null,
+                    "Do not reuse stale fallback images after primary media changes.");
+                var oldJson = "[{\"Date\":\"1995-06-16\",\"Title\":\"Old cache\",\"Url\":\"https://example.org/old.gif\",\"MediaType\":\"image\",\"CachedAtUtc\":\"\\/Date(1700000000000)\\/\",\"LastVerifiedUtc\":\"\\/Date(1700000000000)\\/\"}]";
+                File.WriteAllText(apod_wallpaper.FileStorage.MetadataCacheFilePath, oldJson, new System.Text.UTF8Encoding(false));
+                var old = new apod_wallpaper.ApodMetadataCache().Get(new DateTime(1995, 6, 16)).ToEntry();
+                Assert(old.HasImage && old.Title == "Old cache" && old.PostUrl == null, "Old disk cache without fields must still load.");
+                cache = new apod_wallpaper.ApodMetadataCache();
+                cache.Upsert(parsed.Entry);
+                var fake = new RecordingApodSource();
+                var service = new apod_wallpaper.ApodWallpaperService(fake, cache, new FakeWallpaperApplier());
+                Assert(service.GetPostUrl(date) == parsed.PostUrl && service.OpenPost(date) == parsed.PostUrl,
+                    "NASA action must use cached canonical URL without network.");
+                Assert(service.GetPostUrl(new DateTime(1995, 6, 16)) == apod_wallpaper.ApodPageUrl.GetUrl(new DateTime(1995, 6, 16)), "Old cache fallback stays date-specific.");
+                foreach (var unsafeUrl in new[] { "file:///C:/private", "https://evil.example/image-article/test/", "https://science.nasa.gov.evil.example/image-article/test/", "https://user@science.nasa.gov/image-article/test/" })
+                {
+                    cache.Get(date).PostUrl = unsafeUrl;
+                    Assert(service.GetPostUrl(date) == apod_wallpaper.ApodPageUrl.GetUrl(date), "Never launch arbitrary cached URI.");
+                }
+                cache.Upsert(parsed.Entry);
+                fake.Failure = new IOException("offline");
+                try { service.GetEntryByDate(date, true); throw new InvalidOperationException("Refresh failure was swallowed."); }
+                catch (IOException) { }
+                Assert(new apod_wallpaper.ApodMetadataCache().Get(date).PostUrl == parsed.PostUrl, "Failed metadata refresh must leave disk cache intact.");
+                Assert(fake.Calls.Count == 1, "URL lookup must not issue background requests.");
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetApplicationDataDirectoryOverride(null);
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                TryDeleteDirectory(root);
+            }
+        }
+
         [STAThread]
         private static int Main()
         {
@@ -540,6 +599,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("APOD facade preserves source contracts", () => ApodFacadePreservesContractsAsync().GetAwaiter().GetResult());
                 Run("NASA Science synchronous transport bounds", NasaScienceSyncTransportBounds);
                 Run("NASA Science sync body, shared cooldown and staged adapter", () => NasaScienceSyncAndAdapterAsync().GetAwaiter().GetResult());
+                Run("NASA Science metadata links persist compatibly", ScienceMetadataLinksPersist);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."

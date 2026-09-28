@@ -23,7 +23,7 @@
 | NASA-04a | Выделение legacy и совместимый фасад | NASA-03 | Done |
 | NASA-04b | Sync transport без async-to-sync bridge и новый IApodClient adapter | NASA-04a | Done |
 | NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04b, NASA-05, NASA-06, NASA-07 | To Do |
-| NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04 | To Do |
+| NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04b | Done |
 | NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04, NASA-05 | To Do |
 | NASA-07 | Совместимость существующих range запросов и пагинация | NASA-04 | To Do |
 | NASA-08 | Сквозная регрессия preview/download/apply/favorite/scheduler, RU/EN | NASA-05, NASA-06, NASA-07 | To Do |
@@ -125,6 +125,16 @@ NASA-04a (2026-09-29): старый клиент перенесен в `LegacyAp
 Обязательное перед NASA-04c: проверить/устранить дубли одной даты при смешанных sync+async и одновременных sync вызовах. На этом шаге in-flight sharing NASA-03 сохраняется только для async; общая concurrency и cooldown уже распространяются на оба пути. Не подменять этот пункт blocking Task bridge. Также не забыть CDN fallback из NASA-02. Документация платформы: https://learn.microsoft.com/en-us/dotnet/api/system.net.httpwebrequest.timeout и https://learn.microsoft.com/en-us/dotnet/api/system.net.httpwebrequest.abort . Installer/version/remote не менялись.
 
 Сохранить canonical PostUrl в entry/cache и вернуть его через GetPostUrl/OpenPost, workflow results и NASA button. Старые записи без поля читаются. Не менять yyyy-MM-dd filenames, пути библиотеки, favorites и local files. Ошибка обновления remote metadata не удаляет старые данные. About NASA link обновить при интеграции; copy/translate получают plain text.
+
+Результат NASA-05 (2026-09-29): PostUrl, SourcePreviewUrl и SourceOriginalUrl добавлены в ApodEntry и ApodCachedEntry как необязательные поля. Parser заполняет Entry до выхода через staged adapter; FromEntry/ToEntry и metadata enrichment сохраняют ссылки. Upsert/UpsertRange сохраняют известный PostUrl, если новый legacy результат его не содержит. Source fallback URLs сохраняются только при неизменном соответствующем primary URL, чтобы не подменить новый asset старым. LocalImagePath и схемы имен файлов не менялись.
+
+GetPostUrl/OpenPost используют canonical URL из кеша, повторно проверяя HTTPS, host science.nasa.gov, default port, отсутствие credentials и путь /image-article/. Произвольный URI из кеша не запускается. Существующие workflow results и кнопка NASA уже проходят через этот метод. About NASA ведет на https://science.nasa.gov/apod/. Lookup не делает дополнительных запросов. Для старого кеша без canonical URL пока остается legacy date URL; NASA-08 должна проверить получение canonical metadata для таких дат после переключения источника, не перенаправлять их молча на сегодняшнюю публикацию. Новых UI строк нет.
+
+Проверки: тест сначала воспроизвел потерю PostUrl между record и entry. После реализации проверены disk roundtrip всех ссылок, старый JSON без новых полей, одиночный/range upsert, смена image asset, unsafe cached URL, отсутствие сети при lookup и сохранение disk cache при провале force refresh. Все файлы теста во временной директории; пользовательский кеш не менялся.
+
+Build: единственный полный `dotnet build apod_wallpaper.sln -c Release` скомпилировал Core для обеих платформ и WinUI, но завершился с 1 ошибкой smoke из-за неполного synthetic old-cache fixture (отсутствовали старые timestamp-поля, DateTime.MinValue нельзя сериализовать при UTC+3). Fixture исправлен на реалистичный старый формат. После этого focused Release build SmokeTests успешен, 0 warnings / 0 errors, весь smoke suite passed. Production код после полного build не менялся. Повторный полный build не запускался согласно ограничению AGENTS.md. Отсутствующие timestamps в поврежденном старом кеше не исправлялись в этой задаче.
+
+Без installer/version/push. Production default source еще legacy; NASA-04c остается открыта.
 
 ## NASA-06: today/latest/random
 

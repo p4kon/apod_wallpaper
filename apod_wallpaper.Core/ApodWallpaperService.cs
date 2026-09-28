@@ -509,7 +509,7 @@ namespace apod_wallpaper
 
         public string GetPostUrl(DateTime date)
         {
-            return ApodPageUrl.GetUrl(date);
+            return ApodScienceParser.NormalizePostUrl(_cache.Get(date)?.PostUrl) ?? ApodPageUrl.GetUrl(date);
         }
 
         public ApodDownloadResult EnsureImageDownloaded(ApodEntry entry, DateTime date)
@@ -752,6 +752,12 @@ namespace apod_wallpaper
                 primaryEntry.HdUrl = metadataEntry.HdUrl;
             if (string.IsNullOrWhiteSpace(primaryEntry.MediaType))
                 primaryEntry.MediaType = metadataEntry.MediaType;
+            if (string.IsNullOrWhiteSpace(primaryEntry.PostUrl))
+                primaryEntry.PostUrl = metadataEntry.PostUrl;
+            if (string.IsNullOrWhiteSpace(primaryEntry.SourcePreviewUrl) && string.Equals(primaryEntry.Url, metadataEntry.Url, StringComparison.Ordinal))
+                primaryEntry.SourcePreviewUrl = metadataEntry.SourcePreviewUrl;
+            if (string.IsNullOrWhiteSpace(primaryEntry.SourceOriginalUrl) && string.Equals(primaryEntry.HdUrl, metadataEntry.HdUrl, StringComparison.Ordinal))
+                primaryEntry.SourceOriginalUrl = metadataEntry.SourceOriginalUrl;
 
             return primaryEntry;
         }
