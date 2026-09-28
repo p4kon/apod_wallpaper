@@ -19,6 +19,81 @@ namespace apod_wallpaper.SmokeTests
         private static InMemorySettingsStore _settingsStore;
         private static apod_wallpaper.DpapiUserSecretStore _secretStore;
 
+        private static string ScienceFixture(string name)
+        {
+            return File.ReadAllText(Path.Combine(GetRepositoryRoot(), "apod_wallpaper.SmokeTests", "Fixtures", "NasaScience", name + ".json"));
+        }
+
+        private static void NasaScienceDateUrlsArePure()
+        {
+            const string root = "https://science.nasa.gov/wp-json/wp/v2/apod-basic/";
+            Assert(apod_wallpaper.ApodScienceParser.BuildUrl(new DateTime(2026, 9, 28)) == root + "260928", "Modern date URL must be exact.");
+            Assert(apod_wallpaper.ApodScienceParser.BuildUrl(new DateTime(1995, 6, 16)) == root + "950616", "First APOD date must work.");
+            Assert(apod_wallpaper.ApodScienceParser.BuildUrl(new DateTime(2000, 1, 1)) == root + "000101", "Century boundary must preserve zeroes.");
+            Assert(apod_wallpaper.ApodScienceParser.BuildUrl(new DateTime(2024, 2, 29)) == root + "240229", "Leap day must work.");
+        }
+
+        private static void NasaScienceSelectsPrimaryImage()
+        {
+            var parsed = apod_wallpaper.ApodScienceParser.Parse(ScienceFixture("image"), new DateTime(2026, 9, 27));
+            var entry = parsed.Entry;
+            Assert(entry.HasImage && entry.MediaType == "image", "Primary image should be available.");
+            Assert(entry.PreviewImageUrl.EndsWith("?fit=clip&w=800"), "Preview must use decoded src, not article URL.");
+            Assert(entry.BestImageUrl.EndsWith("?fit=clip&w=4298"), "Original must use primary image link, not metadata or explanation.");
+            Assert(parsed.PostUrl.Contains("/image-article/"), "Canonical article URL must remain separate.");
+            Assert(entry.Title == "Andromeda & stars", "Title entities must be decoded.");
+            Assert(entry.Copyright == "A & B", "Credits must be plain text.");
+            Assert(entry.Explanation == "Stars & dust.\nSecond line.", "Explanation must remove label/scripts and preserve breaks.");
+            Assert(entry.ResolvedFromSource == "nasa_science", "Source should be identifiable.");
+        }
+
+        private static void NasaSciencePreservesArchiveOriginal()
+        {
+            var entry = apod_wallpaper.ApodScienceParser.Parse(ScienceFixture("archive"), new DateTime(1995, 6, 16)).Entry;
+            Assert(entry.BestImageUrl.EndsWith("/e_lens.gif"), "Archive must use real GIF, not news-thumbnail.");
+            Assert(entry.PreviewImageUrl == entry.BestImageUrl, "Identical source URLs are valid; do not invent a thumbnail.");
+        }
+
+        private static void NasaScienceRejectsVideoPosters()
+        {
+            foreach (var kind in new[] { "video", "iframe" })
+            {
+                var json = ScienceFixture("video").Replace("\"media_type\": \"video\"", "\"media_type\": \"" + kind + "\"");
+                var entry = apod_wallpaper.ApodScienceParser.Parse(json, new DateTime(2026, 8, 31)).Entry;
+                Assert(!entry.HasImage && string.IsNullOrEmpty(entry.HdUrl), "Video poster must not be a downloadable image.");
+            }
+        }
+
+        private static void NasaScienceHandlesTextOnly()
+        {
+            var entry = apod_wallpaper.ApodScienceParser.Parse(ScienceFixture("text-only"), new DateTime(2012, 3, 12)).Entry;
+            Assert(!entry.HasImage && entry.MediaType == "other", "Verified text-only page must be unsupported.");
+            Assert(string.IsNullOrEmpty(entry.Url) && string.IsNullOrEmpty(entry.HdUrl), "Unsupported page must not expose poster or article as image.");
+        }
+
+        private static void NasaScienceRejectsInvalidPayloads()
+        {
+            var json = ScienceFixture("image");
+            foreach (var invalid in new[]
+            {
+                "", "{}", "[]", "<html>Error</html>", "null", "{invalid}",
+                json.Replace("2026-09-27", "2026-09-26"),
+                json.Replace("2026 September 27", "2026 September 26"),
+                json.Replace("\"basic_html\"", "\"missing_html\""),
+                json.Replace("https://science.nasa.gov/image-article/", "https://evil.example/image-article/"),
+                json.Replace("https://assets.science.nasa.gov/dynamicimage/assets/science/cds/apod/andromeda.jpg", "file:///C:/private.jpg"),
+                json.Replace("https://assets.science.nasa.gov/dynamicimage/assets/science/cds/apod/andromeda.jpg", "https://127.0.0.1/private.jpg"),
+                json.Replace("andromeda.jpg", "news-thumbnail.png"),
+                json.Replace("\"media_type\": \"image\"", "\"media_type\": \"surprise\"")
+            })
+            {
+                var rejected = false;
+                try { apod_wallpaper.ApodScienceParser.Parse(invalid, new DateTime(2026, 9, 27)); }
+                catch (InvalidDataException) { rejected = true; }
+                Assert(rejected, "Untrusted or unsupported payload must fail closed.");
+            }
+        }
+
         [STAThread]
         private static int Main()
         {
@@ -90,6 +165,12 @@ namespace apod_wallpaper.SmokeTests
                 Run("Month calendar keeps stable day visuals", MonthCalendarKeepsStableDayVisuals);
                 Run("Favorites preview uses a single open gesture path", FavoritesPreviewUsesSingleOpenGesturePath);
                 Run("Update reminder diagnostics avoid secrets", UpdateReminderDiagnosticsAvoidSecrets);
+                Run("NASA Science date URLs are pure", NasaScienceDateUrlsArePure);
+                Run("NASA Science selects primary image and plain text", NasaScienceSelectsPrimaryImage);
+                Run("NASA Science preserves archive originals", NasaSciencePreservesArchiveOriginal);
+                Run("NASA Science rejects video posters as images", NasaScienceRejectsVideoPosters);
+                Run("NASA Science handles text-only pages", NasaScienceHandlesTextOnly);
+                Run("NASA Science rejects invalid payloads", NasaScienceRejectsInvalidPayloads);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."

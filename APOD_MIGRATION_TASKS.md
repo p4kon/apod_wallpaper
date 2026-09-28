@@ -16,7 +16,7 @@
 | ID | Задача | Зависимости | Статус |
 |---|---|---|---|
 | NASA-00 | Журнал и границы миграции | - | Done |
-| NASA-01 | Pure JSON parser, date URL builder, offline fixtures/tests | NASA-00 | In Progress |
+| NASA-01 | Pure JSON parser, date URL builder, offline fixtures/tests | NASA-00 | Done |
 | NASA-02 | Раздельные preview/original, проверка CDN и качества | NASA-01 | To Do |
 | NASA-03 | Ограниченный transport, отмена, ошибки, in-flight guard | NASA-01 | To Do |
 | NASA-04 | Подключение source за IApodClient, сохранение legacy | NASA-02, NASA-03 | To Do |
@@ -44,6 +44,18 @@
 - HTML entities декодируются в ссылках и тексте; HTML не исполняется.
 - Тесты offline: изображения, legacy GIF, poster video, text-only, пустой/невалидный JSON, чужая дата, опасные URL, HTML formatting.
 - Старый parser и production source пока не переключены.
+
+Результат (2026-09-29): добавлены `ApodScienceParser` и `ApodScienceRecord`. JSON десериализуется структурно через DataContractJsonSerializer. Нормализованный результат содержит обычную ApodEntry и отдельный PostUrl. Parser pure, без сети/файлов/download/apply. Ограничен размер JSON и время каждого regex; ошибочная дата, неизвестный тип, неполный HTML и опасные URL отклоняются.
+
+Из нескольких ссылок на картинку выбирается img/src и связанный href только внутри date-bearing center в body. Head/og:image, JSON hdurl и ссылки из explanation не участвуют. Видео проверяется раньше img, пустая корректная публикация получает media_type=other. Совпадающие preview/original сохранены как есть: parser не выдумывает low-res.
+
+Проверки: шесть новых групп smoke сначала упали на NotImplementedException (RED), затем прошли вместе со старым набором (GREEN). Четыре минимизированных synthetic fixture файла явно помечены как адаптированные, не как сырые NASA ответы. Проверены 14 невалидных вариантов, даты/век/leap day, plain text/entities, poster, text-only, архивная заглушка.
+
+Отдельно реальный compiled parser вызван для JSON с NASA: 1995-06-16 -> e_lens.gif, 2012-03-12 -> other без image URLs, 2014-10-01 -> оригинал JPG, 2026-08-31 -> video без poster, 2026-09-27 -> M31Before_Scherer_4298.jpg. На запрос 2026-09-29 сервер на момент проверки вернул HTTP 404; parser к неуспешному ответу не применялся. Это не утверждение о доступности даты позднее.
+
+Решения: не добавлялась новая HTML dependency и не менялись csproj; поддержан проверенный ограниченный basic_html template с timeout, а неизвестная структура вызывает ошибку вместо эвристического выбора любой картинки. JSON DTO игнорирует hdurl намеренно, поскольку он не доказывает наличие оригинала. Production ApodClient, legacy parser, scheduler и UI не изменены. Полная миграция еще не готова: NASA-02..09 остаются открыты.
+
+Итоговая проверка NASA-01: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, smoke tests passed. `git diff --check` без ошибок whitespace (только уведомление Git об автоматической нормализации LF/CRLF). Installer не собирался, push не выполнялся.
 
 ## NASA-02: preview/original
 

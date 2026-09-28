@@ -1,0 +1,9 @@
+{
+  "date": "2026-08-31",
+  "title": "Video",
+  "permalink": "https://science.nasa.gov/image-article/apod-2026-august-31-launch-of-the-roman-space-telescope/",
+  "media_type": "video",
+  "hdurl": "https://assets.science.nasa.gov/poster.jpg",
+  "explanation": "Video explanation.",
+  "basic_html": "<html><body><center>2026 August 31<br><iframe src='https://www.youtube.com/embed/example'></iframe><img src='https://assets.science.nasa.gov/poster.jpg'></center><p><b>Explanation:</b> Video explanation.</p></body></html>"
+}
