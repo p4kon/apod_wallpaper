@@ -1617,7 +1617,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        var imageLoaded = await TryShowPreviewImageAsync(workflow.PreviewLocation);
+        var imageLoaded = await TryShowPreviewImageAsync(workflow.PreviewLocation, workflow.Entry?.SourcePreviewUrl);
         PreviewProgressRing.IsActive = false;
         PreviewProgressRing.Visibility = Visibility.Collapsed;
 
@@ -1737,7 +1737,7 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private async Task<bool> TryShowPreviewImageAsync(string? previewLocation)
+    private async Task<bool> TryShowPreviewImageAsync(string? previewLocation, string? sourcePreviewUrl = null)
     {
         PreviewImageBrush.ImageSource = null;
         PreviewImageFrame.Visibility = Visibility.Collapsed;
@@ -1751,7 +1751,7 @@ public sealed partial class MainPage : Page
 
         try
         {
-            var resolvedPreviewLocation = await ResolvePreviewAssetLocationAsync(previewLocation);
+            var resolvedPreviewLocation = await ResolvePreviewAssetLocationAsync(previewLocation, sourcePreviewUrl);
             var bitmap = new BitmapImage();
             bitmap.DecodePixelWidth = ResolvePreviewDecodeWidth();
             bitmap.ImageOpened += PreviewBitmap_ImageOpened;
@@ -2695,7 +2695,7 @@ public sealed partial class MainPage : Page
         return new Uri(previewLocation, UriKind.RelativeOrAbsolute);
     }
 
-    private async Task<string> ResolvePreviewAssetLocationAsync(string previewLocation)
+    private async Task<string> ResolvePreviewAssetLocationAsync(string previewLocation, string? sourcePreviewUrl)
     {
         if (string.IsNullOrWhiteSpace(previewLocation))
             return previewLocation;
@@ -2708,6 +2708,10 @@ public sealed partial class MainPage : Page
         if (string.IsNullOrWhiteSpace(cachedPreviewPath))
             return previewLocation;
 
+        if (!string.IsNullOrWhiteSpace(sourcePreviewUrl) && !string.Equals(previewLocation, sourcePreviewUrl, StringComparison.Ordinal))
+            return await GetOrDownloadPreviewAssetAsync(previewLocation, cachedPreviewPath, sourcePreviewUrl)
+                ?? throw new IOException("NASA preview download returned no file.");
+
         if (File.Exists(cachedPreviewPath))
             return cachedPreviewPath;
 
@@ -2717,14 +2721,14 @@ public sealed partial class MainPage : Page
             : previewLocation;
     }
 
-    private async Task<string?> GetOrDownloadPreviewAssetAsync(string previewUrl, string cachePath)
+    private async Task<string?> GetOrDownloadPreviewAssetAsync(string previewUrl, string cachePath, string? sourcePreviewUrl = null)
     {
         Task<string?>? downloadTask = null;
         lock (_previewAssetSyncRoot)
         {
             if (!_previewAssetTasks.TryGetValue(previewUrl, out downloadTask))
             {
-                downloadTask = DownloadPreviewAssetAsync(previewUrl, cachePath);
+                downloadTask = DownloadPreviewAssetAsync(previewUrl, cachePath, sourcePreviewUrl);
                 _previewAssetTasks[previewUrl] = downloadTask;
             }
         }
@@ -2743,8 +2747,11 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private async Task<string?> DownloadPreviewAssetAsync(string previewUrl, string cachePath)
+    private async Task<string?> DownloadPreviewAssetAsync(string previewUrl, string cachePath, string? sourcePreviewUrl)
     {
+        if (!string.IsNullOrWhiteSpace(sourcePreviewUrl))
+            return await apod_wallpaper.ApodPreviewAsset.DownloadAsync(previewUrl, sourcePreviewUrl, cachePath);
+
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);

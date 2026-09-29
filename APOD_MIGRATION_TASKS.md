@@ -24,7 +24,7 @@
 | NASA-04b | Sync transport без async-to-sync bridge и новый IApodClient adapter | NASA-04a | Done |
 | NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04c1, NASA-04c2, NASA-04c3, NASA-05, NASA-06, NASA-07 | In Progress |
 | NASA-04c1 | Общий in-flight registry для sync/async одной даты | NASA-04b | Done |
-| NASA-04c2 | Ограниченный asset fallback и canonical URL старого кеша | NASA-02, NASA-05, NASA-07a | In Progress: old-cache migration done; asset fallback remains |
+| NASA-04c2 | Ограниченный asset fallback и canonical URL старого кеша | NASA-02, NASA-05, NASA-07a | In Progress: old-cache + preview fallback done; original download remains |
 | NASA-04c3 | Единая composition source/cache для workflow, probe и Random; production switch | NASA-04c1, NASA-04c2, NASA-06, NASA-07 | To Do |
 | NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04b | Done |
 | NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04b, NASA-05 | Done (staged) |
@@ -139,6 +139,18 @@ Offline тест сначала воспроизвел немигрирующи�
 Остаток NASA-04c2: asset fallback в preview/download еще не реализован. Этот этап не меняет image transport, retry chains или разрешение скачиваемого изображения. Не объявлять NASA-04c2/04c завершенными до закрытия этого остатка.
 
 Итог проверки old-cache этапа: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, smoke tests passed. Вызов кнопки NASA в MainPage проверен по коду: используется Backend.GetPostUrlAsync. Ручной UI/network тест после production switch остается NASA-08. Без version/installer/push.
+
+### NASA-04c2: preview asset fallback
+
+Добавлен ApodPreviewAsset и подключен к remote preview в MainPage для записей с преобразованным SourcePreviewUrl. Кандидаты: вычисленный preview, затем максимум один исходный source URL, только если он преобразуется helper в тот же preview. Подмена другим asset запрещена. Fallback только после 404 или не-image/невалидного изображения. Redirect, 403, 429, 5xx, timeout и превышение размера не запускают резервный запрос. После провала не передаем remote URL в BitmapImage для скрытого третьего запроса.
+
+Сетевой бюджет общий 30 секунд на headers/body обеих попыток; максимум 64 MiB на ответ. Уникальный temporary file, проверка декодируемости на background thread перед публикацией в кеше, атомарная замена старого файла. Валидный кеш повторно не скачивается. CPU decode проверяется на отмену до/после, но не объявляется жестко прерываемым. Локальные preview и непреобразованные/legacy URLs сохраняют прежний путь. Оригиналы, apply/download и scheduler этот этап не меняет.
+
+Тест сначала упал на stub. После реализации offline проверены 404/битое изображение -> source, обе ссылки отсутствуют (ровно 2 попытки), повтор из кеша без сети, 302/403/429/503 без fallback, timeout, pre-cancellation, declared oversize, запрет другого asset, очистка temporary files. Final Release build успешен: 0 warnings / 0 errors, smoke tests passed. Новый файл ApodPreviewAsset.cs включен в отдельный локальный commit. Без version/installer/push. Live WinUI проверка остается NASA-08.
+
+Документация: https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpcompletionoption — ResponseHeadersRead сам не ограничивает чтение body, поэтому использован общий cancellation budget и dispose response при отмене.
+
+Остаток NASA-04c2: bounded original download без молчаливого перехода на уменьшенный dynamicimage. NASA-04c3 и NASA-08 еще открыты. Предварительная оценка всего плана около 70–75% выполнено; это оценка объема, не готовность к релизу.
 
 ## NASA-05: ссылки и кеш
 

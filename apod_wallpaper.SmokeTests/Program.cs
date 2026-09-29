@@ -528,6 +528,69 @@ namespace apod_wallpaper.SmokeTests
             }
         }
 
+        private static async Task SciencePreviewFallbackAsync()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "apod_preview_fallback_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                const string source = "https://assets.science.nasa.gov/dynamicimage/assets/science/test.jpg?w=1200&h=900&fit=clip";
+                var preview = apod_wallpaper.ApodScienceImageUrls.GetPreviewUrl(source);
+                byte[] jpeg;
+                using (var buffer = new MemoryStream())
+                using (var bitmap = new Bitmap(12, 8))
+                { bitmap.Save(buffer, System.Drawing.Imaging.ImageFormat.Jpeg); jpeg = buffer.ToArray(); }
+                foreach (var failure in new[] { 404, 200 })
+                {
+                    var urls = new List<string>();
+                    var path = Path.Combine(root, failure + ".jpg");
+                    Func<Uri, CancellationToken, Task<apod_wallpaper.ApodScienceResponse>> send = (uri, token) => {
+                        urls.Add(uri.AbsoluteUri);
+                        return Task.FromResult(urls.Count == 1
+                            ? new apod_wallpaper.ApodScienceResponse(failure, new MemoryStream(new byte[] { 1, 2, 3 }), "image/jpeg")
+                            : new apod_wallpaper.ApodScienceResponse(200, new MemoryStream(jpeg), "image/jpeg"));
+                    };
+                    await apod_wallpaper.ApodPreviewAsset.DownloadAsync(preview, source, path, send, TimeSpan.FromSeconds(1));
+                    Assert(urls.SequenceEqual(new[] { preview, source }) && apod_wallpaper.LocalImageValidator.IsUsableImageFile(path),
+                        "Preview must retry original source once after missing/invalid derived image, then cache only valid image.");
+                    await apod_wallpaper.ApodPreviewAsset.DownloadAsync(preview, source, path, send, TimeSpan.FromSeconds(1));
+                    Assert(urls.Count == 2, "Valid preview cache must avoid network.");
+                }
+                foreach (var status in new[] { 302, 403, 429, 503 })
+                {
+                    var calls = 0;
+                    var path = Path.Combine(root, status + ".jpg");
+                    await ExpectScienceFailureAsync<IOException>(apod_wallpaper.ApodPreviewAsset.DownloadAsync(preview, source, path,
+                        (uri, token) => { calls++; return Task.FromResult(new apod_wallpaper.ApodScienceResponse(status, Stream.Null)); }, TimeSpan.FromSeconds(1)));
+                    Assert(calls == 1 && !File.Exists(path), "Transient/redirect failure must not fan out or poison preview cache.");
+                }
+                var timeoutCalls = 0;
+                await ExpectScienceFailureAsync<TimeoutException>(apod_wallpaper.ApodPreviewAsset.DownloadAsync(preview, source, Path.Combine(root, "timeout.jpg"),
+                    async (uri, token) => { timeoutCalls++; await Task.Delay(5000, token); return null; }, TimeSpan.FromMilliseconds(50)));
+                Assert(timeoutCalls == 1, "Timeout must not start fallback.");
+                var mismatchCalls = 0;
+                await ExpectScienceFailureAsync<IOException>(apod_wallpaper.ApodPreviewAsset.DownloadAsync(preview, source.Replace("test.jpg", "other.jpg"), Path.Combine(root, "mismatch.jpg"),
+                    (uri, token) => { mismatchCalls++; return Task.FromResult(new apod_wallpaper.ApodScienceResponse(404, Stream.Null)); }, TimeSpan.FromSeconds(1)));
+                Assert(mismatchCalls == 1, "Different source asset must never be used as fallback.");
+                var exhaustedCalls = 0;
+                await ExpectScienceFailureAsync<IOException>(apod_wallpaper.ApodPreviewAsset.DownloadAsync(preview, source, Path.Combine(root, "both-missing.jpg"),
+                    (uri, token) => { exhaustedCalls++; return Task.FromResult(new apod_wallpaper.ApodScienceResponse(404, Stream.Null)); }, TimeSpan.FromSeconds(1)));
+                Assert(exhaustedCalls == 2, "Fallback failure must stop after two requests.");
+                var oversizedCalls = 0;
+                await ExpectScienceFailureAsync<IOException>(apod_wallpaper.ApodPreviewAsset.DownloadAsync(preview, source, Path.Combine(root, "large.jpg"),
+                    (uri, token) => { oversizedCalls++; return Task.FromResult(new apod_wallpaper.ApodScienceResponse(200, Stream.Null, "image/jpeg", 67108865)); }, TimeSpan.FromSeconds(1)));
+                Assert(oversizedCalls == 1, "Oversized response must not trigger fallback.");
+                using (var cancel = new CancellationTokenSource())
+                {
+                    cancel.Cancel();
+                    await ExpectScienceFailureAsync<OperationCanceledException>(apod_wallpaper.ApodPreviewAsset.DownloadAsync(preview, source, Path.Combine(root, "cancel.jpg"),
+                        (uri, token) => { throw new InvalidOperationException("Cancelled request reached transport."); }, TimeSpan.FromSeconds(1), cancel.Token));
+                }
+                Assert(!Directory.GetFiles(root, "*.download").Any(), "Failures must remove temporary files.");
+            }
+            finally { TryDeleteDirectory(root); }
+        }
+
         private static void ScienceMetadataLinksPersist()
         {
             var root = Path.Combine(Path.GetTempPath(), "apod_science_cache_" + Guid.NewGuid().ToString("N"));
@@ -907,6 +970,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science sync body, shared cooldown and staged adapter", () => NasaScienceSyncAndAdapterAsync().GetAwaiter().GetResult());
                 Run("NASA Science metadata links persist compatibly", ScienceMetadataLinksPersist);
                 Run("NASA Science old cache migrates without blocking local previews", () => ScienceOldCacheMigrationAsync().GetAwaiter().GetResult());
+                Run("NASA Science preview fallback is bounded and validates cache", () => SciencePreviewFallbackAsync().GetAwaiter().GetResult());
                 Run("NASA Science latest verifies dates and total budget", () => ScienceLatestUsesVerifiedDatesAsync().GetAwaiter().GetResult());
                 Run("NASA Science probe and Random retain verified metadata", () => ScienceProbeAndRandomAsync().GetAwaiter().GetResult());
                 Run("NASA Science range pagination is complete or fails", () => ScienceRangePagesAsync().GetAwaiter().GetResult());
