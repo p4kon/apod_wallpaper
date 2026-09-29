@@ -144,7 +144,16 @@ namespace apod_wallpaper
                 if (!image.Success)
                 {
                     if (kind == "image")
-                        throw new InvalidDataException("NASA Science image publication has no primary image.");
+                    {
+                        var frame = ResolveMetadataFrame(document, postUrl, requestedDate, body.Groups["body"].Value);
+                        entry.MediaType = "image";
+                        entry.Url = ApodScienceImageUrls.GetPreviewUrl(frame);
+                        entry.HdUrl = ApodScienceImageUrls.GetOriginalUrl(frame);
+                        entry.SourcePreviewUrl = frame;
+                        entry.SourceOriginalUrl = frame;
+                        entry.IsFallbackImage = true;
+                        return new ApodScienceRecord(entry, postUrl, frame, frame);
+                    }
                     return new ApodScienceRecord(entry, postUrl);
                 }
                 if (kind == "other")
@@ -178,6 +187,34 @@ namespace apod_wallpaper
         private static Regex Pattern(string pattern)
         {
             return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        }
+
+        private static string ResolveMetadataFrame(ScienceDto document, string postUrl, DateTime date, string body)
+        {
+            if (EmbeddedMedia.IsMatch(body))
+                throw new InvalidDataException("NASA Science embedded media cannot use an image poster.");
+            var candidate = ValidateImageUrl(document.HdUrl, postUrl);
+            var uri = new Uri(candidate);
+            var directory = "/science/cds/apod/apod/" + date.ToString("yyyy/MMMM/", CultureInfo.InvariantCulture).ToLowerInvariant();
+            if (uri.Scheme != Uri.UriSchemeHttps || !string.Equals(uri.Host, "assets.science.nasa.gov", StringComparison.OrdinalIgnoreCase)
+                || !(uri.AbsolutePath.StartsWith("/dynamicimage/assets" + directory, StringComparison.Ordinal)
+                    || uri.AbsolutePath.StartsWith("/content/dam" + directory, StringComparison.Ordinal)))
+                throw new InvalidDataException("NASA Science metadata image is not a dated NASA asset.");
+            var head = Regex.Match(document.BasicHtml, @"<head\b[^>]*>(?<content>.*?)</head\s*>",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
+            string verified = null;
+            foreach (Match meta in Regex.Matches(head.Groups["content"].Value, @"<meta\b(?<attributes>[^>]*)>",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1)))
+            {
+                var attributes = meta.Groups["attributes"].Value;
+                if (!string.Equals(Attribute(attributes, "property"), "og:image", StringComparison.OrdinalIgnoreCase)) continue;
+                var image = ValidateImageUrl(Attribute(attributes, "content"), postUrl);
+                if (!string.Equals(image, candidate, StringComparison.Ordinal))
+                    throw new InvalidDataException("NASA Science metadata image links disagree.");
+                verified = image;
+            }
+            if (verified == null) throw new InvalidDataException("NASA Science image publication has no verified image.");
+            return verified;
         }
 
         private static string Attribute(string attributes, string name)
@@ -237,6 +274,7 @@ namespace apod_wallpaper
             [DataMember(Name = "title")] public string Title { get; set; }
             [DataMember(Name = "permalink")] public string Permalink { get; set; }
             [DataMember(Name = "media_type")] public string MediaType { get; set; }
+            [DataMember(Name = "hdurl")] public string HdUrl { get; set; }
             [DataMember(Name = "explanation")] public string Explanation { get; set; }
             [DataMember(Name = "copyright")] public string Copyright { get; set; }
             [DataMember(Name = "credit")] public string Credit { get; set; }

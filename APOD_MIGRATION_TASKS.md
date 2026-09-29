@@ -166,6 +166,18 @@ Live: NASA range август 2026 действительно вернул 25 з
 
 Обязательное перед NASA-04c/08: решить поведение month warmup при единичной поврежденной публикации. Сейчас намеренно fail-closed весь диапазон; старый кеш не заменяется частичным результатом, но исправные дни этого месяца не обновляются. Можно сохранять отдельно проверенные записи только с явным partial-result контрактом, не выдавая это за полный месяц. Не ослаблять parser и не выбирать случайную картинку из metadata. Installer/version/push не выполнялись.
 
+### NASA-07a: подтвержденный кадр из metadata (Done)
+
+Уточнение к предыдущему расследованию: публикация 2026-08-05 не лишена изображения. Primary HTML center пуст, но JSON hdurl и HTML og:image согласованно указывают на saturn_spokes_frame.jpg в каталоге NASA за август 2026. Поэтому прежняя классификация этой записи как поврежденной была слишком строгой.
+
+Добавлен ограниченный fallback только для media_type=image без primary img: hdurl должен совпадать с og:image, принадлежать HTTPS assets.science.nasa.gov и каталогу года/месяца публикации. Embedded video, placeholder, другой host, несовпадение ссылок и неверный каталог отклоняются. Primary image сохраняет приоритет; video poster не становится обоями. Сохраняются исходные ссылки и IsFallbackImage. Это поддержка подтвержденного статического кадра NASA, не новый декодер произвольных GIF.
+
+Smoke fixture metadata-frame.json синтетический минимизированный пример структуры ответа 260805. Тест сначала воспроизвел отказ прежнего parser, затем проверил fallback, отрицательные случаи и apply через существующий service с fake wallpaper applier. Реальные обои не менялись. Focused smoke build прошел без warnings/errors.
+
+Live: static original вернул HTTP 200, image/jpeg, 63 659 bytes, 1133x716; существующий DownloadedImageFile сохранил файл, LocalImageValidator подтвердил его корректность. Compiled range client теперь успешно возвращает все 31 публикацию августа, включая этот кадр. Общий fail-closed контракт для действительно невалидных записей пока сохранен; это не partial-result реализация. Production switch остается NASA-04c, installer/version/push не выполнялись.
+
+Итог NASA-07a: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, все smoke tests passed.
+
 ## NASA-08: регрессия
 
 Проверить все потребители: download, apply (manual выключает auto), favorite-with-download, progress, latest scheduler, favorites rotation, calendar month/year, NASA, translation, About/Settings. Parser не должен сделать video poster обоями. Проверить старый cache, offline, slow network, midnight, tray restore и быструю навигацию. Новые пользовательские строки RU/EN. Build + offline smoke + отдельные live/ручные проверки; не объявлять всю миграцию готовой только по build.

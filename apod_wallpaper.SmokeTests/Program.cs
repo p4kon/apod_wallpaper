@@ -627,6 +627,51 @@ namespace apod_wallpaper.SmokeTests
             await ExpectScienceFailureAsync<TimeoutException>(source.GetEntriesAsync(date, date));
         }
 
+        private static void ScienceMetadataFrameIsBoundedFallback()
+        {
+            var date = new DateTime(2026, 8, 5);
+            var json = ScienceFixture("metadata-frame");
+            var entry = apod_wallpaper.ApodScienceParser.Parse(json, date).Entry;
+            Assert(entry.HasImage && entry.HdUrl == "https://assets.science.nasa.gov/content/dam/science/cds/apod/apod/2026/august/saturn_spokes_frame.jpg",
+                "Verified NASA frame must resolve to original JPEG asset.");
+            Assert(entry.Url.EndsWith("?w=800&h=800&fit=clip") && entry.SourceOriginalUrl.Contains("w=1133"), "Preview and fallback source must stay distinct.");
+            Assert(entry.IsFallbackImage, "Metadata-derived frame must be explicit.");
+            foreach (var invalid in new[] {
+                json.Replace("og:image", "og:ignored"),
+                json.Replace("saturn_spokes_frame.jpg?w=1133&amp;", "other.jpg?w=1133&amp;"),
+                json.Replace("saturn_spokes_frame.jpg", "news-thumbnail.jpg"),
+                json.Replace("assets.science.nasa.gov", "example.org"),
+                json.Replace("/2026/august/", "/2026/july/") })
+            {
+                try { apod_wallpaper.ApodScienceParser.Parse(invalid, date); throw new InvalidOperationException("Unverified metadata image accepted."); }
+                catch (InvalidDataException) { }
+            }
+            var video = apod_wallpaper.ApodScienceParser.Parse(json.Replace("\"media_type\": \"image\"", "\"media_type\": \"video\""), date).Entry;
+            Assert(!video.HasImage && video.HdUrl == null, "Video poster must never become wallpaper.");
+            var root = Path.Combine(Path.GetTempPath(), "apod_frame_apply_" + Guid.NewGuid().ToString("N"));
+            var snapshot = CaptureSettings();
+            Directory.CreateDirectory(root);
+            try
+            {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(root);
+                var path = Path.Combine(root, "2026-08-05.jpg");
+                using (var bitmap = new Bitmap(12, 8)) bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Jpeg);
+                var client = new FakeApodClient(entry, new Dictionary<DateTime, apod_wallpaper.ApodEntry> { { date, entry } });
+                var cache = new InMemoryApodMetadataCache();
+                cache.Upsert(entry);
+                var applier = new FakeWallpaperApplier();
+                var service = new apod_wallpaper.ApodWallpaperService(client, cache, applier);
+                service.ApplyWallpaperByDate(date, apod_wallpaper.WallpaperStyle.Smart);
+                Assert(applier.LastAppliedImagePath == path, "Metadata frame must reach existing wallpaper apply path as a normal local image.");
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(root);
+            }
+        }
+
         [STAThread]
         private static int Main()
         {
@@ -717,6 +762,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science latest verifies dates and total budget", () => ScienceLatestUsesVerifiedDatesAsync().GetAwaiter().GetResult());
                 Run("NASA Science probe and Random retain verified metadata", () => ScienceProbeAndRandomAsync().GetAwaiter().GetResult());
                 Run("NASA Science range pagination is complete or fails", () => ScienceRangePagesAsync().GetAwaiter().GetResult());
+                Run("NASA Science metadata frame fallback is bounded", ScienceMetadataFrameIsBoundedFallback);
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."
