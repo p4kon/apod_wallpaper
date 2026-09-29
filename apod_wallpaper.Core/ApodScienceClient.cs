@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace apod_wallpaper
 {
-    // Staged adapter; do not select as production default before NASA-05/06/07 are complete.
+    // NASA Science supplies publications; legacy is retained only for explicit API-key validation.
     internal sealed class ApodScienceClient : IApodClient
     {
         private readonly ApodScienceSource _source;

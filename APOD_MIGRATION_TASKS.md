@@ -19,16 +19,16 @@
 | NASA-01 | Pure JSON parser, date URL builder, offline fixtures/tests | NASA-00 | Done |
 | NASA-02 | Раздельные preview/original, проверка CDN и качества | NASA-01 | Done |
 | NASA-03 | Ограниченный transport, отмена, ошибки, in-flight guard | NASA-01 | Done |
-| NASA-04 | Подключение source за IApodClient, сохранение legacy | NASA-02, NASA-03 | In Progress |
+| NASA-04 | Подключение source за IApodClient, сохранение legacy | NASA-02, NASA-03 | Done |
 | NASA-04a | Выделение legacy и совместимый фасад | NASA-03 | Done |
 | NASA-04b | Sync transport без async-to-sync bridge и новый IApodClient adapter | NASA-04a | Done |
-| NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04c1, NASA-04c2, NASA-04c3, NASA-05, NASA-06, NASA-07 | In Progress |
+| NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04c1, NASA-04c2, NASA-04c3, NASA-05, NASA-06, NASA-07 | Done |
 | NASA-04c1 | Общий in-flight registry для sync/async одной даты | NASA-04b | Done |
 | NASA-04c2 | Ограниченный asset fallback и canonical URL старого кеша | NASA-02, NASA-05, NASA-07a | Done |
-| NASA-04c3 | Единая composition source/cache для workflow, probe и Random; production switch | NASA-04c1, NASA-04c2, NASA-06, NASA-07 | To Do |
+| NASA-04c3 | Единая composition source/cache для workflow, probe и Random; production switch | NASA-04c1, NASA-04c2, NASA-06, NASA-07 | Done |
 | NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04b | Done |
-| NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04b, NASA-05 | Done (staged) |
-| NASA-07 | Совместимость существующих range запросов и пагинация | NASA-04b | Done (staged) |
+| NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04b, NASA-05 | Done (integrated) |
+| NASA-07 | Совместимость существующих range запросов и пагинация | NASA-04b | Done (integrated) |
 | NASA-07a | Проверенный статический кадр из metadata для 2026-08-05 | NASA-07 | Done |
 | NASA-08 | Сквозная регрессия preview/download/apply/favorite/scheduler, RU/EN | NASA-04c, NASA-05, NASA-06, NASA-07 | To Do |
 | NASA-09 | Ручная проверка и выпуск | NASA-08 | To Do |
@@ -161,6 +161,18 @@ Offline тест сначала воспроизвел немигрирующи�
 Тесты: сначала RED, затем проверены sync/async byte identity, HTTP 302/404/429/503 и битое изображение без downgrade/retry, сохранность существующего файла, timeout обеих веток, oversize, cleanup временных файлов. Service integration с fake wallpaper applier доказывает отсутствие apply/local-cache-path при failed download, successful apply валидного original, progress и local reuse без сети. Реальные обои и пользовательские файлы не менялись. NASA-04c2 закрыта; следующий этап NASA-04c3 — shared composition и production switch.
 
 Финальная проверка original-download этапа: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, все smoke tests passed. Без installer/version/push; production default еще legacy до NASA-04c3.
+
+### NASA-04c3: production switch
+
+ApodClient по умолчанию теперь выбирает ApodScienceClient. ApplicationController создает один ApodScienceSource и один ApodMetadataCache, передает их workflow/wallpaper service, JSON-probe и Global Random. Отдельные mutable snapshots кеша для Random не создаются. Controller сохраняет проверенную metadata успешного probe; последующее preview использует общий кеш. Сам probe по-прежнему не скачивает image bytes и не вызывает apply. Default constructors вне controller тоже выбирают Science через ApodClient.
+
+Удалена legacy API-key validation из операций публикаций (preview/download/apply/latest и scheduler lookup): новый JSON keyless, ожидание старой проверки ключа там больше не нужно. Явная проверка ключа и его настройки сохранены для legacy API, не удалены. Scheduler timing/day locks, favorite rotation, manual apply semantics, UI throttle и warmup gating не менялись. Месячные диапазоны теперь идут через новый source, но фоновый warmup для всех пользователей не включен: это NASA-10.
+
+TDD: тест default source сначала подтвердил legacy, после переключения прошел. Controller integration на fake JSON transport проверяет probe -> shared cache -> preview без второй сети, Random с пустым кешем -> preview без второго GET, canonical NASA link без сети. Startup/test controller construction сам сеть не запускает. Старые offline smoke остаются в наборе. Реальные UI, tray restore, slow network, архивные GIF/видео и ручные download/apply сценарии требуют NASA-08/09; production switch не равен готовому релизу.
+
+Предыдущие записи о staged/legacy default выше и ниже — история этапов до этого переключения. Текущий статус определяется таблицей и этим разделом. Без version/installer/push.
+
+Итог NASA-04c3: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, smoke tests passed. Общая предварительная готовность около 85%; оставшийся объем — NASA-08/09, NASA-10 по-прежнему отдельный backlog после миграции.
 
 ## NASA-05: ссылки и кеш
 

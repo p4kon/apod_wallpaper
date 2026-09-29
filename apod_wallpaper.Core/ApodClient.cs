@@ -9,8 +9,7 @@ namespace apod_wallpaper
         private readonly IApodClient _source;
         internal bool UsesScienceSource => _source is ApodScienceClient;
 
-        // Keep the production source unchanged until sync transport and cache migration are ready.
-        public ApodClient() : this(new LegacyApodClient()) { }
+        public ApodClient() : this(new ApodScienceClient(new ApodScienceSource(), new LegacyApodClient())) { }
         internal ApodClient(IApodClient source)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));

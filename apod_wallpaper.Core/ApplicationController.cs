@@ -16,6 +16,7 @@ namespace apod_wallpaper
         private readonly IStartupRegistrationService _startupRegistrationService;
         private readonly Scheduler _scheduler;
         private readonly ApodWorkflowService _workflowService;
+        private readonly IApodMetadataCache _metadataCache;
         private readonly StorageSummaryService _storageSummaryService;
         private readonly ApodCalendarStateService _calendarStateService;
         private readonly ApodPageAvailabilityProbe _pageAvailabilityProbe;
@@ -33,17 +34,27 @@ namespace apod_wallpaper
         public event EventHandler<WallpaperAppliedEventArgs> WallpaperApplied;
 
         public ApplicationController(IApplicationSettingsStore settingsStore, IUserSecretStore secretStore, IStartupRegistrationService startupRegistrationService)
+            : this(settingsStore, secretStore, startupRegistrationService, new ApodScienceSource(), new ApodMetadataCache())
+        {
+        }
+
+        internal ApplicationController(IApplicationSettingsStore settingsStore, IUserSecretStore secretStore,
+            IStartupRegistrationService startupRegistrationService, ApodScienceSource source, IApodMetadataCache cache,
+            Func<DateTime, DateTime, DateTime> pickDate = null)
         {
             _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
             _secretStore = secretStore ?? throw new ArgumentNullException(nameof(secretStore));
             _startupRegistrationService = startupRegistrationService ?? throw new ArgumentNullException(nameof(startupRegistrationService));
             _scheduler = new Scheduler();
-            _workflowService = new ApodWorkflowService();
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            _metadataCache = cache ?? throw new ArgumentNullException(nameof(cache));
+            var client = new ApodClient(new ApodScienceClient(source, new LegacyApodClient()));
+            _workflowService = new ApodWorkflowService(new ApodWallpaperService(client, _metadataCache, new WallpaperService()));
             _storageSummaryService = new StorageSummaryService();
             _calendarStateService = new ApodCalendarStateService(_workflowService);
-            _pageAvailabilityProbe = new ApodPageAvailabilityProbe();
+            _pageAvailabilityProbe = new ApodPageAvailabilityProbe(source);
             _favoriteStore = new FavoriteApodStore();
-            _randomApodService = new RandomApodService(_pageAvailabilityProbe);
+            _randomApodService = new RandomApodService(_pageAvailabilityProbe, _metadataCache, pickDate);
             _updateCheckService = new UpdateCheckService();
         }
 
@@ -278,7 +289,6 @@ namespace apod_wallpaper
         {
             return ExecuteOperationAsync(async () =>
             {
-                await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
                 var result = await _workflowService.LoadDayAsync(date, forceRefresh).ConfigureAwait(false);
                 _calendarStateService.Clear();
                 return EnsureWorkflowResultSucceeded(result, "Unable to load the requested APOD entry.");
@@ -294,7 +304,6 @@ namespace apod_wallpaper
         {
             return ExecuteOperationAsync(async () =>
             {
-                await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
                 var result = await _workflowService.DownloadDayAsync(date, forceRefresh, progress).ConfigureAwait(false);
                 _calendarStateService.Clear();
                 return EnsureWorkflowResultSucceeded(result, "Unable to download the requested APOD image.");
@@ -310,7 +319,6 @@ namespace apod_wallpaper
         {
             return ExecuteOperationAsync(async () =>
             {
-                await EnsureApiKeyValidationIfNeededAsync(date, forceRefresh).ConfigureAwait(false);
                 var result = await _workflowService.ApplyDayAsync(date, style, forceRefresh, progress).ConfigureAwait(false);
                 PersistLastAppliedWallpaperImagePath(result.ImagePath);
                 _calendarStateService.Clear();
@@ -328,7 +336,6 @@ namespace apod_wallpaper
         {
             return ExecuteOperationAsync(async () =>
             {
-                await EnsureApiKeyValidationAsync().ConfigureAwait(false);
                 var result = await _workflowService.ApplyLatestPublishedAsync(style, forceRefresh, progress).ConfigureAwait(false);
                 PersistLastAppliedWallpaperImagePath(result.ImagePath);
                 _calendarStateService.Clear();
@@ -436,7 +443,12 @@ namespace apod_wallpaper
         public Task<OperationResult<ApodPageAvailabilityProbeResult>> ProbeApodPageAvailabilityAsync(DateTime date)
         {
             return ExecuteOperationAsync(
-                () => _pageAvailabilityProbe.ProbeAsync(date.Date, TimeSpan.FromSeconds(2)),
+                async () =>
+                {
+                    var result = await _pageAvailabilityProbe.ProbeAsync(date.Date, TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                    if (result.IsAvailable && result.Entry != null) _metadataCache.Upsert(result.Entry);
+                    return result;
+                },
                 OperationErrorCode.WorkflowFailed,
                 "Unable to probe the NASA APOD page availability.");
         }
@@ -717,8 +729,6 @@ namespace apod_wallpaper
                     AppLogger.Info("Scheduler skipped because today's auto-check already completed.");
                     return;
                 }
-
-                EnsureApiKeyValidation();
 
                 var latestPublishedDate = _workflowService.GetLatestPublishedDate().Date;
                 var latestAvailableDate = _workflowService.GetLatestAvailableDate().Date;
@@ -1007,33 +1017,6 @@ namespace apod_wallpaper
                 ? fallbackMessage
                 : result.Message;
             throw new InvalidOperationException(message);
-        }
-
-        private ApiKeyValidationState EnsureApiKeyValidation()
-        {
-            return EnsureApiKeyValidationAsync().GetAwaiter().GetResult();
-        }
-
-        private void EnsureApiKeyValidationIfNeeded(DateTime date, bool forceRefresh)
-        {
-            if (date.Date > DateTime.Today)
-                return;
-
-            if (!forceRefresh && _workflowService.HasUsableLocalImage(date))
-                return;
-
-            EnsureApiKeyValidation();
-        }
-
-        private Task EnsureApiKeyValidationIfNeededAsync(DateTime date, bool forceRefresh)
-        {
-            if (date.Date > DateTime.Today)
-                return Task.CompletedTask;
-
-            if (!forceRefresh && _workflowService.HasUsableLocalImage(date))
-                return Task.CompletedTask;
-
-            return EnsureApiKeyValidationAsync();
         }
 
         private void SaveApiKeyValidationState(ApiKeyValidationState validationState)

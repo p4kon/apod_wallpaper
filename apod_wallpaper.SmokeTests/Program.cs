@@ -680,6 +680,60 @@ namespace apod_wallpaper.SmokeTests
             public void Report(apod_wallpaper.DownloadProgressSnapshot value) { Last = value; }
         }
 
+        private static async Task ScienceProductionCompositionAsync()
+        {
+            Assert(new apod_wallpaper.ApodClient().UsesScienceSource, "Default APOD client must select NASA Science.");
+            var date = new DateTime(2026, 9, 27);
+            var root = Path.Combine(Path.GetTempPath(), "apod_composition_" + Guid.NewGuid().ToString("N"));
+            var snapshot = CaptureSettings();
+            apod_wallpaper.FileStorage.SetSessionImagesDirectory(root);
+            try
+            {
+                var calls = 0;
+                var cache = new InMemoryApodMetadataCache();
+                var source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => {
+                    calls++; Assert(uri.Host == "science.nasa.gov", "Composition must not use legacy endpoint.");
+                    return Task.FromResult(ScienceResponse());
+                });
+                using (var controller = new apod_wallpaper.ApplicationController(_settingsStore, _secretStore,
+                    new FakeStartupRegistrationService(), source, cache, (start, end) => date))
+                {
+                    var probe = await controller.ProbeApodPageAvailabilityAsync(date);
+                    Assert(probe.Succeeded && probe.Value.IsAvailable && cache.Get(date)?.PostUrl != null, "JSON probe must retain metadata in shared cache.");
+                    var loaded = await controller.LoadDayAsync(date);
+                    Assert(loaded.Succeeded && loaded.Value.Entry.HasImage && calls == 1, "Workflow must reuse probe cache without second request.");
+                    var picked = await controller.PickRandomApodDateAsync("global", false);
+                    Assert(picked.Succeeded && cache.Get(date) != null, "Global Random must resolve through shared JSON probe.");
+                    var before = calls;
+                    await controller.LoadDayAsync(date);
+                    Assert(calls == before, "Random and workflow must share the same cache instance.");
+                    var canonical = await controller.GetPostUrlAsync(date);
+                    Assert(canonical.Succeeded && canonical.Value.StartsWith("https://science.nasa.gov/image-article/") && calls == before,
+                        "NASA action must reuse canonical URL from same cache.");
+                }
+                var randomCache = new InMemoryApodMetadataCache();
+                using (var controller = new apod_wallpaper.ApplicationController(_settingsStore, _secretStore,
+                    new FakeStartupRegistrationService(), source, randomCache, (start, end) => date))
+                {
+                    var before = calls;
+                    var picked = await controller.PickRandomApodDateAsync("global", false);
+                    Assert(picked.Succeeded && randomCache.Get(date)?.PostUrl != null && calls == before + 1,
+                        "Random must populate an initially empty shared cache.");
+                    var loaded = await controller.LoadDayAsync(date);
+                    Assert(loaded.Succeeded && calls == before + 1, "Preview after Random must not refetch metadata.");
+                }
+                var controllerSource = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "apod_wallpaper.Core", "ApplicationController.cs"));
+                Assert(!controllerSource.Contains("await EnsureApiKeyValidationAsync()") && !controllerSource.Contains("EnsureApiKeyValidation();"),
+                    "Publication operations must not wait for legacy API-key validation.");
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(root);
+            }
+        }
+
         private static void ScienceMetadataLinksPersist()
         {
             var root = Path.Combine(Path.GetTempPath(), "apod_science_cache_" + Guid.NewGuid().ToString("N"));
@@ -1061,6 +1115,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science old cache migrates without blocking local previews", () => ScienceOldCacheMigrationAsync().GetAwaiter().GetResult());
                 Run("NASA Science preview fallback is bounded and validates cache", () => SciencePreviewFallbackAsync().GetAwaiter().GetResult());
                 Run("NASA Science originals preserve bytes and fail without downgrade", () => ScienceOriginalDownloadAsync().GetAwaiter().GetResult());
+                Run("NASA Science production composition shares source and cache", () => ScienceProductionCompositionAsync().GetAwaiter().GetResult());
                 Run("NASA Science latest verifies dates and total budget", () => ScienceLatestUsesVerifiedDatesAsync().GetAwaiter().GetResult());
                 Run("NASA Science probe and Random retain verified metadata", () => ScienceProbeAndRandomAsync().GetAwaiter().GetResult());
                 Run("NASA Science range pagination is complete or fails", () => ScienceRangePagesAsync().GetAwaiter().GetResult());
