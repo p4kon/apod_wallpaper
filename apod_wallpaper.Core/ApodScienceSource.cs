@@ -14,16 +14,20 @@ namespace apod_wallpaper
         private readonly Action _dispose;
         private int _disposed;
         internal ApodScienceResponse(int status, Stream body, string contentType = "application/json",
-            long? contentLength = null, TimeSpan? retryAfter = null, Action dispose = null)
+            long? contentLength = null, TimeSpan? retryAfter = null, Action dispose = null,
+            int? total = null, int? totalPages = null)
         {
             Status = status; Body = body; ContentType = contentType;
             ContentLength = contentLength; RetryAfter = retryAfter; _dispose = dispose;
+            Total = total; TotalPages = totalPages;
         }
         internal int Status { get; }
         internal Stream Body { get; }
         internal string ContentType { get; }
         internal long? ContentLength { get; }
         internal TimeSpan? RetryAfter { get; }
+        internal int? Total { get; }
+        internal int? TotalPages { get; }
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
@@ -37,7 +41,7 @@ namespace apod_wallpaper
         internal int Status { get; }
     }
 
-    internal sealed class ApodScienceSource
+    internal sealed partial class ApodScienceSource
     {
         private const int MaximumBodyBytes = 1024 * 1024;
         private static readonly Lazy<HttpClient> Client = new Lazy<HttpClient>(() => new HttpClient(new HttpClientHandler
@@ -78,6 +82,11 @@ namespace apod_wallpaper
 
         internal ApodScienceRecord GetEntry(DateTime date, CancellationToken token = default(CancellationToken))
         {
+            return ApodScienceParser.Parse(ReadJson(date, token), date.Date);
+        }
+
+        private string ReadJson(DateTime date, CancellationToken token, Uri uri = null, Action<ApodScienceResponse> headers = null)
+        {
             token.ThrowIfCancellationRequested();
             using (var budget = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
@@ -88,10 +97,11 @@ namespace apod_wallpaper
                     _slots.Wait(budget.Token);
                     entered = true;
                     CheckCooldown();
-                    using (var response = _sendSync(new Uri(ApodScienceParser.BuildUrl(date)), budget.Token))
+                    using (var response = _sendSync(uri ?? new Uri(ApodScienceParser.BuildUrl(date)), budget.Token))
                     {
                         budget.Token.ThrowIfCancellationRequested();
                         ValidateResponse(response, date.Date);
+                        headers?.Invoke(response);
                         using (budget.Token.Register(response.Dispose))
                         using (var bytes = new MemoryStream())
                         {
@@ -103,7 +113,7 @@ namespace apod_wallpaper
                                 AppendBytes(bytes, buffer, count);
                             }
                             budget.Token.ThrowIfCancellationRequested();
-                            return ApodScienceParser.Parse(Decode(bytes), date.Date);
+                            return Decode(bytes);
                         }
                     }
                 }
@@ -140,7 +150,8 @@ namespace apod_wallpaper
                     retry = retryHeader.Delta ?? (retryHeader.Date - DateTimeOffset.UtcNow);
                 return new ApodScienceResponse((int)response.StatusCode, response.GetResponseStream(),
                     response.ContentType.Split(';')[0].Trim(), response.ContentLength, retry,
-                    () => { abort.Dispose(); response.Dispose(); });
+                    () => { abort.Dispose(); response.Dispose(); },
+                    ParseCount(response.Headers["X-WP-Total"]), ParseCount(response.Headers["X-WP-TotalPages"]));
             }
             catch { abort.Dispose(); response?.Dispose(); throw; }
 #else
@@ -154,7 +165,8 @@ namespace apod_wallpaper
                         ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow);
                     var body = response.StatusCode == HttpStatusCode.OK ? response.Content.ReadAsStream(token) : Stream.Null;
                     return new ApodScienceResponse((int)response.StatusCode, body,
-                        response.Content.Headers.ContentType?.MediaType, response.Content.Headers.ContentLength, retry, response.Dispose);
+                        response.Content.Headers.ContentType?.MediaType, response.Content.Headers.ContentLength, retry, response.Dispose,
+                        ReadCount(response, "X-WP-Total"), ReadCount(response, "X-WP-TotalPages"));
                 }
                 catch { response.Dispose(); throw; }
             }
@@ -276,7 +288,7 @@ namespace apod_wallpaper
             }
         }
 
-        private async Task<string> ReadJsonAsync(DateTime date, CancellationToken callerToken)
+        private async Task<string> ReadJsonAsync(DateTime date, CancellationToken callerToken, Uri uri = null, Action<ApodScienceResponse> headers = null)
         {
             using (var budget = CancellationTokenSource.CreateLinkedTokenSource(callerToken))
             {
@@ -289,10 +301,11 @@ namespace apod_wallpaper
                     entered = true;
                     CheckCooldown();
 
-                    using (var response = await _send(new Uri(ApodScienceParser.BuildUrl(date)), token).ConfigureAwait(false))
+                    using (var response = await _send(uri ?? new Uri(ApodScienceParser.BuildUrl(date)), token).ConfigureAwait(false))
                     {
                         token.ThrowIfCancellationRequested();
                         ValidateResponse(response, date);
+                        headers?.Invoke(response);
 
                         // ResponseHeadersRead does not cover body timeout/size. Bound decompressed bytes too.
                         using (token.Register(response.Dispose))
@@ -335,10 +348,22 @@ namespace apod_wallpaper
                         ? await response.Content.ReadAsStreamAsync().ConfigureAwait(false) : Stream.Null;
                     return new ApodScienceResponse((int)response.StatusCode, body,
                         response.Content.Headers.ContentType?.MediaType, response.Content.Headers.ContentLength,
-                        retry, response.Dispose);
+                        retry, response.Dispose, ReadCount(response, "X-WP-Total"), ReadCount(response, "X-WP-TotalPages"));
                 }
                 catch { response.Dispose(); throw; }
             }
+        }
+
+        private static int? ParseCount(string value)
+        {
+            return int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var count)
+                ? (int?)count : null;
+        }
+
+        private static int? ReadCount(HttpResponseMessage response, string name)
+        {
+            if (!response.Headers.TryGetValues(name, out var values)) return null;
+            return ParseCount(string.Join(",", values));
         }
     }
 }

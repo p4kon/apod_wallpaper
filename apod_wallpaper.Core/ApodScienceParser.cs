@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -44,6 +45,34 @@ namespace apod_wallpaper
         public static string BuildUrl(DateTime date)
         {
             return Endpoint + date.ToString("yyMMdd", CultureInfo.InvariantCulture);
+        }
+
+        internal static IReadOnlyList<ApodEntry> ParseRangePage(string json, DateTime start, DateTime end)
+        {
+            if (string.IsNullOrWhiteSpace(json) || json.Length > MaximumJsonCharacters || !json.TrimStart().StartsWith("[", StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid NASA Science range document.");
+            try
+            {
+                List<ScienceDto> documents;
+                using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
+                    documents = (List<ScienceDto>)new DataContractJsonSerializer(typeof(List<ScienceDto>)).ReadObject(stream);
+                if (documents == null || documents.Count > 31) throw new InvalidDataException("Invalid NASA Science page size.");
+                var entries = new List<ApodEntry>();
+                foreach (var document in documents)
+                {
+                    DateTime date;
+                    if (document == null || !DateTime.TryParseExact(document.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out date)
+                        || date < start.Date || date > end.Date)
+                        throw new InvalidDataException("NASA Science range contains an unexpected date.");
+                    using (var stream = new MemoryStream())
+                    {
+                        new DataContractJsonSerializer(typeof(ScienceDto)).WriteObject(stream, document);
+                        entries.Add(Parse(Encoding.UTF8.GetString(stream.ToArray()), date).Entry);
+                    }
+                }
+                return entries;
+            }
+            catch (SerializationException ex) { throw new InvalidDataException("Invalid NASA Science range JSON.", ex); }
         }
 
         public static ApodScienceRecord Parse(string json, DateTime requestedDate)

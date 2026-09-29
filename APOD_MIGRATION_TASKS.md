@@ -25,7 +25,7 @@
 | NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04b, NASA-05, NASA-06, NASA-07 | To Do |
 | NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04b | Done |
 | NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04b, NASA-05 | Done (staged) |
-| NASA-07 | Совместимость существующих range запросов и пагинация | NASA-04 | To Do |
+| NASA-07 | Совместимость существующих range запросов и пагинация | NASA-04b | Done (staged) |
 | NASA-08 | Сквозная регрессия preview/download/apply/favorite/scheduler, RU/EN | NASA-05, NASA-06, NASA-07 | To Do |
 | NASA-09 | Ручная проверка и выпуск | NASA-08 | To Do |
 | NASA-10 | Быстрое фоновое обновление открытого месяца для всех | NASA-09 | Backlog |
@@ -155,6 +155,16 @@ Global Random ограничен 10 попытками и общим бюдже�
 В текущем коде они существуют: ShouldWarmMonth -> WarmMonthAsync -> GetCalendarMonthStateAsync -> GetMonthState -> GetMonthStatus -> RefreshMonthStatus -> GetEntries. UI путь использует sync core внутри Task.Run. Warmup разрешен только с personal key; с DEMO_KEY он выключен. Существуют также async range методы.
 
 Сохранить текущую интенсивность сети при миграции. Новый диапазон дает 25 элементов на страницу, август проверен как 25+6; читать пагинацию, проверять дату, dedup, partial failure. Не считать отсутствующие во временно неполном ответе даты unavailable. Year cache-first, stale requestVersion guards сохранить.
+
+Результат NASA-07: added `ApodScienceSource.Range.cs`, sync/async GetEntries за существующим staged IApodClient. URL содержит date_from/date_to/page; X-WP-Total и X-WP-TotalPages обязательны, ограничены и должны оставаться неизменными между страницами. Общий сетевой бюджет 8 секунд на весь диапазон, страницы последовательно, прежние ограничения body/concurrency/Retry-After сохранены. Допустимый диапазон 1..366 дат, максимум 32 страницы; существующий календарь запрашивает месяц. Это не включает автоматическое сканирование года.
+
+Каждая запись проходит существующий exact-date/media parser; дата обязана попадать в диапазон. Одинаковые дубликаты сворачиваются, конфликтующие отклоняются; итог отсортирован по дате, число уникальных записей должно совпасть с Total. Все страницы накапливаются локально и возвращаются только целиком. HTTP/schema/pagination failure не возвращает частичный успех; range 404 не классифицирует отдельную дату как unavailable. Пустой подтвержденный диапазон возвращает пустой список, без синтетических записей unavailable. Legacy API больше не вызывается range-методами staged adapter; остается только key validation. Default production adapter не переключен.
+
+TDD: новый range test сначала упал на NotImplementedException, затем прошел. Дополнительно проверены ошибка второй страницы, wrong date, missing headers, null/не-array JSON, dedup, нехватка unique entries, изменение Total, empty range, timeout и отсутствие legacy delegation. Финальный Release build: 0 warnings / 0 errors, smoke tests passed.
+
+Live: NASA range август 2026 действительно вернул 25 записей первой страницы, Total=31 и TotalPages=2. Но compiled range client отклонил август: у 2026-08-05 media_type=image при пустом primary center (в нем дата, но нет img/video). Отдельная проверка каждой записи подтвердила дефект этой даты, не transport. Никакие hdurl/og:image вместо отсутствующего primary image не подставлялись. Сентябрь 2026-09-01..28 успешно прошел compiled sync client: 28 записей, 26 image и 2 video, границы и сортировка корректны. Image bytes не загружались.
+
+Обязательное перед NASA-04c/08: решить поведение month warmup при единичной поврежденной публикации. Сейчас намеренно fail-closed весь диапазон; старый кеш не заменяется частичным результатом, но исправные дни этого месяца не обновляются. Можно сохранять отдельно проверенные записи только с явным partial-result контрактом, не выдавая это за полный месяц. Не ослаблять parser и не выбирать случайную картинку из metadata. Installer/version/push не выполнялись.
 
 ## NASA-08: регрессия
 

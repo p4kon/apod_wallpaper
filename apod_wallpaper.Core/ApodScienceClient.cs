@@ -75,9 +75,8 @@ namespace apod_wallpaper
             }
         }
 
-        // Range migration is separate; errors from Science never trigger legacy retries.
-        public IReadOnlyList<ApodEntry> GetEntries(DateTime startDate, DateTime endDate) => _legacy.GetEntries(startDate, endDate);
-        public Task<IReadOnlyList<ApodEntry>> GetEntriesAsync(DateTime startDate, DateTime endDate) => _legacy.GetEntriesAsync(startDate, endDate);
+        public IReadOnlyList<ApodEntry> GetEntries(DateTime startDate, DateTime endDate) => _source.GetEntries(startDate, endDate);
+        public Task<IReadOnlyList<ApodEntry>> GetEntriesAsync(DateTime startDate, DateTime endDate) => _source.GetEntriesAsync(startDate, endDate);
         public Task<ApiKeyValidationState> ValidateApiKeyAsync(string apiKey) => _legacy.ValidateApiKeyAsync(apiKey);
     }
 }
