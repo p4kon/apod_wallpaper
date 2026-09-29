@@ -347,7 +347,7 @@ namespace apod_wallpaper
 
         public Task<OperationResult<string>> GetPostUrlAsync(DateTime date)
         {
-            return Task.FromResult(ExecuteOperation(() => _workflowService.GetPostUrl(date), OperationErrorCode.WorkflowFailed, "Unable to resolve the NASA APOD page URL."));
+            return ExecuteOperationAsync(() => _workflowService.ResolvePostUrlAsync(date), OperationErrorCode.WorkflowFailed, "Unable to resolve the NASA APOD page URL.");
         }
 
         public Task<OperationResult<ApiKeyValidationState>> GetApiKeyValidationStateAsync()

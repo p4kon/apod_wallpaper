@@ -452,6 +452,82 @@ namespace apod_wallpaper.SmokeTests
             Assert(legacy.Calls.Count == 1, "Failed dates must not trigger legacy retry chains.");
         }
 
+        private static async Task ScienceOldCacheMigrationAsync()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "apod_old_cache_" + Guid.NewGuid().ToString("N"));
+            var snapshot = CaptureSettings();
+            Directory.CreateDirectory(root);
+            apod_wallpaper.FileStorage.SetApplicationDataDirectoryOverride(root);
+            apod_wallpaper.FileStorage.SetSessionImagesDirectory(root);
+            try
+            {
+                var date = new DateTime(2026, 9, 27);
+                var calls = 0;
+                var fail = false;
+                var source = new apod_wallpaper.ApodScienceSource(
+                    send: (uri, token) => { calls++; return Task.FromResult(ScienceResponse(fail ? 503 : 200)); },
+                    sendSync: (uri, token) => { calls++; return ScienceResponse(fail ? 503 : 200); });
+                var client = new apod_wallpaper.ApodClient(new apod_wallpaper.ApodScienceClient(source, new RecordingApodSource(), () => date));
+                var old = new apod_wallpaper.ApodEntry { Date = "2026-09-27", MediaType = "image",
+                    Title = "Old title", Explanation = "Complete old explanation", Url = "https://apod.nasa.gov/apod/image/old.jpg",
+                    HdUrl = "https://apod.nasa.gov/apod/image/old-full.jpg" };
+                foreach (var useAsync in new[] { false, true })
+                {
+                    var cache = new InMemoryApodMetadataCache();
+                    cache.Upsert(old);
+                    var service = new apod_wallpaper.ApodWallpaperService(client, cache, new FakeWallpaperApplier());
+                    var entry = useAsync ? await service.GetEntryByDateAsync(date) : service.GetEntryByDate(date);
+                    Assert(entry.PostUrl != null && entry.HdUrl.Contains("assets.science.nasa.gov"), "Old remote cache must migrate links even with complete text.");
+                    var before = calls;
+                    await service.GetEntryByDateAsync(date);
+                    Assert(calls == before, "Migrated cache must not refetch metadata.");
+                }
+                foreach (var useAsync in new[] { false, true })
+                {
+                    var latestCache = new InMemoryApodMetadataCache();
+                    latestCache.Upsert(old);
+                    var latestService = new apod_wallpaper.ApodWallpaperService(client, latestCache, new FakeWallpaperApplier());
+                    var beforeLatest = calls;
+                    var latest = useAsync ? await latestService.GetLatestPublishedEntryAsync() : latestService.GetLatestPublishedEntry();
+                    Assert(latest.PostUrl != null && latest.HdUrl.Contains("assets.science.nasa.gov") && calls == beforeLatest + 1,
+                        "Latest must reuse freshly fetched Science metadata instead of preferring old cache or refetching.");
+                }
+                var failedCache = new InMemoryApodMetadataCache();
+                failedCache.Upsert(old);
+                var failedService = new apod_wallpaper.ApodWallpaperService(client, failedCache, new FakeWallpaperApplier());
+                fail = true;
+                var beforeFailure = calls;
+                Assert((await failedService.GetEntryByDateAsync(date)).HdUrl == old.HdUrl, "Offline migration must retain old entry.");
+                failedService.GetEntryByDate(date);
+                Assert(calls == beforeFailure + 1 && failedCache.Get(date).HdUrl == old.HdUrl, "Failed migration must be throttled without overwriting cache.");
+                fail = false;
+                var localPath = Path.Combine(root, "2026-09-27.jpg");
+                using (var bitmap = new Bitmap(12, 8)) bitmap.Save(localPath, System.Drawing.Imaging.ImageFormat.Jpeg);
+                var localCache = new apod_wallpaper.ApodMetadataCache();
+                localCache.Upsert(old);
+                var localService = new apod_wallpaper.ApodWallpaperService(client, localCache, new FakeWallpaperApplier());
+                var beforeLocal = calls;
+                var preview = await localService.GetPreviewByDateAsync(date);
+                Assert(preview.IsLocalFile && preview.PreviewLocation == localPath && calls == beforeLocal, "Local preview must not wait for canonical metadata migration.");
+                var postUrl = await localService.ResolvePostUrlAsync(date);
+                Assert(postUrl.StartsWith("https://science.nasa.gov/image-article/") && calls == beforeLocal + 1,
+                    "Explicit NASA action must resolve canonical URL for old local cache.");
+                Assert(localCache.Get(date).LocalImagePath == localPath, "Canonical metadata refresh must preserve original local path.");
+                Assert(await localService.ResolvePostUrlAsync(date) == postUrl && calls == beforeLocal + 1,
+                    "Repeated NASA action must use canonical cache.");
+                fail = true;
+                await ExpectScienceFailureAsync<apod_wallpaper.ApodScienceRequestException>(failedService.ResolvePostUrlAsync(date));
+                Assert(failedCache.Get(date).HdUrl == old.HdUrl, "Failed explicit resolution must not replace cached metadata.");
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetApplicationDataDirectoryOverride(null);
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(root);
+            }
+        }
+
         private static void ScienceMetadataLinksPersist()
         {
             var root = Path.Combine(Path.GetTempPath(), "apod_science_cache_" + Guid.NewGuid().ToString("N"));
@@ -830,6 +906,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science synchronous transport bounds", NasaScienceSyncTransportBounds);
                 Run("NASA Science sync body, shared cooldown and staged adapter", () => NasaScienceSyncAndAdapterAsync().GetAwaiter().GetResult());
                 Run("NASA Science metadata links persist compatibly", ScienceMetadataLinksPersist);
+                Run("NASA Science old cache migrates without blocking local previews", () => ScienceOldCacheMigrationAsync().GetAwaiter().GetResult());
                 Run("NASA Science latest verifies dates and total budget", () => ScienceLatestUsesVerifiedDatesAsync().GetAwaiter().GetResult());
                 Run("NASA Science probe and Random retain verified metadata", () => ScienceProbeAndRandomAsync().GetAwaiter().GetResult());
                 Run("NASA Science range pagination is complete or fails", () => ScienceRangePagesAsync().GetAwaiter().GetResult());

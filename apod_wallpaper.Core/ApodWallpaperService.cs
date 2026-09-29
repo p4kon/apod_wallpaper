@@ -20,6 +20,9 @@ namespace apod_wallpaper
         private readonly SemaphoreSlim _latestEntrySemaphore = new SemaphoreSlim(1, 1);
         private ApodEntry _latestEntry;
         private DateTime _latestEntryFetchedAtUtc;
+        private readonly object _migrationGate = new object();
+        private readonly Dictionary<DateTime, DateTime> _migrationAttempts = new Dictionary<DateTime, DateTime>();
+        private bool UsesScienceSource => _client is ApodScienceClient || (_client is ApodClient facade && facade.UsesScienceSource);
 
         public ApodWallpaperService()
             : this(new ApodClient(), new ApodMetadataCache(), new WallpaperService())
@@ -47,6 +50,13 @@ namespace apod_wallpaper
             {
                 var cachedEntry = cached.ToEntry();
                 var hasUsableLocalImage = LocalImageValidator.IsUsableImageFile(localImagePath);
+                if (!hasUsableLocalImage && TryBeginSourceMigration(date, cachedEntry))
+                    cachedEntry = EnrichEntryMetadataFromClient(date, cachedEntry);
+                if (!hasUsableLocalImage && NeedsSourceMigration(cachedEntry))
+                {
+                    cachedEntry.ResolvedFromSource = "cache";
+                    return cachedEntry;
+                }
                 if (cachedEntry.HasImage || hasUsableLocalImage)
                 {
                     if (ShouldEnrichCachedEntryMetadata(cachedEntry))
@@ -82,6 +92,13 @@ namespace apod_wallpaper
             {
                 var cachedEntry = cached.ToEntry();
                 var hasUsableLocalImage = LocalImageValidator.IsUsableImageFile(localImagePath);
+                if (!hasUsableLocalImage && TryBeginSourceMigration(date, cachedEntry))
+                    cachedEntry = await EnrichEntryMetadataFromClientAsync(date, cachedEntry).ConfigureAwait(false);
+                if (!hasUsableLocalImage && NeedsSourceMigration(cachedEntry))
+                {
+                    cachedEntry.ResolvedFromSource = "cache";
+                    return cachedEntry;
+                }
                 if (cachedEntry.HasImage || hasUsableLocalImage)
                 {
                     if (ShouldEnrichCachedEntryMetadata(cachedEntry))
@@ -132,7 +149,7 @@ namespace apod_wallpaper
                 if (!forceRefresh)
                 {
                     var cached = _cache.Get(entryDate);
-                    if (cached != null)
+                    if (cached != null && !NeedsSourceMigration(cached.ToEntry()))
                     {
                         var cachedEntry = cached.ToEntry();
                         if (cachedEntry.HasImage || !ShouldRefreshCachedEntry(cached, entryDate))
@@ -178,7 +195,7 @@ namespace apod_wallpaper
                 if (!forceRefresh)
                 {
                     var cached = _cache.Get(entryDate);
-                    if (cached != null)
+                    if (cached != null && !NeedsSourceMigration(cached.ToEntry()))
                     {
                         var cachedEntry = cached.ToEntry();
                         if (cachedEntry.HasImage || !ShouldRefreshCachedEntry(cached, entryDate))
@@ -512,6 +529,18 @@ namespace apod_wallpaper
             return ApodScienceParser.NormalizePostUrl(_cache.Get(date)?.PostUrl) ?? ApodPageUrl.GetUrl(date);
         }
 
+        public async Task<string> ResolvePostUrlAsync(DateTime date)
+        {
+            var canonical = ApodScienceParser.NormalizePostUrl(_cache.Get(date)?.PostUrl);
+            if (canonical != null) return canonical;
+            if (!UsesScienceSource) return GetPostUrl(date);
+            var entry = await _client.GetEntryAsync(date).ConfigureAwait(false);
+            canonical = ApodScienceParser.NormalizePostUrl(entry?.PostUrl);
+            if (canonical == null) throw new InvalidDataException("NASA Science publication has no canonical article URL.");
+            _cache.Upsert(entry);
+            return canonical;
+        }
+
         public ApodDownloadResult EnsureImageDownloaded(ApodEntry entry, DateTime date)
         {
             if (entry == null)
@@ -681,6 +710,25 @@ namespace apod_wallpaper
             };
         }
 
+        private bool NeedsSourceMigration(ApodEntry entry)
+        {
+            return UsesScienceSource && entry != null && ApodScienceParser.NormalizePostUrl(entry.PostUrl) == null;
+        }
+
+        private bool TryBeginSourceMigration(DateTime date, ApodEntry entry)
+        {
+            if (!NeedsSourceMigration(entry)) return false;
+            var now = DateTime.UtcNow;
+            lock (_migrationGate)
+            {
+                foreach (var expired in _migrationAttempts.Where(pair => now - pair.Value >= TimeSpan.FromMinutes(10)).Select(pair => pair.Key).ToArray())
+                    _migrationAttempts.Remove(expired);
+                if (_migrationAttempts.ContainsKey(date.Date)) return false;
+                _migrationAttempts[date.Date] = now;
+                return true;
+            }
+        }
+
         private static bool ShouldEnrichCachedEntryMetadata(ApodEntry entry)
         {
             if (entry == null)
@@ -697,12 +745,10 @@ namespace apod_wallpaper
                 if (freshEntry != null)
                 {
                     _cache.Upsert(freshEntry);
-                    return MergeEntryMetadata(fallbackEntry, freshEntry);
+                    return NeedsSourceMigration(fallbackEntry) ? freshEntry : MergeEntryMetadata(fallbackEntry, freshEntry);
                 }
             }
-            catch
-            {
-            }
+            catch (Exception ex) { AppLogger.Warn("APOD metadata enrichment failed for " + date.ToString("yyyy-MM-dd") + ".", ex); }
 
             return fallbackEntry;
         }
@@ -715,12 +761,10 @@ namespace apod_wallpaper
                 if (freshEntry != null)
                 {
                     _cache.Upsert(freshEntry);
-                    return MergeEntryMetadata(fallbackEntry, freshEntry);
+                    return NeedsSourceMigration(fallbackEntry) ? freshEntry : MergeEntryMetadata(fallbackEntry, freshEntry);
                 }
             }
-            catch
-            {
-            }
+            catch (Exception ex) { AppLogger.Warn("APOD metadata enrichment failed for " + date.ToString("yyyy-MM-dd") + ".", ex); }
 
             return fallbackEntry;
         }

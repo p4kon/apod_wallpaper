@@ -24,7 +24,7 @@
 | NASA-04b | Sync transport без async-to-sync bridge и новый IApodClient adapter | NASA-04a | Done |
 | NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04c1, NASA-04c2, NASA-04c3, NASA-05, NASA-06, NASA-07 | In Progress |
 | NASA-04c1 | Общий in-flight registry для sync/async одной даты | NASA-04b | Done |
-| NASA-04c2 | Ограниченный asset fallback и canonical URL старого кеша | NASA-02, NASA-05, NASA-07a | To Do |
+| NASA-04c2 | Ограниченный asset fallback и canonical URL старого кеша | NASA-02, NASA-05, NASA-07a | In Progress: old-cache migration done; asset fallback remains |
 | NASA-04c3 | Единая composition source/cache для workflow, probe и Random; production switch | NASA-04c1, NASA-04c2, NASA-06, NASA-07 | To Do |
 | NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04b | Done |
 | NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04b, NASA-05 | Done (staged) |
@@ -127,6 +127,18 @@ NASA-04c1: sync и async GetEntry используют общий registry по 
 Проверки NASA-04c1: новый тест сначала воспроизвел два независимых sync/async запроса, затем прошел. Покрыты sync-first, async-first, два sync consumers, независимость mutable Entry, отмена первого при живых остальных, отмена последнего, повтор после отмены/503 и отсутствие постоянного кеша flight. Source/cache composition и asset fallback намеренно не помечены выполненными.
 
 Итог NASA-04c1: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, все smoke tests passed. Изменены только source, smoke tests и журнал. Без version/installer/push.
+
+### NASA-04c2: миграция старых записей кеша
+
+Закрыта часть canonical URL/старых media links. При выбранном Science client удаленная старая запись без валидного canonical URL обновляется даже при заполненных title/explanation. Возвращается новая запись целиком, а не смесь старых image URLs и новых source URLs. При ошибке старая запись остается доступна и не перезаписывается; автоматическая миграция той же даты имеет session cooldown 10 минут. Force refresh сохраняет явный обход кеша. Latest использует уже полученные свежие metadata вместо предпочтения старой записи и лишнего GET.
+
+Локальное preview с заполненными metadata не ждет сеть ради canonical URL. Явная кнопка NASA идет через новый async resolver в service/workflow и существующий ApplicationController.GetPostUrlAsync: получает exact-date JSON только при отсутствии canonical cache, сохраняет metadata с прежним LocalImagePath и возвращает ссылку на статью. При сетевой ошибке возвращается штатная ошибка OperationResult, а не случайная сегодняшняя страница. Чистый синхронный GetPostUrl остается offline lookup для payload. Legacy клиент сохраняет прежнее поведение; production source еще не переключен.
+
+Offline тест сначала воспроизвел немигрирующий старый кеш. Проверены sync/async old-cache refresh, latest без повторного GET, reuse мигрированного кеша, offline сохранение и cooldown, быстрый local preview, явное разрешение canonical URL, повтор без сети и сохранение LocalImagePath в настоящем disk cache. Все тестовые данные в отдельной временной директории, пользовательские файлы не менялись.
+
+Остаток NASA-04c2: asset fallback в preview/download еще не реализован. Этот этап не меняет image transport, retry chains или разрешение скачиваемого изображения. Не объявлять NASA-04c2/04c завершенными до закрытия этого остатка.
+
+Итог проверки old-cache этапа: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, smoke tests passed. Вызов кнопки NASA в MainPage проверен по коду: используется Backend.GetPostUrlAsync. Ручной UI/network тест после production switch остается NASA-08. Без version/installer/push.
 
 ## NASA-05: ссылки и кеш
 

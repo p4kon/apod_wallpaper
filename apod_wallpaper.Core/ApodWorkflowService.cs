@@ -292,6 +292,11 @@ namespace apod_wallpaper
             return _wallpaperService.GetPostUrl(date);
         }
 
+        public Task<string> ResolvePostUrlAsync(DateTime date)
+        {
+            return _wallpaperService.ResolvePostUrlAsync(date);
+        }
+
         public DateTime GetLatestPublishedDate()
         {
             return _wallpaperService.GetLatestPublishedDate();
