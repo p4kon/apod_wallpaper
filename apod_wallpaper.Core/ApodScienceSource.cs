@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -66,6 +67,8 @@ namespace apod_wallpaper
             internal Task Worker;
             internal int Waiters;
             internal bool Finished;
+            internal string Json;
+            internal ExceptionDispatchInfo Error;
         }
 
         internal ApodScienceSource(Func<Uri, CancellationToken, Task<ApodScienceResponse>> send = null,
@@ -82,7 +85,84 @@ namespace apod_wallpaper
 
         internal ApodScienceRecord GetEntry(DateTime date, CancellationToken token = default(CancellationToken))
         {
-            return ApodScienceParser.Parse(ReadJson(date, token), date.Date);
+            token.ThrowIfCancellationRequested();
+            date = date.Date;
+            var flight = JoinFlight(date, synchronous: true);
+            try
+            {
+                // Native synchronous wait, not a blocking Task bridge. Cancellation wakes only this consumer.
+                using (token.Register(() => { lock (_gate) Monitor.PulseAll(_gate); }))
+                {
+                    lock (_gate)
+                    {
+                        while (!flight.Finished)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            Monitor.Wait(_gate);
+                        }
+                        token.ThrowIfCancellationRequested();
+                        flight.Error?.Throw();
+                    }
+                    return ApodScienceParser.Parse(flight.Json, date);
+                }
+            }
+            finally { LeaveFlight(date, flight); }
+        }
+
+        private Flight JoinFlight(DateTime date, bool synchronous)
+        {
+            lock (_gate)
+            {
+                if (_flights.TryGetValue(date, out var existing))
+                {
+                    existing.Waiters++;
+                    return existing;
+                }
+                var flight = new Flight { Waiters = 1 };
+                _flights.Add(date, flight);
+                // A sync owner's cancellation must not abort another consumer's request.
+                // Only the first sync consumer queues a native sync transport worker.
+                if (synchronous) ThreadPool.QueueUserWorkItem(_ => RunFlight(date, flight));
+                else flight.Worker = RunFlightAsync(date, flight);
+                return flight;
+            }
+        }
+
+        private void LeaveFlight(DateTime date, Flight flight)
+        {
+            lock (_gate)
+            {
+                if (--flight.Waiters != 0) return;
+                RemoveFlight(date, flight);
+                if (flight.Finished) flight.Cancellation.Dispose();
+                else flight.Cancellation.Cancel();
+            }
+        }
+
+        private void RunFlight(DateTime date, Flight flight)
+        {
+            try { CompleteFlight(date, flight, ReadJson(date, flight.Cancellation.Token), null); }
+            catch (Exception ex) { CompleteFlight(date, flight, null, ex); }
+        }
+
+        private void CompleteFlight(DateTime date, Flight flight, string json, Exception error)
+        {
+            lock (_gate)
+            {
+                flight.Json = json;
+                flight.Error = error == null ? null : ExceptionDispatchInfo.Capture(error);
+                RemoveFlight(date, flight);
+                flight.Finished = true;
+                if (error is OperationCanceledException) flight.Completion.TrySetCanceled();
+                else if (error != null)
+                {
+                    flight.Completion.TrySetException(error);
+                    var observed = flight.Completion.Task.Exception;
+                }
+                else flight.Completion.TrySetResult(json);
+                Monitor.PulseAll(_gate);
+                if (flight.Waiters == 0) flight.Cancellation.Dispose();
+            }
         }
 
         private string ReadJson(DateTime date, CancellationToken token, Uri uri = null, Action<ApodScienceResponse> headers = null)
@@ -219,18 +299,7 @@ namespace apod_wallpaper
         {
             token.ThrowIfCancellationRequested();
             date = date.Date;
-            Flight flight;
-            lock (_gate)
-            {
-                if (!_flights.TryGetValue(date, out flight))
-                {
-                    flight = new Flight { Waiters = 1 };
-                    _flights.Add(date, flight);
-                    // The worker owns completion/error observation even if every consumer cancels.
-                    flight.Worker = RunFlightAsync(date, flight);
-                }
-                else flight.Waiters++;
-            }
+            var flight = JoinFlight(date, synchronous: false);
             try
             {
                 var cancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -243,18 +312,7 @@ namespace apod_wallpaper
                     return ApodScienceParser.Parse(json, date);
                 }
             }
-            finally
-            {
-                lock (_gate)
-                {
-                    if (--flight.Waiters == 0)
-                    {
-                        RemoveFlight(date, flight);
-                        if (flight.Finished) flight.Cancellation.Dispose();
-                        else flight.Cancellation.Cancel();
-                    }
-                }
-            }
+            finally { LeaveFlight(date, flight); }
         }
 
         private void RemoveFlight(DateTime date, Flight flight)
@@ -268,24 +326,9 @@ namespace apod_wallpaper
             try
             {
                 var json = await ReadJsonAsync(date, flight.Cancellation.Token).ConfigureAwait(false);
-                flight.Completion.TrySetResult(json);
+                CompleteFlight(date, flight, json, null);
             }
-            catch (OperationCanceledException) { flight.Completion.TrySetCanceled(); }
-            catch (Exception ex)
-            {
-                flight.Completion.TrySetException(ex);
-                // A cancelled last waiter may no longer observe this exception.
-                var observed = flight.Completion.Task.Exception;
-            }
-            finally
-            {
-                lock (_gate)
-                {
-                    RemoveFlight(date, flight);
-                    flight.Finished = true;
-                    if (flight.Waiters == 0) flight.Cancellation.Dispose();
-                }
-            }
+            catch (Exception ex) { CompleteFlight(date, flight, null, ex); }
         }
 
         private async Task<string> ReadJsonAsync(DateTime date, CancellationToken callerToken, Uri uri = null, Action<ApodScienceResponse> headers = null)

@@ -22,11 +22,15 @@
 | NASA-04 | Подключение source за IApodClient, сохранение legacy | NASA-02, NASA-03 | In Progress |
 | NASA-04a | Выделение legacy и совместимый фасад | NASA-03 | Done |
 | NASA-04b | Sync transport без async-to-sync bridge и новый IApodClient adapter | NASA-04a | Done |
-| NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04b, NASA-05, NASA-06, NASA-07 | To Do |
+| NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04c1, NASA-04c2, NASA-04c3, NASA-05, NASA-06, NASA-07 | In Progress |
+| NASA-04c1 | Общий in-flight registry для sync/async одной даты | NASA-04b | Done |
+| NASA-04c2 | Ограниченный asset fallback и canonical URL старого кеша | NASA-02, NASA-05, NASA-07a | To Do |
+| NASA-04c3 | Единая composition source/cache для workflow, probe и Random; production switch | NASA-04c1, NASA-04c2, NASA-06, NASA-07 | To Do |
 | NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04b | Done |
 | NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04b, NASA-05 | Done (staged) |
 | NASA-07 | Совместимость существующих range запросов и пагинация | NASA-04b | Done (staged) |
-| NASA-08 | Сквозная регрессия preview/download/apply/favorite/scheduler, RU/EN | NASA-05, NASA-06, NASA-07 | To Do |
+| NASA-07a | Проверенный статический кадр из metadata для 2026-08-05 | NASA-07 | Done |
+| NASA-08 | Сквозная регрессия preview/download/apply/favorite/scheduler, RU/EN | NASA-04c, NASA-05, NASA-06, NASA-07 | To Do |
 | NASA-09 | Ручная проверка и выпуск | NASA-08 | To Do |
 | NASA-10 | Быстрое фоновое обновление открытого месяца для всех | NASA-09 | Backlog |
 
@@ -113,6 +117,16 @@ NASA-04a (2026-09-29): старый клиент перенесен в `LegacyAp
 Причина разделения: граф вызовов подтвердил sync путь GetEntryByDate -> preview/download/apply/latest и sync GetEntries для month status. NASA-03 предоставляет только async transport. Переключение только GetEntryAsync оставило бы разное поведение в разных сценариях; блокирующий Task bridge противоречит договоренности. Дополнительно PostUrl/SourcePreviewUrl/SourceOriginalUrl пока живут только в ApodScienceRecord и не сохраняются через существующий entry/cache. Поэтому NASA-04 остается In Progress. NASA-04b готовит native sync transport и adapter, NASA-05/06/07 могут работать с ним до production switch; их зависимость от NASA-04 означает NASA-04b, а не завершение NASA-04c. Итоговое переключение выполняется после этих зависимостей, без циклической очереди задач.
 
 Проверки NASA-04a: новая группа smoke сначала упала на NotImplementedException, затем прошла. Проверены все семь делегируемых методов, неизменность дат включая time component, pending async result, sync/async ошибки без fallback, null source. Полный `dotnet build apod_wallpaper.sln -c Release`: 0 warnings / 0 errors, smoke tests passed. Это проверка сохранения контрактов, не подтверждение завершения миграции. UI, scheduler, settings, version, installer и remote не менялись.
+
+### NASA-04c: уточнение статуса и оставшихся зависимостей
+
+NASA-04 не завершена: это родительская задача, а не только выделение legacy. NASA-04a/b выполнены; production default по-прежнему LegacyApodClient, controller использует parameterless legacy probe. Выполненные NASA-05/06/07 подготовили контракт и staged реализации, но не включили их в приложение. Ранее дополнительные условия переключения были записаны только в тексте, а таблица зависимостей была неполной. Теперь они выделены в NASA-04c1..3, а NASA-08 явно зависит от production switch. Это не пропущенная отметка Done.
+
+NASA-04c1: sync и async GetEntry используют общий registry по DateTime.Date. Первый sync consumer запускает один native sync transport worker; остальные sync consumers ждут Monitor, async consumers ждут Task completion. Это не блокирующий async-to-sync мост. Worker независим от первого caller: отмена одного ожидания не отменяет остальных; уход последнего отменяет сеть. Результат JSON разбирается отдельно для каждого потребителя, завершенные/ошибочные flight удаляются. Range transport, общий semaphore=2, Retry-After и timeout сохранены. Очередь ThreadPool перед стартом sync worker не включена в его сетевой timeout; при отмене caller ожидание прерывается независимо от старта worker.
+
+Проверки NASA-04c1: новый тест сначала воспроизвел два независимых sync/async запроса, затем прошел. Покрыты sync-first, async-first, два sync consumers, независимость mutable Entry, отмена первого при живых остальных, отмена последнего, повтор после отмены/503 и отсутствие постоянного кеша flight. Source/cache composition и asset fallback намеренно не помечены выполненными.
+
+Итог NASA-04c1: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, все smoke tests passed. Изменены только source, smoke tests и журнал. Без version/installer/push.
 
 ## NASA-05: ссылки и кеш
 
