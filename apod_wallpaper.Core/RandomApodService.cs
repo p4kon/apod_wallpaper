@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -14,10 +15,15 @@ namespace apod_wallpaper
         private static readonly Random SharedRandom = new Random();
         private static readonly object RandomSyncRoot = new object();
         private readonly ApodPageAvailabilityProbe _pageAvailabilityProbe;
+        private readonly IApodMetadataCache _cache;
+        private readonly Func<DateTime, DateTime, DateTime> _pickDate;
 
-        public RandomApodService(ApodPageAvailabilityProbe pageAvailabilityProbe)
+        public RandomApodService(ApodPageAvailabilityProbe pageAvailabilityProbe,
+            IApodMetadataCache cache = null, Func<DateTime, DateTime, DateTime> pickDate = null)
         {
             _pageAvailabilityProbe = pageAvailabilityProbe ?? throw new ArgumentNullException(nameof(pageAvailabilityProbe));
+            _cache = cache;
+            _pickDate = pickDate ?? PickDateInRange;
         }
 
         public async Task<RandomApodResult> PickGlobalAsync(bool includeDeepArchive)
@@ -27,18 +33,27 @@ namespace apod_wallpaper
             if (startDate > endDate)
                 return RandomApodResult.NoCandidates(RandomApodSource.Global, includeDeepArchive, "Random APOD date range is empty.");
 
+            var clock = Stopwatch.StartNew();
+            var attempts = 0;
             for (var attempt = 1; attempt <= GlobalAvailabilityAttemptLimit; attempt++)
             {
-                var candidate = PickDateInRange(startDate, endDate);
-                var probe = await _pageAvailabilityProbe.ProbeAsync(candidate, TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                var remaining = TimeSpan.FromSeconds(8) - clock.Elapsed;
+                if (remaining <= TimeSpan.Zero) break;
+                var candidate = _pickDate(startDate, endDate);
+                attempts = attempt;
+                var probe = await _pageAvailabilityProbe.ProbeAsync(candidate, remaining < TimeSpan.FromSeconds(2) ? remaining : TimeSpan.FromSeconds(2)).ConfigureAwait(false);
                 if (probe.IsAvailable)
+                {
+                    if (probe.Entry != null) _cache?.Upsert(probe.Entry);
                     return RandomApodResult.Success(candidate, RandomApodSource.Global, includeDeepArchive, attempt);
+                }
+                if (!probe.IsUnavailable) break;
             }
 
             return RandomApodResult.Unavailable(
                 RandomApodSource.Global,
                 includeDeepArchive,
-                GlobalAvailabilityAttemptLimit,
+                attempts,
                 "Could not find an available APOD date quickly.");
         }
 

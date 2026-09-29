@@ -33,6 +33,7 @@ namespace apod_wallpaper
         public string Method { get; }
         public string RedirectLocation { get; }
         public string ErrorMessage { get; }
+        internal ApodEntry Entry { get; set; }
 
         public static ApodPageAvailabilityProbeResult Available(DateTime date, string expectedUrl, HttpStatusCode statusCode, string method)
         {

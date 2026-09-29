@@ -24,7 +24,7 @@
 | NASA-04b | Sync transport без async-to-sync bridge и новый IApodClient adapter | NASA-04a | Done |
 | NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04b, NASA-05, NASA-06, NASA-07 | To Do |
 | NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04b | Done |
-| NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04, NASA-05 | To Do |
+| NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04b, NASA-05 | Done (staged) |
 | NASA-07 | Совместимость существующих range запросов и пагинация | NASA-04 | To Do |
 | NASA-08 | Сквозная регрессия preview/download/apply/favorite/scheduler, RU/EN | NASA-05, NASA-06, NASA-07 | To Do |
 | NASA-09 | Ручная проверка и выпуск | NASA-08 | To Do |
@@ -139,6 +139,16 @@ Build: единственный полный `dotnet build apod_wallpaper.sln -c
 ## NASA-06: today/latest/random
 
 Probe проверяет точную дату публикации по JSON, не скачивает изображение и не применяет обои. Сохранить throttle, midnight bypass, guards и transient override. Latest учитывает фактическую дату, а не просто HTTP 200. Random сохраняет ограниченный reroll, общий бюджет и кеш результата для preview. Local/favorites остаются offline. Scheduler timing и apply logic не менять.
+
+Результат NASA-06: в staged ApodScienceClient sync/async latest больше не делегируются legacy. Проверяется максимум четыре даты, начиная с более поздней local/UTC today, с общим бюджетом 8 секунд. Переход назад только после 404; schema mismatch/429/5xx/timeout прерывают lookup. Видео и text-only считаются настоящими публикациями, а не поводом искать более старую картинку; выбор обоев остается существующему workflow.
+
+ApodPageAvailabilityProbe получил явно выбираемый JSON-путь через constructor injection ApodScienceSource. Проверенная публикация возвращает Available и внутреннюю Entry, 404 -> Unavailable, неверная дата/schema/timeout/HTTP failure -> Unknown. Никаких image downloads, apply или scheduler вызовов. Parameterless probe сохраняет старый путь до NASA-04c, старые response evaluator tests сохранены. UI throttle, midnight bypass, in-progress и transient override не менялись.
+
+Global Random ограничен 10 попытками и общим бюджетом 8 секунд, отдельный probe максимум 2 секунды. Перевыбор только для подтвержденной unavailable даты, Unknown останавливает попытки, чтобы не множить запросы при outage. При JSON-probe и переданном общем metadata cache успешная Entry сохраняется для preview. Добавлены injection date picker/cache для детерминированных тестов. Local/downloaded/favorites выбор не изменен.
+
+Важно для NASA-04c: ApplicationController пока создает legacy probe; JSON-probe и кеширование Random в приложении еще не включены. Нужно передать общий source и тот же экземпляр metadata cache, который использует wallpaper service. Отдельный долго живущий ApodMetadataCache создавать нельзя: его in-memory snapshot способен перезаписать изменения другого экземпляра. Default клиента тоже пока legacy. Изменение общего бюджета Random уже действует независимо от источника.
+
+Проверки: RED latest-тест подтвердил прежнюю legacy-делегацию. После реализации проверены sync/async 404 lookback, остановка на 503, video latest, общий timeout, wrong-date probe, 404/timeout result, reroll отсутствующей архивной даты, сохранение canonical metadata, остановка Random на 503 и attempt cap. Тест wrong-date probe выявил необходимость отдельно ловить InvalidDataException; исправлено, весь smoke suite passed. Финальный `dotnet build apod_wallpaper.sln -c Release`: 0 warnings / 0 errors. Реальную UI activation/restore проверку выполнить после NASA-04c. Installer/version/push не выполнялись.
 
 ## NASA-07: месячные запросы
 

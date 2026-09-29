@@ -435,7 +435,7 @@ namespace apod_wallpaper.SmokeTests
             var legacy = new RecordingApodSource();
             source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => Task.FromResult(ScienceResponse()),
                 sendSync: (uri, token) => ScienceResponse());
-            apod_wallpaper.IApodClient client = new apod_wallpaper.ApodClient(new apod_wallpaper.ApodScienceClient(source, legacy));
+            apod_wallpaper.IApodClient client = new apod_wallpaper.ApodClient(new apod_wallpaper.ApodScienceClient(source, legacy, () => date));
             Assert(client.GetEntry(date).ResolvedFromSource == "nasa_science", "Sync date must use new source.");
             Assert((await client.GetEntryAsync(date)).ResolvedFromSource == "nasa_science", "Async date must use new source.");
             Assert(legacy.Calls.Count == 0, "Date calls must not contact legacy/API key validation.");
@@ -444,14 +444,14 @@ namespace apod_wallpaper.SmokeTests
             client.GetEntries(date, date);
             await client.GetEntriesAsync(date, date);
             await client.ValidateApiKeyAsync("test-key");
-            Assert(string.Join(",", legacy.Calls) == "latest,latest_async,range,range_async,validate", "Unmigrated operations must use explicit compatibility delegation.");
+            Assert(string.Join(",", legacy.Calls) == "range,range_async,validate", "Unmigrated operations must use explicit compatibility delegation.");
             source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => Task.FromResult(ScienceResponse(503)),
                 sendSync: (uri, token) => ScienceResponse(503));
             client = new apod_wallpaper.ApodScienceClient(source, legacy);
             try { client.GetEntry(date); throw new InvalidOperationException("Failure swallowed."); }
             catch (apod_wallpaper.ApodScienceRequestException) { }
             await ExpectScienceFailureAsync<apod_wallpaper.ApodScienceRequestException>(client.GetEntryAsync(date));
-            Assert(legacy.Calls.Count == 5, "Failed dates must not trigger legacy retry chains.");
+            Assert(legacy.Calls.Count == 3, "Failed dates must not trigger legacy retry chains.");
         }
 
         private static void ScienceMetadataLinksPersist()
@@ -511,6 +511,73 @@ namespace apod_wallpaper.SmokeTests
                 apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
                 TryDeleteDirectory(root);
             }
+        }
+
+        private static async Task ScienceLatestUsesVerifiedDatesAsync()
+        {
+            var today = new DateTime(2026, 9, 28);
+            var calls = 0;
+            var legacy = new RecordingApodSource();
+            Func<Uri, CancellationToken, apod_wallpaper.ApodScienceResponse> send = (uri, token) =>
+            { calls++; return uri.AbsolutePath.EndsWith("260928") ? ScienceResponse(404) : ScienceResponse(); };
+            var source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => Task.FromResult(send(uri, token)), sendSync: send);
+            var client = new apod_wallpaper.ApodScienceClient(source, legacy, () => today);
+            Assert(client.GetLatestEntry().Date == "2026-09-27", "Sync latest must walk back after confirmed 404.");
+            Assert((await client.GetLatestEntryAsync()).Date == "2026-09-27" && calls == 4, "Async latest must use same policy.");
+            Assert(legacy.Calls.Count == 0, "Latest must not contact old API/HTML.");
+            calls = 0;
+            source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => { calls++; return Task.FromResult(ScienceResponse(503)); });
+            client = new apod_wallpaper.ApodScienceClient(source, legacy, () => today);
+            await ExpectScienceFailureAsync<apod_wallpaper.ApodScienceRequestException>(client.GetLatestEntryAsync());
+            Assert(calls == 1, "Transient server failure must not fan out to older dates.");
+            source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => Task.FromResult(ScienceResponse(json: ScienceFixture("video"))));
+            client = new apod_wallpaper.ApodScienceClient(source, legacy, () => new DateTime(2026, 8, 31));
+            Assert((await client.GetLatestEntryAsync()).MediaType == "video", "Latest publication need not be an image.");
+            source = new apod_wallpaper.ApodScienceSource(send: async (uri, token) =>
+            { await Task.Delay(Timeout.Infinite, token); return ScienceResponse(); });
+            client = new apod_wallpaper.ApodScienceClient(source, legacy, () => today, TimeSpan.FromMilliseconds(100));
+            await ExpectScienceFailureAsync<TimeoutException>(client.GetLatestEntryAsync());
+        }
+
+        private static async Task ScienceProbeAndRandomAsync()
+        {
+            var date = new DateTime(2026, 9, 27);
+            var calls = 0;
+            var source = new apod_wallpaper.ApodScienceSource(send: (uri, token) =>
+            { calls++; return Task.FromResult(ScienceResponse()); });
+            var probe = new apod_wallpaper.ApodPageAvailabilityProbe(source);
+            var result = await probe.ProbeAsync(date, TimeSpan.FromSeconds(1));
+            Assert(result.IsAvailable && result.Entry.PostUrl != null && result.Method == "GET", "Probe must return verified metadata.");
+            result = await probe.ProbeAsync(date.AddDays(-1), TimeSpan.FromSeconds(1));
+            Assert(!result.IsAvailable && !result.IsUnavailable, "Wrong JSON date must remain unknown.");
+            source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => Task.FromResult(ScienceResponse(404)));
+            result = await new apod_wallpaper.ApodPageAvailabilityProbe(source).ProbeAsync(date, TimeSpan.FromSeconds(1));
+            Assert(result.IsUnavailable && result.Entry == null, "404 must not unlock or cache an entry.");
+            source = new apod_wallpaper.ApodScienceSource(send: async (uri, token) =>
+            { await Task.Delay(Timeout.Infinite, token); return ScienceResponse(); });
+            result = await new apod_wallpaper.ApodPageAvailabilityProbe(source).ProbeAsync(date, TimeSpan.FromMilliseconds(100));
+            Assert(!result.IsAvailable && !result.IsUnavailable, "Timeout is unknown, not missing.");
+
+            var picks = 0;
+            calls = 0;
+            var cache = new InMemoryApodMetadataCache();
+            source = new apod_wallpaper.ApodScienceSource(send: (uri, token) =>
+            { calls++; return Task.FromResult(uri.AbsolutePath.EndsWith("950617") ? ScienceResponse(404) : ScienceResponse()); });
+            var random = new apod_wallpaper.RandomApodService(new apod_wallpaper.ApodPageAvailabilityProbe(source), cache,
+                (start, end) => ++picks == 1 ? new DateTime(1995, 6, 17) : date);
+            var selected = await random.PickGlobalAsync(true);
+            Assert(selected.Date == date && calls == 2, "Random must reroll a confirmed missing page.");
+            Assert(cache.Get(date)?.PostUrl != null && cache.Get(date).ToEntry().HasImage, "Random must retain metadata for preview.");
+            calls = 0;
+            source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => { calls++; return Task.FromResult(ScienceResponse(503)); });
+            random = new apod_wallpaper.RandomApodService(new apod_wallpaper.ApodPageAvailabilityProbe(source), cache, (start, end) => date);
+            selected = await random.PickGlobalAsync(false);
+            Assert(selected.Status != apod_wallpaper.RandomApodStatus.Success && calls == 1, "Do not multiply requests during a NASA outage.");
+            calls = 0;
+            source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => { calls++; return Task.FromResult(ScienceResponse(404)); });
+            random = new apod_wallpaper.RandomApodService(new apod_wallpaper.ApodPageAvailabilityProbe(source), cache, (start, end) => date);
+            await random.PickGlobalAsync(false);
+            Assert(calls == apod_wallpaper.RandomApodService.GlobalAvailabilityAttemptLimit, "Missing pages must respect attempt cap.");
         }
 
         [STAThread]
@@ -600,6 +667,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science synchronous transport bounds", NasaScienceSyncTransportBounds);
                 Run("NASA Science sync body, shared cooldown and staged adapter", () => NasaScienceSyncAndAdapterAsync().GetAwaiter().GetResult());
                 Run("NASA Science metadata links persist compatibly", ScienceMetadataLinksPersist);
+                Run("NASA Science latest verifies dates and total budget", () => ScienceLatestUsesVerifiedDatesAsync().GetAwaiter().GetResult());
+                Run("NASA Science probe and Random retain verified metadata", () => ScienceProbeAndRandomAsync().GetAwaiter().GetResult());
 
                 Console.WriteLine(_failures == 0
                     ? "Smoke tests passed."

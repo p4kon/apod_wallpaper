@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Security.Authentication;
@@ -13,9 +14,19 @@ namespace apod_wallpaper
     {
         private static readonly Regex ApodPageRegex = new Regex(@"/apod/ap(?<date>\d{6})\.html$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Lazy<HttpClient> SharedHttpClient = new Lazy<HttpClient>(CreateHttpClient);
+        private readonly ApodScienceSource _scienceSource;
+
+        public ApodPageAvailabilityProbe() { }
+
+        internal ApodPageAvailabilityProbe(ApodScienceSource scienceSource)
+        {
+            _scienceSource = scienceSource ?? throw new ArgumentNullException(nameof(scienceSource));
+        }
 
         public async Task<ApodPageAvailabilityProbeResult> ProbeAsync(DateTime date, TimeSpan timeout)
         {
+            if (_scienceSource != null)
+                return await ProbeScienceAsync(date, timeout).ConfigureAwait(false);
             var expectedUrl = ApodPageUrl.BuildUrl(date);
             using (var cancellation = new CancellationTokenSource(timeout))
             {
@@ -24,6 +35,27 @@ namespace apod_wallpaper
                     return headResult;
 
                 return await ProbeWithMethodAsync(date, expectedUrl, HttpMethod.Get, cancellation.Token).ConfigureAwait(false);
+            }
+        }
+
+        private async Task<ApodPageAvailabilityProbeResult> ProbeScienceAsync(DateTime date, TimeSpan timeout)
+        {
+            var url = ApodScienceParser.BuildUrl(date);
+            using (var budget = new CancellationTokenSource(timeout))
+            {
+                try
+                {
+                    var record = await _scienceSource.GetEntryAsync(date, budget.Token).ConfigureAwait(false);
+                    var result = ApodPageAvailabilityProbeResult.Available(date, url, HttpStatusCode.OK, "GET");
+                    result.Entry = record.Entry;
+                    return result;
+                }
+                catch (ApodEntryUnavailableException)
+                { return ApodPageAvailabilityProbeResult.Unavailable(date, url, HttpStatusCode.NotFound, "GET"); }
+                catch (ApodScienceRequestException ex)
+                { return ApodPageAvailabilityProbeResult.Unknown(date, url, "GET", (HttpStatusCode)ex.Status); }
+                catch (Exception ex) when (ex is OperationCanceledException || ex is TimeoutException || ex is InvalidDataException || ex is IOException || ex is HttpRequestException)
+                { return ApodPageAvailabilityProbeResult.Unknown(date, url, "GET", errorMessage: ex.Message); }
             }
         }
 
