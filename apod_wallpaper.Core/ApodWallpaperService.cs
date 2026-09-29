@@ -17,6 +17,7 @@ namespace apod_wallpaper
         private readonly IApodClient _client;
         private readonly IApodMetadataCache _cache;
         private readonly IWallpaperApplier _wallpaperService;
+        private readonly ApodOriginalAsset _originalAsset;
         private readonly SemaphoreSlim _latestEntrySemaphore = new SemaphoreSlim(1, 1);
         private ApodEntry _latestEntry;
         private DateTime _latestEntryFetchedAtUtc;
@@ -29,11 +30,12 @@ namespace apod_wallpaper
         {
         }
 
-        internal ApodWallpaperService(IApodClient client, IApodMetadataCache cache, IWallpaperApplier wallpaperService)
+        internal ApodWallpaperService(IApodClient client, IApodMetadataCache cache, IWallpaperApplier wallpaperService, ApodOriginalAsset originalAsset = null)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _wallpaperService = wallpaperService ?? throw new ArgumentNullException(nameof(wallpaperService));
+            _originalAsset = originalAsset ?? new ApodOriginalAsset();
             RunHousekeepingIfNeeded();
         }
 
@@ -573,7 +575,12 @@ namespace apod_wallpaper
 
             var image = new DownloadedImageFile(entry.BestImageUrl, baseName);
             var downloadedNow = false;
-            if (!File.Exists(image.FullPath))
+            if (ApodOriginalAsset.Handles(entry))
+            {
+                _originalAsset.Download(entry.BestImageUrl, image.FullPath);
+                downloadedNow = true;
+            }
+            else if (!File.Exists(image.FullPath))
             {
                 image.DownloadImage();
                 image.SaveImage();
@@ -630,7 +637,12 @@ namespace apod_wallpaper
 
             var image = new DownloadedImageFile(entry.BestImageUrl, baseName);
             var downloadedNow = false;
-            if (!File.Exists(image.FullPath))
+            if (ApodOriginalAsset.Handles(entry))
+            {
+                await _originalAsset.DownloadAsync(entry.BestImageUrl, image.FullPath, progress).ConfigureAwait(false);
+                downloadedNow = true;
+            }
+            else if (!File.Exists(image.FullPath))
             {
                 await image.DownloadImageAsync(progress).ConfigureAwait(false);
                 image.SaveImage();

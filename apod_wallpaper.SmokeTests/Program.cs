@@ -591,6 +591,95 @@ namespace apod_wallpaper.SmokeTests
             finally { TryDeleteDirectory(root); }
         }
 
+        private static async Task ScienceOriginalDownloadAsync()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "apod_original_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var entry = apod_wallpaper.ApodScienceParser.Parse(ScienceFixture("image"), new DateTime(2026, 9, 27)).Entry;
+                Assert(apod_wallpaper.ApodOriginalAsset.Handles(entry), "Derived NASA original must use bounded downloader.");
+                byte[] bytes;
+                using (var stream = new MemoryStream())
+                using (var bitmap = new Bitmap(12, 8))
+                { bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Jpeg); bytes = stream.ToArray(); }
+                foreach (var asyncMode in new[] { false, true })
+                {
+                    var calls = 0;
+                    var status = 200;
+                    var data = bytes;
+                    Func<Uri, CancellationToken, apod_wallpaper.ApodScienceResponse> send = (uri, token) => {
+                        calls++;
+                        Assert(uri.AbsoluteUri == entry.BestImageUrl, "Original must not fall back to resized source.");
+                        return new apod_wallpaper.ApodScienceResponse(status, new MemoryStream(data), "image/jpeg", data.Length);
+                    };
+                    var downloader = new apod_wallpaper.ApodOriginalAsset(send, (uri, token) => Task.FromResult(send(uri, token)));
+                    var path = Path.Combine(root, asyncMode + ".jpg");
+                    if (asyncMode) await downloader.DownloadAsync(entry.BestImageUrl, path); else downloader.Download(entry.BestImageUrl, path);
+                    Assert(File.ReadAllBytes(path).SequenceEqual(bytes), "Original bytes must be preserved without JPEG re-encoding.");
+                    foreach (var failure in new[] { 302, 404, 429, 503, 200 })
+                    {
+                        status = failure;
+                        data = new byte[] { 1, 2, 3 };
+                        var before = calls;
+                        try
+                        {
+                            if (asyncMode) await downloader.DownloadAsync(entry.BestImageUrl, path); else downloader.Download(entry.BestImageUrl, path);
+                            throw new InvalidOperationException("Invalid original accepted.");
+                        }
+                        catch (Exception ex) when (ex is IOException || ex is InvalidDataException) { }
+                        Assert(calls == before + 1 && File.ReadAllBytes(path).SequenceEqual(bytes), "Failure must preserve existing file and make one request only.");
+                    }
+                }
+                var timed = new apod_wallpaper.ApodOriginalAsset(
+                    send: (uri, token) => { token.WaitHandle.WaitOne(); token.ThrowIfCancellationRequested(); return null; },
+                    sendAsync: async (uri, token) => { await Task.Delay(5000, token); return null; }, timeout: TimeSpan.FromMilliseconds(50));
+                try { timed.Download(entry.BestImageUrl, Path.Combine(root, "timed.jpg")); throw new InvalidOperationException("Sync timeout ignored."); }
+                catch (TimeoutException) { }
+                await ExpectScienceFailureAsync<TimeoutException>(timed.DownloadAsync(entry.BestImageUrl, Path.Combine(root, "timed-async.jpg")));
+                var large = new apod_wallpaper.ApodOriginalAsset(sendAsync: (uri, token) => Task.FromResult(
+                    new apod_wallpaper.ApodScienceResponse(200, Stream.Null, "image/jpeg", 268435457)));
+                await ExpectScienceFailureAsync<IOException>(large.DownloadAsync(entry.BestImageUrl, Path.Combine(root, "large.jpg")));
+                var snapshot = CaptureSettings();
+                try
+                {
+                    apod_wallpaper.FileStorage.SetSessionImagesDirectory(root);
+                    var date = new DateTime(2026, 9, 27);
+                    var cache = new InMemoryApodMetadataCache();
+                    var applier = new FakeWallpaperApplier();
+                    var calls = 0;
+                    var status = 503;
+                    var downloader = new apod_wallpaper.ApodOriginalAsset(sendAsync: (uri, token) => {
+                        calls++; return Task.FromResult(new apod_wallpaper.ApodScienceResponse(status, new MemoryStream(bytes), "image/jpeg", bytes.Length));
+                    });
+                    var client = new FakeApodClient(entry, new Dictionary<DateTime, apod_wallpaper.ApodEntry> { { date, entry } });
+                    var service = new apod_wallpaper.ApodWallpaperService(client, cache, applier, downloader);
+                    await ExpectScienceFailureAsync<IOException>(service.ApplyWallpaperByDateAsync(date, apod_wallpaper.WallpaperStyle.Smart));
+                    Assert(applier.LastAppliedImagePath == null && string.IsNullOrWhiteSpace(cache.Get(date)?.LocalImagePath), "Failed download must not apply or cache local path.");
+                    status = 200;
+                    var progress = new RecordedDownloadProgress();
+                    var applied = await service.ApplyWallpaperByDateAsync(date, apod_wallpaper.WallpaperStyle.Smart, false, progress);
+                    Assert(applier.LastAppliedImagePath == applied.ImagePath && File.ReadAllBytes(applied.ImagePath).SequenceEqual(bytes), "Apply must receive validated unmodified original.");
+                    Assert(progress.Last.BytesReceived == bytes.Length && progress.Last.TotalBytes == bytes.Length, "Download progress must report original bytes.");
+                    await service.DownloadImageByDateAsync(date);
+                    Assert(calls == 2, "Existing original must avoid repeat download.");
+                }
+                finally
+                {
+                    apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                    RestoreSettings(snapshot);
+                }
+                Assert(!Directory.GetFiles(root, "*.download").Any(), "Original transfer must clean temporary files.");
+            }
+            finally { TryDeleteDirectory(root); }
+        }
+
+        private sealed class RecordedDownloadProgress : IProgress<apod_wallpaper.DownloadProgressSnapshot>
+        {
+            internal apod_wallpaper.DownloadProgressSnapshot Last;
+            public void Report(apod_wallpaper.DownloadProgressSnapshot value) { Last = value; }
+        }
+
         private static void ScienceMetadataLinksPersist()
         {
             var root = Path.Combine(Path.GetTempPath(), "apod_science_cache_" + Guid.NewGuid().ToString("N"));
@@ -971,6 +1060,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science metadata links persist compatibly", ScienceMetadataLinksPersist);
                 Run("NASA Science old cache migrates without blocking local previews", () => ScienceOldCacheMigrationAsync().GetAwaiter().GetResult());
                 Run("NASA Science preview fallback is bounded and validates cache", () => SciencePreviewFallbackAsync().GetAwaiter().GetResult());
+                Run("NASA Science originals preserve bytes and fail without downgrade", () => ScienceOriginalDownloadAsync().GetAwaiter().GetResult());
                 Run("NASA Science latest verifies dates and total budget", () => ScienceLatestUsesVerifiedDatesAsync().GetAwaiter().GetResult());
                 Run("NASA Science probe and Random retain verified metadata", () => ScienceProbeAndRandomAsync().GetAwaiter().GetResult());
                 Run("NASA Science range pagination is complete or fails", () => ScienceRangePagesAsync().GetAwaiter().GetResult());

@@ -24,7 +24,7 @@
 | NASA-04b | Sync transport без async-to-sync bridge и новый IApodClient adapter | NASA-04a | Done |
 | NASA-04c | Переключение production source после сохранения metadata и проверки потребителей | NASA-04c1, NASA-04c2, NASA-04c3, NASA-05, NASA-06, NASA-07 | In Progress |
 | NASA-04c1 | Общий in-flight registry для sync/async одной даты | NASA-04b | Done |
-| NASA-04c2 | Ограниченный asset fallback и canonical URL старого кеша | NASA-02, NASA-05, NASA-07a | In Progress: old-cache + preview fallback done; original download remains |
+| NASA-04c2 | Ограниченный asset fallback и canonical URL старого кеша | NASA-02, NASA-05, NASA-07a | Done |
 | NASA-04c3 | Единая composition source/cache для workflow, probe и Random; production switch | NASA-04c1, NASA-04c2, NASA-06, NASA-07 | To Do |
 | NASA-05 | Canonical PostUrl, backward-compatible cache, кнопка NASA | NASA-04b | Done |
 | NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04b, NASA-05 | Done (staged) |
@@ -151,6 +151,16 @@ Offline тест сначала воспроизвел немигрирующи�
 Документация: https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpcompletionoption — ResponseHeadersRead сам не ограничивает чтение body, поэтому использован общий cancellation budget и dispose response при отмене.
 
 Остаток NASA-04c2: bounded original download без молчаливого перехода на уменьшенный dynamicimage. NASA-04c3 и NASA-08 еще открыты. Предварительная оценка всего плана около 70–75% выполнено; это оценка объема, не готовность к релизу.
+
+### NASA-04c2: оригиналы NASA CDN
+
+Добавлен ApodOriginalAsset, подключен в обе ветки EnsureImageDownloaded (sync/async). Обрабатывает проверенные static content/dam ссылки NASA, совпадающие с mapping сохраненного SourceOriginalUrl. Один GET, без redirect/retry/перехода на уменьшенный dynamicimage. При 404/non-image/ошибке download завершается штатным исключением workflow: подтвержденного альтернативного full-resolution адреса у нас нет, поэтому не выдаем resized image за original. Это осознанный fail-closed выбор вместо небезопасного fallback.
+
+Общий сетевой бюджет 2 минуты на headers/body, предел 256 MiB, потоковая запись во временный файл. После проверки image файл публикуется атомарно; до этого прежний файл не затирается. Исходные bytes сохраняются без повторного JPEG encoding. Async path сохраняет progress (bytes/total/speed). Sync использует HttpClient.Send на net8 и native HttpWebRequest на net48; нового async-to-sync bridge нет. Как и ранее, на net48 DNS может превышать платформенный timeout; decode не является жестко прерываемой операцией. GIF/непреобразованные сторонние URLs остаются в прежнем загрузчике, не расширяем эту задачу до переписывания всего legacy transport.
+
+Тесты: сначала RED, затем проверены sync/async byte identity, HTTP 302/404/429/503 и битое изображение без downgrade/retry, сохранность существующего файла, timeout обеих веток, oversize, cleanup временных файлов. Service integration с fake wallpaper applier доказывает отсутствие apply/local-cache-path при failed download, successful apply валидного original, progress и local reuse без сети. Реальные обои и пользовательские файлы не менялись. NASA-04c2 закрыта; следующий этап NASA-04c3 — shared composition и production switch.
+
+Финальная проверка original-download этапа: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, все smoke tests passed. Без installer/version/push; production default еще legacy до NASA-04c3.
 
 ## NASA-05: ссылки и кеш
 
