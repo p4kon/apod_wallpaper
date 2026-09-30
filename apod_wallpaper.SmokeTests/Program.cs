@@ -848,9 +848,108 @@ namespace apod_wallpaper.SmokeTests
                     }
                     var post = await controller.GetPostUrlAsync(date);
                     Assert(!post.Succeeded && keys.Contains(post.Error.Message), "NASA link lookup failure needs RU translation.");
-                    // Existing latest-date fallback performs three lookups on failure;
-                    // keep this visible until the separate NASA-08 retry fix.
-                    Assert(requests == 7, "Expected four direct requests plus three legacy latest-date fallback lookups.");
+                    Assert(requests == 5, "Each failed facade operation must perform just one metadata lookup.");
+                }
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(root);
+            }
+        }
+
+        private static async Task ScienceLatestFailureDoesNotRetryAsync()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "apod_latest_failure_" + Guid.NewGuid().ToString("N"));
+            var snapshot = CaptureSettings();
+            apod_wallpaper.FileStorage.SetSessionImagesDirectory(root);
+            try
+            {
+                foreach (var asyncMode in new[] { false, true })
+                foreach (var force in new[] { false, true })
+                foreach (var status in new[] { 503, 429, 302, 404, 0 })
+                {
+                    var requests = 0;
+                    Func<Uri, CancellationToken, apod_wallpaper.ApodScienceResponse> send = (uri, token) => {
+                        requests++;
+                        if (status == 0) throw new TimeoutException("simulated timeout");
+                        return ScienceResponse(status: status);
+                    };
+                    var source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => Task.FromResult(send(uri, token)), sendSync: send);
+                    var client = new apod_wallpaper.ApodScienceClient(source, new RecordingApodSource(), () => new DateTime(2026, 9, 27));
+                    var applier = new FakeWallpaperApplier();
+                    var cache = new InMemoryApodMetadataCache();
+                    var service = new apod_wallpaper.ApodWallpaperService(client, cache, applier);
+                    var workflow = new apod_wallpaper.ApodWorkflowService(service);
+                    var result = asyncMode
+                        ? await workflow.ApplyLatestPublishedAsync(apod_wallpaper.WallpaperStyle.Fit, force)
+                        : workflow.ApplyLatestPublished(apod_wallpaper.WallpaperStyle.Fit, force);
+                    Assert(result.Status == (status == 404 ? apod_wallpaper.ApodWorkflowStatus.Unavailable : apod_wallpaper.ApodWorkflowStatus.Failed),
+                        "Latest failure must preserve unavailable/failed distinction.");
+                    Assert(requests == (status == 404 ? 4 : 1), "Latest workflow must not restart lookup after failure; status=" + status);
+                    Assert(applier.LastAppliedImagePath == null && cache.Get(new DateTime(2026, 9, 27)) == null,
+                        "Failed latest must not apply wallpaper or invent a cached publication.");
+                    var before = requests;
+                    try
+                    {
+                        if (asyncMode) await service.ApplyLatestPublishedWallpaperAsync(apod_wallpaper.WallpaperStyle.Fit, force);
+                        else service.ApplyLatestPublishedWallpaper(apod_wallpaper.WallpaperStyle.Fit, force);
+                        throw new InvalidOperationException("Direct service swallowed source failure.");
+                    }
+                    catch (Exception ex) when (ex is IOException || ex is TimeoutException || ex is apod_wallpaper.ApodEntryUnavailableException) { }
+                    Assert(requests - before <= (status == 404 ? 4 : 1), "Direct apply must not restart failed lookup either.");
+                    var calendarDate = asyncMode ? await service.GetLatestPublishedDateAsync() : service.GetLatestPublishedDate();
+                    Assert(calendarDate == DateTime.UtcNow.Date, "Calendar date fallback must retain its existing behavior on source failure.");
+                }
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(root);
+            }
+        }
+
+        private static async Task ScienceLatestReusesVerifiedCacheAsync()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "apod_latest_cache_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var snapshot = CaptureSettings();
+            apod_wallpaper.FileStorage.SetSessionImagesDirectory(root);
+            try
+            {
+                var date = new DateTime(2026, 9, 27);
+                var path = Path.Combine(root, date.ToString("yyyy-MM-dd") + ".jpg");
+                using (var bitmap = new Bitmap(12, 12)) bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Jpeg);
+                foreach (var asyncMode in new[] { false, true })
+                {
+                    var requests = 0;
+                    var online = true;
+                    Func<Uri, CancellationToken, apod_wallpaper.ApodScienceResponse> send = (uri, token) => {
+                        requests++;
+                        return ScienceResponse(status: online ? 200 : 503);
+                    };
+                    var source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => Task.FromResult(send(uri, token)), sendSync: send);
+                    var client = new apod_wallpaper.ApodScienceClient(source, new RecordingApodSource(), () => date);
+                    var applier = new FakeWallpaperApplier();
+                    var service = new apod_wallpaper.ApodWallpaperService(client, new InMemoryApodMetadataCache(), applier);
+                    var workflow = new apod_wallpaper.ApodWorkflowService(service);
+                    var first = asyncMode ? await workflow.ApplyLatestPublishedAsync(apod_wallpaper.WallpaperStyle.Fit, true)
+                        : workflow.ApplyLatestPublished(apod_wallpaper.WallpaperStyle.Fit, true);
+                    Assert(first.IsSuccess && first.LatestPublishedDate == date && requests == 1,
+                        "Latest image must be reused directly, even for a forced workflow.");
+                    online = false;
+                    var cached = asyncMode ? await workflow.ApplyLatestPublishedAsync(apod_wallpaper.WallpaperStyle.Fit)
+                        : workflow.ApplyLatestPublished(apod_wallpaper.WallpaperStyle.Fit);
+                    Assert(cached.IsSuccess && requests == 1 && applier.LastAppliedImagePath == path,
+                        "Fresh latest cache and local image must remain usable without a network request.");
+                    var forced = asyncMode ? await workflow.ApplyLatestPublishedAsync(apod_wallpaper.WallpaperStyle.Fit, true)
+                        : workflow.ApplyLatestPublished(apod_wallpaper.WallpaperStyle.Fit, true);
+                    Assert(forced.Status == apod_wallpaper.ApodWorkflowStatus.Failed && requests == 2,
+                        "Force refresh must bypass latest cache and stop on the first failure.");
+                    Assert(service.GetLatestPublishedDate() == date && requests == 2,
+                        "Failed force refresh must preserve the previously verified fresh cache.");
                 }
             }
             finally
@@ -1177,7 +1276,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("HTML extractor resolves title and explanation text", HtmlExtractorResolvesTextMetadata);
                 Run("Runtime settings fall back to DEMO_KEY for invalid key", InvalidApiKeyFallsBackToDemoKey);
                 Run("Local image is preferred for preview", LocalImageIsPreferredForPreview);
-                Run("ApplyLatestPublished walks back through video days", ApplyLatestPublishedFallsBackAcrossVideoDays);
+                Run("ApplyLatestPublished walks back through video days", () => ApplyLatestPublishedFallsBackAcrossVideoDaysAsync().GetAwaiter().GetResult());
                 Run("Smart composer stretches near screen ratio images", SmartComposerUsesStretchForNearScreenRatio);
                 Run("Smart composer creates single focus image for square content", SmartComposerCreatesSingleFocusForSquareImages);
                 Run("Smart composer preserves ultrawide images without Fill cropping", SmartComposerPreservesUltraWideImages);
@@ -1246,6 +1345,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science workflow source and text-only cache regression", () => ScienceWorkflowRegressionAsync().GetAwaiter().GetResult());
                 Run("NASA Science errors expose localized workflow messages", () => ScienceErrorMessagesAsync().GetAwaiter().GetResult());
                 Run("NASA Science facade failures have localized messages", () => ScienceFacadeFailureMessagesAsync().GetAwaiter().GetResult());
+                Run("NASA Science latest failures do not restart lookup", () => ScienceLatestFailureDoesNotRetryAsync().GetAwaiter().GetResult());
+                Run("NASA Science latest reuses verified publication and local cache", () => ScienceLatestReusesVerifiedCacheAsync().GetAwaiter().GetResult());
                 Run("NASA Science latest verifies dates and total budget", () => ScienceLatestUsesVerifiedDatesAsync().GetAwaiter().GetResult());
                 Run("NASA Science probe and Random retain verified metadata", () => ScienceProbeAndRandomAsync().GetAwaiter().GetResult());
                 Run("NASA Science range pagination is complete or fails", () => ScienceRangePagesAsync().GetAwaiter().GetResult());
@@ -2223,7 +2324,7 @@ Bright clusters mark newborn stars.
             }
         }
 
-        private static void ApplyLatestPublishedFallsBackAcrossVideoDays()
+        private static async Task ApplyLatestPublishedFallsBackAcrossVideoDaysAsync()
         {
             var tempDirectory = Path.Combine(Path.GetTempPath(), "apod_wallpaper_smoke_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDirectory);
@@ -2263,6 +2364,13 @@ Bright clusters mark newborn stars.
                 Assert(result.LatestPublishedDate == today, "Expected ApplyLatestPublished to preserve the real latest published date for calendar updates.");
                 Assert(string.Equals(result.ImagePath, localImagePath, StringComparison.OrdinalIgnoreCase), "Expected fallback image path to point to the local image.");
                 Assert(fakeWallpaperApplier.LastAppliedImagePath == localImagePath, "Expected wallpaper applier to receive the fallback local image.");
+                Assert(fakeClient.LatestCalls == 1 && !fakeClient.RequestedDates.Contains(today),
+                    "Sync latest must not refetch the already verified video publication.");
+                var asyncResult = await workflow.ApplyLatestPublishedAsync(apod_wallpaper.WallpaperStyle.Smart, true);
+                Assert(asyncResult.IsSuccess && asyncResult.ResolvedDate == imageDate && asyncResult.LatestPublishedDate == today,
+                    "Async latest must preserve video lookback and the latest publication date.");
+                Assert(fakeClient.LatestCalls == 2 && !fakeClient.RequestedDates.Contains(today),
+                    "Forced async latest must refresh once without refetching the latest video date.");
             }
             finally
             {
@@ -3096,6 +3204,8 @@ Bright clusters mark newborn stars.
 
         private sealed class FakeApodClient : apod_wallpaper.IApodClient
         {
+            internal int LatestCalls;
+            internal readonly List<DateTime> RequestedDates = new List<DateTime>();
             private readonly apod_wallpaper.ApodEntry _latestEntry;
             private readonly System.Collections.Generic.Dictionary<DateTime, apod_wallpaper.ApodEntry> _entries;
 
@@ -3105,10 +3215,10 @@ Bright clusters mark newborn stars.
                 _entries = entries;
             }
 
-            public apod_wallpaper.ApodEntry GetEntry(DateTime date) => _entries[date.Date];
+            public apod_wallpaper.ApodEntry GetEntry(DateTime date) { RequestedDates.Add(date.Date); return _entries[date.Date]; }
             public Task<apod_wallpaper.ApodEntry> GetEntryAsync(DateTime date) => Task.FromResult(GetEntry(date));
-            public apod_wallpaper.ApodEntry GetLatestEntry() => _latestEntry;
-            public Task<apod_wallpaper.ApodEntry> GetLatestEntryAsync() => Task.FromResult(_latestEntry);
+            public apod_wallpaper.ApodEntry GetLatestEntry() { LatestCalls++; return _latestEntry; }
+            public Task<apod_wallpaper.ApodEntry> GetLatestEntryAsync() => Task.FromResult(GetLatestEntry());
             public System.Collections.Generic.IReadOnlyList<apod_wallpaper.ApodEntry> GetEntries(DateTime startDate, DateTime endDate) => new[] { _latestEntry };
             public Task<System.Collections.Generic.IReadOnlyList<apod_wallpaper.ApodEntry>> GetEntriesAsync(DateTime startDate, DateTime endDate) => Task.FromResult(GetEntries(startDate, endDate));
             public Task<apod_wallpaper.ApiKeyValidationState> ValidateApiKeyAsync(string apiKey) => Task.FromResult(apod_wallpaper.ApiKeyValidationState.Valid);

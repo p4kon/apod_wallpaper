@@ -206,8 +206,9 @@ namespace apod_wallpaper
         {
             return Execute(DateTime.UtcNow.Date, () =>
             {
-                var latestPublishedDate = _wallpaperService.GetLatestPublishedDate();
-                var apply = _wallpaperService.ApplyLatestPublishedWallpaper(style, forceRefresh);
+                var latestEntry = _wallpaperService.GetLatestPublishedEntry(forceRefresh);
+                var latestPublishedDate = DateTime.Parse(latestEntry.Date).Date;
+                var apply = _wallpaperService.ApplyLatestPublishedWallpaper(style, forceRefresh, latestEntry);
                 var resolvedDate = ParseEntryDate(apply.Entry, DateTime.UtcNow.Date);
 
                 return new ApodWorkflowResult
@@ -236,8 +237,9 @@ namespace apod_wallpaper
         {
             return ExecuteAsync(DateTime.UtcNow.Date, async () =>
             {
-                var latestPublishedDate = await _wallpaperService.GetLatestPublishedDateAsync().ConfigureAwait(false);
-                var apply = await _wallpaperService.ApplyLatestPublishedWallpaperAsync(style, forceRefresh, progress).ConfigureAwait(false);
+                var latestEntry = await _wallpaperService.GetLatestPublishedEntryAsync(forceRefresh).ConfigureAwait(false);
+                var latestPublishedDate = DateTime.Parse(latestEntry.Date).Date;
+                var apply = await _wallpaperService.ApplyLatestPublishedWallpaperAsync(style, forceRefresh, progress, latestEntry).ConfigureAwait(false);
                 var resolvedDate = ParseEntryDate(apply.Entry, DateTime.UtcNow.Date);
 
                 return new ApodWorkflowResult

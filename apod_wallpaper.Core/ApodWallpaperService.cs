@@ -459,9 +459,9 @@ namespace apod_wallpaper
             return ApplyLatestPublishedWallpaper(style, forceRefresh);
         }
 
-        public ApodApplyResult ApplyLatestPublishedWallpaper(WallpaperStyle style, bool forceRefresh = false)
+        public ApodApplyResult ApplyLatestPublishedWallpaper(WallpaperStyle style, bool forceRefresh = false, ApodEntry latestPublishedEntry = null)
         {
-            var latestEntry = GetLatestAvailableImageEntry(forceRefresh);
+            var latestEntry = GetLatestAvailableImageEntry(forceRefresh, latestPublishedEntry);
             var entryDate = DateTime.Parse(latestEntry.Date).Date;
             var downloadResult = EnsureImageDownloaded(latestEntry, entryDate);
             _wallpaperService.ApplyPreservingHistory(downloadResult.ImagePath, style);
@@ -480,9 +480,9 @@ namespace apod_wallpaper
             return await ApplyLatestPublishedWallpaperAsync(style, forceRefresh, null).ConfigureAwait(false);
         }
 
-        public async Task<ApodApplyResult> ApplyLatestPublishedWallpaperAsync(WallpaperStyle style, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress)
+        public async Task<ApodApplyResult> ApplyLatestPublishedWallpaperAsync(WallpaperStyle style, bool forceRefresh, IProgress<DownloadProgressSnapshot> progress, ApodEntry latestPublishedEntry = null)
         {
-            var latestEntry = await GetLatestAvailableImageEntryAsync(forceRefresh).ConfigureAwait(false);
+            var latestEntry = await GetLatestAvailableImageEntryAsync(forceRefresh, latestPublishedEntry).ConfigureAwait(false);
             var entryDate = DateTime.Parse(latestEntry.Date).Date;
             var downloadResult = await EnsureImageDownloadedAsync(latestEntry, entryDate, progress).ConfigureAwait(false);
             _wallpaperService.ApplyPreservingHistory(downloadResult.ImagePath, style);
@@ -875,10 +875,13 @@ namespace apod_wallpaper
             return _client.ValidateApiKeyAsync(apiKey);
         }
 
-        private ApodEntry GetLatestAvailableImageEntry(bool forceRefresh = false)
+        private ApodEntry GetLatestAvailableImageEntry(bool forceRefresh = false, ApodEntry latestPublishedEntry = null)
         {
-            var latestPublishedDate = GetLatestPublishedDate();
-            for (var offset = 0; offset <= LatestImageLookback.TotalDays; offset++)
+            // Applying wallpaper requires a verified publication, not the calendar's date fallback.
+            var latestEntry = latestPublishedEntry ?? GetLatestPublishedEntry(forceRefresh);
+            if (latestEntry.HasImage) return latestEntry;
+            var latestPublishedDate = DateTime.Parse(latestEntry.Date).Date;
+            for (var offset = 1; offset <= LatestImageLookback.TotalDays; offset++)
             {
                 var candidateDate = latestPublishedDate.AddDays(-offset);
                 var entry = GetEntryByDate(candidateDate, forceRefresh);
@@ -889,10 +892,12 @@ namespace apod_wallpaper
             throw new InvalidOperationException("Unable to resolve a recent APOD entry with a downloadable image.");
         }
 
-        private async Task<ApodEntry> GetLatestAvailableImageEntryAsync(bool forceRefresh = false)
+        private async Task<ApodEntry> GetLatestAvailableImageEntryAsync(bool forceRefresh = false, ApodEntry latestPublishedEntry = null)
         {
-            var latestPublishedDate = await GetLatestPublishedDateAsync().ConfigureAwait(false);
-            for (var offset = 0; offset <= LatestImageLookback.TotalDays; offset++)
+            var latestEntry = latestPublishedEntry ?? await GetLatestPublishedEntryAsync(forceRefresh).ConfigureAwait(false);
+            if (latestEntry.HasImage) return latestEntry;
+            var latestPublishedDate = DateTime.Parse(latestEntry.Date).Date;
+            for (var offset = 1; offset <= LatestImageLookback.TotalDays; offset++)
             {
                 var candidateDate = latestPublishedDate.AddDays(-offset);
                 var entry = await GetEntryByDateAsync(candidateDate, forceRefresh).ConfigureAwait(false);
