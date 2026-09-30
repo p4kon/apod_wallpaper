@@ -258,13 +258,35 @@ Live результат: 12/12 дат успешно разобраны: 1995-06
 
 Проверка NASA-08a: сначала два regression tests воспроизвели лишние запросы. Затем sync/async, force on/off, HTTP 503/429/302, timeout подтвердили отсутствие повторного поиска; 404 сохраняет максимум 4 кандидата latest и Unavailable. Прямой service тоже не перезапускает поиск. Подтверждены отсутствие apply/cache mutation при ошибке, сохранение календарного UTC-today fallback, sync/async переход через два video дня к локальному изображению, одна загрузка latest metadata на успешный forced apply, использование свежего session cache офлайн без сети и принудительный refresh с сохранением старого кеша при неудаче. Facade test теперь ожидает 5 запросов, не 7. Existing scheduler/day-lock smoke прошли; это не ручной тест работающего scheduler. Полный Release solution build успешен: 0 warnings / 0 errors, все smoke tests passed. Реальные обои не менялись.
 
-Осталось в NASA-08: завершить матрицу сквозных проверок, прежде всего favorite-with-download и ручное выключение auto при apply. UI/tray/midnight/быстрая навигация и визуальное качество не подтверждены этими этапами. NASA-09 остается ручной проверкой перед выпуском. Предварительная общая готовность около 90–95%, NASA-10 не входит в обязательный объем миграции.
+Четвертый этап: favorite-with-download проверен behavioral smoke в отдельном временном data/images каталоге. Реальный metadata cache и FavoriteApodStore: available без файла не добавляется; HTTP 503 при original download не дает добавить favorite; успешный download сообщает progress и делает дату доступной для добавления; удаление favorite оставляет оригинал; wallpaper applier не вызывается. Transport и applier подменены, сеть и реальные обои не затрагиваются.
+
+В UI выявлены и точечно исправлены два условия. Favorites теперь отключает Auto только при applyResult.Value.IsSuccess, а не при любом успешном вызове с payload (Unavailable не равен установленным обоям). MainPage принимает решение об отключении Auto по свежим persisted settings после успешного apply, не по устаревшему локальному snapshot. При ошибке чтения настройки не перезаписываются значениями из старого snapshot. Source-level smoke воспроизвел отсутствующий guard и проверяет новые условия; это структурная проверка, не автоматический прогон UI. Полный Release solution build: 0 warnings / 0 errors, все smoke passed.
+
+Автоматизированная и live-metadata часть NASA-08 пройдена; оставшаяся часть приемки перенесена в явный ручной чек-лист NASA-09 ниже. NASA-08 не помечена полностью Done до этой проверки. Предварительная готовность около 95%; это оценка объема, не гарантия отсутствия UI ошибок. NASA-10 не входит в обязательный объем миграции.
 
 Проверить все потребители: download, apply (manual выключает auto), favorite-with-download, progress, latest scheduler, favorites rotation, calendar month/year, NASA, translation, About/Settings. Parser не должен сделать video poster обоями. Проверить старый cache, offline, slow network, midnight, tray restore и быструю навигацию. Новые пользовательские строки RU/EN. Build + offline smoke + отдельные live/ручные проверки; не объявлять всю миграцию готовой только по build.
 
 ## NASA-09: выпуск
 
 Сначала ручная проверка пользователя. Затем отдельное разрешение на version/installer/tag/push. До этого каждый task commit локальный. Не запускать setup автоматически.
+
+### Чек-лист приемки (все пункты Pending manual)
+
+| Сценарий | Ожидаемый результат |
+| --- | --- |
+| Обычная дата: preview -> NASA -> Download | Preview отображается; NASA открывает именно выбранную публикацию; скачивается оригинал, виден progress |
+| Available -> Favorite на медленной сети | Favorite появляется только после успешного скачивания; прогресс виден; обои и Auto не меняются |
+| Ошибка сети при Favorite / Apply | Нет ложного favorite или установки; Auto не выключается при неуспешном apply; сообщение соответствует RU/EN |
+| Успешный Apply из Calendar / Favorites / viewer | Выбрано нужное фото, Auto становится Off; повторное открытие Settings подтверждает сохранение |
+| Архив 1995-06-16 и кадр 2026-08-05 | Preview и download корректны; apply не падает; viewer показывает реальное изображение |
+| Видео 2026-08-31 и other 2012-03-12 | Poster/текст не становятся обоями; нет доступного действия Favorite для неподдерживаемой публикации |
+| Старый локальный архив и offline | Локальные preview/favorites доступны, исходные файлы не перекачиваются; canonical NASA URL обновляется при доступной сети |
+| Быстрый Random и перелистывание Month / Year | Нет смешения дат/подписей/preview; год остается cache-first; нет автоматического image download |
+| Сегодня, tray restore, activation, смена суток | Быстрая проверка доступности не блокируется старой датой throttle; нет параллельного спама и unintended apply |
+| Latest scheduler и favorites rotation | Сохраняются расписание/day-lock и выбранный источник; video latest приводит к ближайшему изображению, сетевой сбой не устанавливает неподтвержденное фото |
+| RU/EN, About, Settings, Translate | Переводы ошибок читаемы; update checker и сохранение настроек работают; перевод открывается только по действию пользователя |
+
+Ограничения доказательств: desktop UI автоматизация не выполнялась; реальный apply, startup/tray lifecycle и ночная смена даты не проверены вручную. Существующие тесты scheduler/day-lock и UI source guards не считать заменой этим пунктам. Следующий шаг — тестовый installer по отдельному запросу, без release/version/push до приемки.
 
 ## NASA-10: быстрый месяц (после смены источника)
 

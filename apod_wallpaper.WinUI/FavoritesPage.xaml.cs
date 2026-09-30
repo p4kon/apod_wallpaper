@@ -382,7 +382,7 @@ public sealed partial class FavoritesPage : Page
             var settingsResult = await _arguments.BackendHost.Backend.GetSettingsAsync();
             var wallpaperStyle = ResolveWallpaperStyleFromSettings(settingsResult.Value);
             var applyResult = await _arguments.BackendHost.Backend.ApplyDayAsync(item.Date.Date, wallpaperStyle);
-            if (!applyResult.Succeeded || applyResult.Value == null)
+            if (!applyResult.Succeeded || applyResult.Value == null || !applyResult.Value.IsSuccess)
                 return;
 
             await DisableAutoRefreshAfterFavoriteWallpaperApplyAsync();

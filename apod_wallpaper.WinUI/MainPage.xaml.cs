@@ -2457,10 +2457,20 @@ public sealed partial class MainPage : Page
 
     private async Task DisableAutoRefreshAfterManualApplyAsync(apod_wallpaper.ApodWorkflowResult workflow)
     {
-        if (_backendHost == null || _currentSettingsSnapshot == null || !_currentSettingsSnapshot.AutoRefreshEnabled)
+        if (_backendHost == null || !workflow.IsSuccess)
             return;
 
-        var updatedSnapshot = await GetFreshSettingsSnapshotAsync();
+        var settingsResult = await _backendHost.Backend.GetSettingsAsync();
+        if (!settingsResult.Succeeded || settingsResult.Value == null)
+            return;
+
+        if (!settingsResult.Value.AutoRefreshEnabled)
+        {
+            ApplySavedSettingsSnapshot(settingsResult.Value);
+            return;
+        }
+
+        var updatedSnapshot = settingsResult.Value.Clone();
         updatedSnapshot.AutoRefreshEnabled = false;
 
         var saveResult = await _backendHost.Backend.SaveSettingsAsync(updatedSnapshot);

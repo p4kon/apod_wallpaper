@@ -960,6 +960,77 @@ namespace apod_wallpaper.SmokeTests
             }
         }
 
+        private static async Task ScienceFavoriteRequiresCompletedDownloadAsync()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "apod_favorite_flow_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var snapshot = CaptureSettings();
+            apod_wallpaper.FileStorage.SetApplicationDataDirectoryOverride(root);
+            apod_wallpaper.FileStorage.SetSessionImagesDirectory(root);
+            try
+            {
+                var date = new DateTime(2026, 9, 27);
+                var entry = apod_wallpaper.ApodScienceParser.Parse(ScienceFixture("image"), date).Entry;
+                var cache = new apod_wallpaper.ApodMetadataCache();
+                cache.Upsert(entry);
+                var source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => {
+                    throw new InvalidOperationException("Favorite state changes must not request metadata.");
+                });
+                using (var controller = new apod_wallpaper.ApplicationController(_settingsStore, _secretStore,
+                    new FakeStartupRegistrationService(), source, cache))
+                {
+                    var rejected = await controller.SetFavoriteAsync(date, true);
+                    Assert(!rejected.Succeeded && !new apod_wallpaper.FavoriteApodStore().IsFavorite(date),
+                        "Available metadata without a local image must not become favorite.");
+                    byte[] bytes;
+                    using (var stream = new MemoryStream())
+                    using (var bitmap = new Bitmap(12, 8))
+                    { bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Jpeg); bytes = stream.ToArray(); }
+                    var status = 503;
+                    var downloader = new apod_wallpaper.ApodOriginalAsset(sendAsync: (uri, token) => Task.FromResult(
+                        new apod_wallpaper.ApodScienceResponse(status, new MemoryStream(bytes), "image/jpeg", bytes.Length)));
+                    var applier = new FakeWallpaperApplier();
+                    var service = new apod_wallpaper.ApodWallpaperService(new FakeApodClient(entry,
+                        new Dictionary<DateTime, apod_wallpaper.ApodEntry> { { date, entry } }), cache, applier, downloader);
+                    var workflow = new apod_wallpaper.ApodWorkflowService(service);
+                    var failed = await workflow.DownloadDayAsync(date);
+                    Assert(!failed.IsSuccess && !(await controller.SetFavoriteAsync(date, true)).Succeeded,
+                        "Failed transfer must not unlock favorite persistence.");
+                    status = 200;
+                    var progress = new RecordedDownloadProgress();
+                    var downloaded = await workflow.DownloadDayAsync(date, false, progress);
+                    Assert(downloaded.IsSuccess && progress.Last.BytesReceived == bytes.Length,
+                        "Successful download must publish a valid original and progress.");
+                    Assert((await controller.SetFavoriteAsync(date, true)).Succeeded &&
+                        new apod_wallpaper.FavoriteApodStore().IsFavorite(date), "Downloaded original must be eligible for favorites.");
+                    Assert((await controller.SetFavoriteAsync(date, false)).Succeeded && File.Exists(downloaded.ImagePath),
+                        "Removing a favorite must preserve the original image.");
+                    Assert(applier.LastAppliedImagePath == null, "Download/favorite flow must never apply wallpaper.");
+                }
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetApplicationDataDirectoryOverride(null);
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(root);
+            }
+        }
+
+        private static void ManualApplyUiGuardsArePreserved()
+        {
+            var ui = Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI");
+            var favorites = File.ReadAllText(Path.Combine(ui, "FavoritesPage.xaml.cs"));
+            Assert(favorites.Contains("!applyResult.Value.IsSuccess"), "Favorites must reject Unavailable before disabling Auto.");
+            var main = File.ReadAllText(Path.Combine(ui, "MainPage.xaml.cs"));
+            var start = main.IndexOf("private async Task DisableAutoRefreshAfterManualApplyAsync", StringComparison.Ordinal);
+            var end = main.IndexOf("private void ApplySavedSettingsSnapshot", start, StringComparison.Ordinal);
+            var method = main.Substring(start, end - start);
+            Assert(method.Contains("!workflow.IsSuccess") && method.Contains("await _backendHost.Backend.GetSettingsAsync()"),
+                "Manual apply must require success and read current persisted settings.");
+            Assert(!method.Contains("_currentSettingsSnapshot.AutoRefreshEnabled"), "Stale UI state must not block Auto disable.");
+        }
+
         private static void ScienceMetadataLinksPersist()
         {
             var root = Path.Combine(Path.GetTempPath(), "apod_science_cache_" + Guid.NewGuid().ToString("N"));
@@ -1347,6 +1418,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science facade failures have localized messages", () => ScienceFacadeFailureMessagesAsync().GetAwaiter().GetResult());
                 Run("NASA Science latest failures do not restart lookup", () => ScienceLatestFailureDoesNotRetryAsync().GetAwaiter().GetResult());
                 Run("NASA Science latest reuses verified publication and local cache", () => ScienceLatestReusesVerifiedCacheAsync().GetAwaiter().GetResult());
+                Run("NASA Science favorites require a completed original download", () => ScienceFavoriteRequiresCompletedDownloadAsync().GetAwaiter().GetResult());
+                Run("Manual apply UI guards preserve Auto on failure", ManualApplyUiGuardsArePreserved);
                 Run("NASA Science latest verifies dates and total budget", () => ScienceLatestUsesVerifiedDatesAsync().GetAwaiter().GetResult());
                 Run("NASA Science probe and Random retain verified metadata", () => ScienceProbeAndRandomAsync().GetAwaiter().GetResult());
                 Run("NASA Science range pagination is complete or fails", () => ScienceRangePagesAsync().GetAwaiter().GetResult());
