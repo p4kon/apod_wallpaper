@@ -8,7 +8,7 @@ Website: https://apod_wallpaper.p4kon.com
 
 ## Features
 
-- Browse APOD entries by date.
+- Browse current and historical APOD entries by date through NASA Science, without an API key.
 - Preview APOD images and explanation text.
 - Copy APOD explanation text.
 - Open APOD explanation text in Google Translate with a selectable target language.
@@ -17,7 +17,7 @@ Website: https://apod_wallpaper.p4kon.com
 - Automatically check for the latest APOD image.
 - Skip video/unsupported APOD days.
 - Run from the system tray.
-- Store an optional NASA API key locally.
+- Previously saved optional NASA API keys remain local; the NASA Science source does not require one.
 - Switch the UI between English and Russian.
 
 ## Requirements
@@ -25,7 +25,7 @@ Website: https://apod_wallpaper.p4kon.com
 - Windows 10 version 2004 or newer, or Windows 11.
 - x64 Windows.
 - The setup installer bundles Windows App Runtime 2.0.1.
-- The portable build includes the .NET desktop runtime files used by the app, but still needs Windows App Runtime on the machine.
+- The 2.0.0 portable release includes the .NET desktop runtime and Windows App SDK runtime files used by the app.
 
 ## Status
 

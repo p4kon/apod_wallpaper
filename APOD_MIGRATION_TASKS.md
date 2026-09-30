@@ -31,7 +31,7 @@
 | NASA-07 | Совместимость существующих range запросов и пагинация | NASA-04b | Done (integrated) |
 | NASA-07a | Проверенный статический кадр из metadata для 2026-08-05 | NASA-07 | Done |
 | NASA-08 | Сквозная регрессия preview/download/apply/favorite/scheduler, RU/EN | NASA-04c, NASA-05, NASA-06, NASA-07 | Automated/live metadata passed; manual pending |
-| NASA-09 | Ручная проверка и выпуск | NASA-08 | In Progress: test installer 2.0.0 authorized |
+| NASA-09 | Ручная проверка и выпуск | NASA-08 | User accepted testing; release preparation authorized |
 | NASA-10 | Быстрое фоновое обновление открытого месяца для всех | NASA-09 | Backlog |
 
 ## NASA-00: журнал и границы
@@ -267,6 +267,8 @@ Live результат: 12/12 дат успешно разобраны: 1995-06
 Проверить все потребители: download, apply (manual выключает auto), favorite-with-download, progress, latest scheduler, favorites rotation, calendar month/year, NASA, translation, About/Settings. Parser не должен сделать video poster обоями. Проверить старый cache, offline, slow network, midnight, tray restore и быструю навигацию. Новые пользовательские строки RU/EN. Build + offline smoke + отдельные live/ручные проверки; не объявлять всю миграцию готовой только по build.
 
 ## NASA-09: выпуск
+
+Пользователь подтвердил, что приложение работает, и разрешил подготовку GitHub release 2.0.0. Подготовлены английские release notes в стиле v1.3.1/v1.3.2: `docs/releases/v2.0.0.md`, обновлены RELEASE_NOTES и сведения о source/runtime в README. Повторный Release build прошел: 0 warnings/errors, smoke tests passed. Разрешены merge main, push и annotated tag v2.0.0; публикацию страницы GitHub Release выполняет пользователь. Отдельные пункты ручного чек-листа ниже не объявляются автоматически проверенными: получено общее подтверждение пользователя. Ограничение старых ошибочно скачанных локальных изображений явно указано в release notes.
 
 Сначала ручная проверка пользователя. Затем отдельное разрешение на version/installer/tag/push. До этого каждый task commit локальный. Не запускать setup автоматически.
 
