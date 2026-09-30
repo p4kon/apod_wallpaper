@@ -734,6 +734,54 @@ namespace apod_wallpaper.SmokeTests
             }
         }
 
+        private static async Task ScienceWorkflowRegressionAsync()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "apod_regression_" + Guid.NewGuid().ToString("N"));
+            var snapshot = CaptureSettings();
+            apod_wallpaper.FileStorage.SetSessionImagesDirectory(root);
+            try
+            {
+                var imageDate = new DateTime(2026, 9, 27);
+                var textDate = new DateTime(2012, 3, 12);
+                var image = apod_wallpaper.ApodScienceParser.Parse(ScienceFixture("image"), imageDate).Entry;
+                var text = apod_wallpaper.ApodScienceParser.Parse(ScienceFixture("text-only"), textDate).Entry;
+                var cache = new InMemoryApodMetadataCache();
+                var client = new FakeApodClient(image, new System.Collections.Generic.Dictionary<DateTime, apod_wallpaper.ApodEntry>
+                {
+                    [imageDate] = image
+                });
+                var service = new apod_wallpaper.ApodWallpaperService(client, cache, new FakeWallpaperApplier());
+                Assert(service.GetPreviewByDate(imageDate, true).Source == apod_wallpaper.ApodDataSource.Api,
+                    "Fresh Science JSON preview must be classified as API, not unknown.");
+                Assert((await service.GetPreviewByDateAsync(imageDate, true)).Source == apod_wallpaper.ApodDataSource.Api,
+                    "Async Science preview must use the same source classification.");
+                cache.Upsert(text);
+                cache.Get(textDate).CachedAtUtc = DateTime.UtcNow.AddDays(-30);
+                Assert(!service.GetEntryByDate(textDate).HasImage, "Confirmed text-only cache must not refetch after expiry.");
+                Assert(!(await service.GetEntryByDateAsync(textDate)).HasImage, "Async text-only cache must not refetch either.");
+                var day = service.GetMonthStatus(textDate, false, DateTime.UtcNow.Date, apod_wallpaper.MonthRefreshMode.Balanced)
+                    .Single(item => item.Date == textDate);
+                Assert(day.IsKnown && !day.HasImage, "Text-only calendar day must remain known, not unchecked.");
+                var forced = false;
+                try { await service.GetEntryByDateAsync(textDate, true); }
+                catch (System.Collections.Generic.KeyNotFoundException) { forced = true; }
+                Assert(forced, "Explicit refresh must still bypass confirmed unsupported cache.");
+                text.PostUrl = null;
+                cache.Upsert(text);
+                cache.Get(textDate).CachedAtUtc = DateTime.UtcNow.AddDays(-30);
+                var retried = false;
+                try { await service.GetEntryByDateAsync(textDate); }
+                catch (System.Collections.Generic.KeyNotFoundException) { retried = true; }
+                Assert(retried, "Unconfirmed legacy other entries must retain normal refresh behavior.");
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(root);
+            }
+        }
+
         private static void ScienceMetadataLinksPersist()
         {
             var root = Path.Combine(Path.GetTempPath(), "apod_science_cache_" + Guid.NewGuid().ToString("N"));
@@ -1116,6 +1164,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science preview fallback is bounded and validates cache", () => SciencePreviewFallbackAsync().GetAwaiter().GetResult());
                 Run("NASA Science originals preserve bytes and fail without downgrade", () => ScienceOriginalDownloadAsync().GetAwaiter().GetResult());
                 Run("NASA Science production composition shares source and cache", () => ScienceProductionCompositionAsync().GetAwaiter().GetResult());
+                Run("NASA Science workflow source and text-only cache regression", () => ScienceWorkflowRegressionAsync().GetAwaiter().GetResult());
                 Run("NASA Science latest verifies dates and total budget", () => ScienceLatestUsesVerifiedDatesAsync().GetAwaiter().GetResult());
                 Run("NASA Science probe and Random retain verified metadata", () => ScienceProbeAndRandomAsync().GetAwaiter().GetResult());
                 Run("NASA Science range pagination is complete or fails", () => ScienceRangePagesAsync().GetAwaiter().GetResult());

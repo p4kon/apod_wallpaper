@@ -30,7 +30,7 @@
 | NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04b, NASA-05 | Done (integrated) |
 | NASA-07 | Совместимость существующих range запросов и пагинация | NASA-04b | Done (integrated) |
 | NASA-07a | Проверенный статический кадр из metadata для 2026-08-05 | NASA-07 | Done |
-| NASA-08 | Сквозная регрессия preview/download/apply/favorite/scheduler, RU/EN | NASA-04c, NASA-05, NASA-06, NASA-07 | To Do |
+| NASA-08 | Сквозная регрессия preview/download/apply/favorite/scheduler, RU/EN | NASA-04c, NASA-05, NASA-06, NASA-07 | In Progress |
 | NASA-09 | Ручная проверка и выпуск | NASA-08 | To Do |
 | NASA-10 | Быстрое фоновое обновление открытого месяца для всех | NASA-09 | Backlog |
 
@@ -239,6 +239,12 @@ Live: static original вернул HTTP 200, image/jpeg, 63 659 bytes, 1133x716;
 Итог NASA-07a: `dotnet build apod_wallpaper.sln -c Release` успешно, 0 warnings / 0 errors, все smoke tests passed.
 
 ## NASA-08: регрессия
+
+Первый этап: тестами воспроизведены два интеграционных дефекта. Новый источник `nasa_science` теперь отображается через существующий тип Api, а не Unknown (sync/async preview). Подтвержденная текстовая публикация `other` с валидным canonical Science URL не запрашивается повторно только из-за возраста кеша. Календарь сохраняет известное отсутствие изображения. Force refresh продолжает обращаться к источнику; старые неподтвержденные записи `other` сохраняют обычное обновление. Тесты используют fixtures, временный каталог и fake client, без сети и установки обоев.
+
+Проверка первого этапа: Release solution build успешен, 0 warnings / 0 errors, все smoke tests passed. Оба дефекта предварительно воспроизведены красными регрессионными тестами. Изменены только ApodWallpaperService, smoke tests и этот журнал.
+
+Осталось в NASA-08: завершить аудит пользовательских ошибок и RU/EN, проверить оставшиеся сквозные сценарии и live-выборку после production switch. UI/tray/midnight/быстрая навигация и визуальное качество не подтверждены этим этапом. NASA-09 остается ручной проверкой перед выпуском. Предварительная общая готовность 85–90%, NASA-10 не входит в обязательный объем миграции.
 
 Проверить все потребители: download, apply (manual выключает auto), favorite-with-download, progress, latest scheduler, favorites rotation, calendar month/year, NASA, translation, About/Settings. Parser не должен сделать video poster обоями. Проверить старый cache, offline, slow network, midnight, tray restore и быструю навигацию. Новые пользовательские строки RU/EN. Build + offline smoke + отдельные live/ручные проверки; не объявлять всю миграцию готовой только по build.
 

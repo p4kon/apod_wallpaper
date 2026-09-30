@@ -936,7 +936,9 @@ namespace apod_wallpaper
                 return false;
 
             return string.Equals(entry.MediaType, "video", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(entry.MediaType, "unsupported", StringComparison.OrdinalIgnoreCase);
+                   string.Equals(entry.MediaType, "unsupported", StringComparison.OrdinalIgnoreCase) ||
+                   (string.Equals(entry.MediaType, "other", StringComparison.OrdinalIgnoreCase) &&
+                    ApodScienceParser.NormalizePostUrl(entry.PostUrl) != null);
         }
 
         private void RunHousekeepingIfNeeded()
@@ -963,6 +965,7 @@ namespace apod_wallpaper
             switch (value)
             {
                 case "api":
+                case "nasa_science":
                     return ApodDataSource.Api;
                 case "cache":
                     return ApodDataSource.Cache;
