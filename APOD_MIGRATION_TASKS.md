@@ -30,8 +30,8 @@
 | NASA-06 | Today probe, latest, Global Random без side effects | NASA-03, NASA-04b, NASA-05 | Done (integrated) |
 | NASA-07 | Совместимость существующих range запросов и пагинация | NASA-04b | Done (integrated) |
 | NASA-07a | Проверенный статический кадр из metadata для 2026-08-05 | NASA-07 | Done |
-| NASA-08 | Сквозная регрессия preview/download/apply/favorite/scheduler, RU/EN | NASA-04c, NASA-05, NASA-06, NASA-07 | In Progress |
-| NASA-09 | Ручная проверка и выпуск | NASA-08 | To Do |
+| NASA-08 | Сквозная регрессия preview/download/apply/favorite/scheduler, RU/EN | NASA-04c, NASA-05, NASA-06, NASA-07 | Automated/live metadata passed; manual pending |
+| NASA-09 | Ручная проверка и выпуск | NASA-08 | In Progress: test installer 2.0.0 authorized |
 | NASA-10 | Быстрое фоновое обновление открытого месяца для всех | NASA-09 | Backlog |
 
 ## NASA-00: журнал и границы
@@ -269,6 +269,10 @@ Live результат: 12/12 дат успешно разобраны: 1995-06
 ## NASA-09: выпуск
 
 Сначала ручная проверка пользователя. Затем отдельное разрешение на version/installer/tag/push. До этого каждый task commit локальный. Не запускать setup автоматически.
+
+2026-09-30: пользователь разрешил следующую мажорную версию и установщик после завершения backend. Текущая application version 1.3.2 повышается до 2.0.0 (WinUI assembly/file/package 2.0.0.0). Это локальная тестовая сборка для приемки, не опубликованный release. Изменения версии разрешены; tag, remote push и запуск installer не запрошены. README/RELEASE_NOTES и packaging scripts не меняются. Обязательных незавершенных backend-пунктов миграции в очереди нет; NASA-10 остается отдельно после приемки.
+
+Тестовый установщик собран: `artifacts/release-2.0.0/setup/APODWallpaper-2.0.0.0-win-x64-setup.exe` (166 746 094 bytes). Полный Release build 2.0.0: 0 warnings / 0 errors, все smoke tests passed. Существующий publish-portable script выполнен с `-SelfContained -Version 2.0.0.0 -OutputRoot artifacts/release-2.0.0`, поэтому дополнительно создан portable ZIP как часть pipeline. Версии опубликованных WinUI EXE/DLL и assembly проверены: 2.0.0.0; installer ProductVersion: 2.0.0.0. Packaging успешен; единственное предупреждение Inno Setup: устаревший идентификатор архитектуры x64 автоматически заменен на x64os. Скрипты упаковки не менялись. Installer не запускался; ручной чек-лист пока Pending. Tag/push не выполнялись.
 
 ### Чек-лист приемки (все пункты Pending manual)
 
