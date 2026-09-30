@@ -782,6 +782,40 @@ namespace apod_wallpaper.SmokeTests
             }
         }
 
+        private static async Task ScienceErrorMessagesAsync()
+        {
+            var keys = ExtractAppStringKeys(File.ReadAllText(Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "AppStrings.cs")));
+            var cases = new[]
+            {
+                Tuple.Create<Exception, string>(new apod_wallpaper.ApodScienceRequestException(429), "NASA is receiving too many requests. Please try again later."),
+                Tuple.Create<Exception, string>(new apod_wallpaper.ApodScienceRequestException(503), "Unable to reach NASA APOD right now. Check your internet connection and try again."),
+                Tuple.Create<Exception, string>(new TimeoutException("internal detail"), "The APOD request timed out. Please try again."),
+                Tuple.Create<Exception, string>(new InvalidDataException("internal payload"), "The APOD response could not be read. Please try again later."),
+                Tuple.Create<Exception, string>(new Exception("internal detail"), "Something went wrong while processing the APOD request.")
+            };
+            foreach (var item in cases)
+            {
+                var message = apod_wallpaper.ApodErrorTranslator.ToUserMessage(item.Item1);
+                Assert(message == item.Item2, "APOD error must expose a stable user message: " + item.Item2);
+                Assert(keys.Contains(message), "APOD error message must have a Russian translation: " + message);
+            }
+            var date = new DateTime(2012, 3, 12);
+            var source = new apod_wallpaper.ApodScienceSource(
+                send: (uri, token) => Task.FromResult(ScienceResponse(status: 404)),
+                sendSync: (uri, token) => ScienceResponse(status: 404));
+            var service = new apod_wallpaper.ApodWorkflowService(new apod_wallpaper.ApodWallpaperService(
+                new apod_wallpaper.ApodScienceClient(source, new RecordingApodSource()),
+                new InMemoryApodMetadataCache(), new FakeWallpaperApplier()));
+            foreach (var result in new[] { service.LoadDay(date, true), await service.LoadDayAsync(date, true) })
+            {
+                Assert(result.Status == apod_wallpaper.ApodWorkflowStatus.Unavailable, "404 must remain unavailable, not a workflow failure.");
+                Assert(result.Message == "The selected APOD date is currently unavailable." && keys.Contains(result.Message),
+                    "404 must use a translated message, not the transport exception text.");
+            }
+            foreach (var message in new[] { "NASA has not published APOD for this date yet.", "The selected APOD entry does not contain a downloadable image." })
+                Assert(keys.Contains(message), "Publication-state message must have a Russian translation: " + message);
+        }
+
         private static void ScienceMetadataLinksPersist()
         {
             var root = Path.Combine(Path.GetTempPath(), "apod_science_cache_" + Guid.NewGuid().ToString("N"));
@@ -1165,6 +1199,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science originals preserve bytes and fail without downgrade", () => ScienceOriginalDownloadAsync().GetAwaiter().GetResult());
                 Run("NASA Science production composition shares source and cache", () => ScienceProductionCompositionAsync().GetAwaiter().GetResult());
                 Run("NASA Science workflow source and text-only cache regression", () => ScienceWorkflowRegressionAsync().GetAwaiter().GetResult());
+                Run("NASA Science errors expose localized workflow messages", () => ScienceErrorMessagesAsync().GetAwaiter().GetResult());
                 Run("NASA Science latest verifies dates and total budget", () => ScienceLatestUsesVerifiedDatesAsync().GetAwaiter().GetResult());
                 Run("NASA Science probe and Random retain verified metadata", () => ScienceProbeAndRandomAsync().GetAwaiter().GetResult());
                 Run("NASA Science range pagination is complete or fails", () => ScienceRangePagesAsync().GetAwaiter().GetResult());

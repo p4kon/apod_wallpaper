@@ -244,7 +244,9 @@ Live: static original вернул HTTP 200, image/jpeg, 63 659 bytes, 1133x716;
 
 Проверка первого этапа: Release solution build успешен, 0 warnings / 0 errors, все smoke tests passed. Оба дефекта предварительно воспроизведены красными регрессионными тестами. Изменены только ApodWallpaperService, smoke tests и этот журнал.
 
-Осталось в NASA-08: завершить аудит пользовательских ошибок и RU/EN, проверить оставшиеся сквозные сценарии и live-выборку после production switch. UI/tray/midnight/быстрая навигация и визуальное качество не подтверждены этим этапом. NASA-09 остается ручной проверкой перед выпуском. Предварительная общая готовность 85–90%, NASA-10 не входит в обязательный объем миграции.
+Второй этап: для workflow ошибок добавлены стабильные RU/EN сообщения: 429, HTTP failure, timeout, invalid response и generic failure. Отсутствующая публикация в sync/async workflow остается Unavailable, но больше не выводит технический текст исключения. Добавлены отсутствовавшие переводы для будущей даты и публикации без изображения. Тест сначала воспроизвел отсутствие сообщения 429, затем проверил mapping, ключи перевода и оба 404 workflow на fake transport. Release solution build успешен: 0 warnings / 0 errors, smoke tests passed. Сетевые retries/timeouts, scheduler и UI layout не менялись.
+
+Осталось в NASA-08: проверить оставшиеся сквозные сценарии и live-выборку после production switch, включая сообщения ошибок вне workflow. UI/tray/midnight/быстрая навигация и визуальное качество не подтверждены этими этапами. NASA-09 остается ручной проверкой перед выпуском. Предварительная общая готовность около 90%, NASA-10 не входит в обязательный объем миграции.
 
 Проверить все потребители: download, apply (manual выключает auto), favorite-with-download, progress, latest scheduler, favorites rotation, calendar month/year, NASA, translation, About/Settings. Parser не должен сделать video poster обоями. Проверить старый cache, offline, slow network, midnight, tray restore и быструю навигацию. Новые пользовательские строки RU/EN. Build + offline smoke + отдельные live/ручные проверки; не объявлять всю миграцию готовой только по build.
 

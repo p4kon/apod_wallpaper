@@ -354,7 +354,7 @@ namespace apod_wallpaper
                 {
                     Status = ApodWorkflowStatus.Unavailable,
                     RequestedDate = requestedDate.Date,
-                    Message = ex.Message,
+                    Message = ApodErrorTranslator.ToUserMessage(ex),
                     Source = ApodDataSource.Unknown,
                 };
             }
@@ -383,7 +383,7 @@ namespace apod_wallpaper
                 {
                     Status = ApodWorkflowStatus.Unavailable,
                     RequestedDate = requestedDate.Date,
-                    Message = ex.Message,
+                    Message = ApodErrorTranslator.ToUserMessage(ex),
                     Source = ApodDataSource.Unknown,
                 };
             }
