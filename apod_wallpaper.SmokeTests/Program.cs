@@ -816,6 +816,51 @@ namespace apod_wallpaper.SmokeTests
                 Assert(keys.Contains(message), "Publication-state message must have a Russian translation: " + message);
         }
 
+        private static async Task ScienceFacadeFailureMessagesAsync()
+        {
+            var keys = ExtractAppStringKeys(File.ReadAllText(Path.Combine(GetRepositoryRoot(), "apod_wallpaper.WinUI", "AppStrings.cs")));
+            var root = Path.Combine(Path.GetTempPath(), "apod_facade_errors_" + Guid.NewGuid().ToString("N"));
+            var snapshot = CaptureSettings();
+            apod_wallpaper.FileStorage.SetSessionImagesDirectory(root);
+            try
+            {
+                var requests = 0;
+                var source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => {
+                    requests++;
+                    return Task.FromResult(ScienceResponse(status: 503));
+                });
+                using (var controller = new apod_wallpaper.ApplicationController(_settingsStore, _secretStore,
+                    new FakeStartupRegistrationService(), source, new InMemoryApodMetadataCache()))
+                {
+                    var date = new DateTime(2012, 3, 12);
+                    var results = new[]
+                    {
+                        await controller.LoadDayAsync(date, true),
+                        await controller.DownloadDayAsync(date, true),
+                        await controller.ApplyDayAsync(date, apod_wallpaper.WallpaperStyle.Fit, true),
+                        await controller.ApplyLatestPublishedAsync(apod_wallpaper.WallpaperStyle.Fit, true)
+                    };
+                    foreach (var result in results)
+                    {
+                        Assert(!result.Succeeded && result.Error != null, "Unavailable transport must produce a facade failure.");
+                        Assert(keys.Contains(result.Error.Message), "Facade failure needs RU translation: " + result.Error.Message);
+                        Assert(!result.Error.Message.Contains("503"), "Technical HTTP details must not leak into user messages.");
+                    }
+                    var post = await controller.GetPostUrlAsync(date);
+                    Assert(!post.Succeeded && keys.Contains(post.Error.Message), "NASA link lookup failure needs RU translation.");
+                    // Existing latest-date fallback performs three lookups on failure;
+                    // keep this visible until the separate NASA-08 retry fix.
+                    Assert(requests == 7, "Expected four direct requests plus three legacy latest-date fallback lookups.");
+                }
+            }
+            finally
+            {
+                apod_wallpaper.FileStorage.SetSessionImagesDirectory(snapshot.ImagesDirectoryPath);
+                RestoreSettings(snapshot);
+                TryDeleteDirectory(root);
+            }
+        }
+
         private static void ScienceMetadataLinksPersist()
         {
             var root = Path.Combine(Path.GetTempPath(), "apod_science_cache_" + Guid.NewGuid().ToString("N"));
@@ -1200,6 +1245,7 @@ namespace apod_wallpaper.SmokeTests
                 Run("NASA Science production composition shares source and cache", () => ScienceProductionCompositionAsync().GetAwaiter().GetResult());
                 Run("NASA Science workflow source and text-only cache regression", () => ScienceWorkflowRegressionAsync().GetAwaiter().GetResult());
                 Run("NASA Science errors expose localized workflow messages", () => ScienceErrorMessagesAsync().GetAwaiter().GetResult());
+                Run("NASA Science facade failures have localized messages", () => ScienceFacadeFailureMessagesAsync().GetAwaiter().GetResult());
                 Run("NASA Science latest verifies dates and total budget", () => ScienceLatestUsesVerifiedDatesAsync().GetAwaiter().GetResult());
                 Run("NASA Science probe and Random retain verified metadata", () => ScienceProbeAndRandomAsync().GetAwaiter().GetResult());
                 Run("NASA Science range pagination is complete or fails", () => ScienceRangePagesAsync().GetAwaiter().GetResult());

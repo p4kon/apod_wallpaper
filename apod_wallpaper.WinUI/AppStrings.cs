@@ -14,6 +14,11 @@ internal static class AppStrings
     private static readonly IReadOnlyDictionary<string, string> Russian = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["About"] = "О программе",
+        ["Unable to load the requested APOD entry."] = "Не удалось загрузить выбранную публикацию APOD.",
+        ["Unable to download the requested APOD image."] = "Не удалось скачать выбранное изображение APOD.",
+        ["Unable to apply the requested APOD image as wallpaper."] = "Не удалось установить выбранное изображение APOD на рабочий стол.",
+        ["Unable to apply the latest available APOD image."] = "Не удалось установить последнее доступное изображение APOD на рабочий стол.",
+        ["Unable to resolve the NASA APOD page URL."] = "Не удалось получить ссылку на страницу NASA APOD.",
         ["NASA is receiving too many requests. Please try again later."] = "NASA получает слишком много запросов. Попробуйте позже.",
         ["Unable to reach NASA APOD right now. Check your internet connection and try again."] = "Не удалось связаться с NASA APOD. Проверьте подключение к интернету и попробуйте снова.",
         ["The APOD request timed out. Please try again."] = "Время ожидания ответа APOD истекло. Попробуйте снова.",
