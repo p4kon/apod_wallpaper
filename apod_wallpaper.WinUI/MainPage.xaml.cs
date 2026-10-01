@@ -174,13 +174,13 @@ public sealed partial class MainPage : Page
     private static readonly SolidColorBrush AutoRefreshDisabledBrush = new(ColorHelper.FromArgb(0xFF, 0xC4, 0x5A, 0x5A));
     private static readonly SolidColorBrush AutoRefreshForegroundBrush = new(Colors.White);
     private const int GoogleTranslateMaxUrlLength = 7800;
-    private static readonly TimeSpan TodayAvailabilityProbeThrottle = TimeSpan.FromMinutes(5);
+    private readonly apod_wallpaper.CalendarPublicationProbeState _publicationProbe = new();
+    private readonly DispatcherTimer _publicationProbeTimer = new() { Interval = TimeSpan.FromSeconds(15) };
+    private bool _calendarHostActive;
     private string _originalExplanationText = string.Empty;
     private string _displayedExplanationText = string.Empty;
     private bool _isExplanationTranslated;
     private DateTime? _transientAvailableApodDate;
-    private DateTime? _lastTodayAvailabilityProbeDate;
-    private DateTime _lastTodayAvailabilityProbeUtc = DateTime.MinValue;
     private Task? _todayAvailabilityProbeTask;
 
     public MainPage()
@@ -200,6 +200,8 @@ public sealed partial class MainPage : Page
         UpdateActionAvailability();
         AppStrings.LanguageChanged += AppStrings_LanguageChanged;
         Loaded += MainPage_Loaded;
+        Unloaded += (_, _) => NotifyHostLeftCalendar();
+        _publicationProbeTimer.Tick += (_, _) => QueueTodayAvailabilityProbe();
         ActualThemeChanged += MainPage_ActualThemeChanged;
     }
 
@@ -257,12 +259,20 @@ public sealed partial class MainPage : Page
     private void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
         RefreshLocalizedText();
-        QueueTodayAvailabilityProbe();
+        NotifyHostReturnedToCalendar();
     }
 
     internal void NotifyHostReturnedToCalendar()
     {
+        _calendarHostActive = true;
+        _publicationProbeTimer.Start();
         QueueTodayAvailabilityProbe();
+    }
+
+    internal void NotifyHostLeftCalendar()
+    {
+        _calendarHostActive = false;
+        _publicationProbeTimer.Stop();
     }
 
     private void RefreshLocalizedText()
@@ -1201,23 +1211,16 @@ public sealed partial class MainPage : Page
 
     private void QueueTodayAvailabilityProbe()
     {
-        if (_backendHost == null)
+        if (_backendHost == null || !_calendarHostActive)
             return;
 
         var today = DateTime.Today;
-        if (!IsCurrentMonth(_visibleMonth))
-            return;
 
         var existingTask = _todayAvailabilityProbeTask;
         if (existingTask != null && !existingTask.IsCompleted)
             return;
 
-        if (apod_wallpaper.ApodCalendarAvailability.ShouldThrottleProbe(
-            today,
-            _lastTodayAvailabilityProbeDate,
-            _lastTodayAvailabilityProbeUtc,
-            DateTime.UtcNow,
-            TodayAvailabilityProbeThrottle))
+        if (!_publicationProbe.ShouldProbe(today, DateTime.UtcNow))
             return;
 
         _todayAvailabilityProbeTask = MaybeProbeTodayAvailabilityAsync();
@@ -1229,9 +1232,9 @@ public sealed partial class MainPage : Page
         {
             await ProbeTodayAvailabilityCoreAsync();
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort UI responsiveness probe only. Scheduler/download/apply paths own real work.
+            apod_wallpaper.AppLogger.Warn("Calendar publication confirmation failed.", ex);
         }
     }
 
@@ -1241,9 +1244,11 @@ public sealed partial class MainPage : Page
             return;
 
         var today = DateTime.Today;
-        _lastTodayAvailabilityProbeDate = today;
-        _lastTodayAvailabilityProbeUtc = DateTime.UtcNow;
         var result = await _backendHost.Backend.ProbeApodPageAvailabilityAsync(today);
+        // A response started before midnight must not mark the new local day as checked.
+        if (today != DateTime.Today)
+            return;
+        _publicationProbe.Complete(today, DateTime.UtcNow, result.Succeeded ? result.Value : null);
         if (!result.Succeeded || result.Value == null || !result.Value.IsAvailable)
             return;
 
@@ -1257,6 +1262,11 @@ public sealed partial class MainPage : Page
 
     private async Task RefreshCalendarAfterAvailabilityProbeAsync(DateTime availableDate)
     {
+        if (_isYearViewMode)
+        {
+            await LoadVisibleYearAsync();
+            return;
+        }
         var availableMonth = new DateTime(availableDate.Year, availableDate.Month, 1);
         if (_currentMonthState != null && _currentMonthState.Month.Date == availableMonth.Date)
             await ApplyCalendarMonthStateAsync(_currentMonthState, progressive: false, _monthRequestVersion);
@@ -3276,6 +3286,7 @@ public sealed partial class MainPage : Page
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
+        NotifyHostLeftCalendar();
         if (_trayStatus != null)
             _trayStatus.Changed -= TrayStatus_Changed;
 

@@ -102,6 +102,12 @@ public sealed partial class ShellPage : Page
         _ = TryRunAutomaticUpdateReminderAsync(UpdateCheckTrigger.RestoredFromTray);
     }
 
+    internal void NotifyWindowDeactivated()
+    {
+        if (ContentFrame.Content is MainPage mainPage)
+            mainPage.NotifyHostLeftCalendar();
+    }
+
     private void NavigateToSettings()
     {
         if (_arguments == null)

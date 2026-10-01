@@ -699,9 +699,9 @@ namespace apod_wallpaper.SmokeTests
                     new FakeStartupRegistrationService(), source, cache, (start, end) => date))
                 {
                     var probe = await controller.ProbeApodPageAvailabilityAsync(date);
-                    Assert(probe.Succeeded && probe.Value.IsAvailable && cache.Get(date)?.PostUrl != null, "JSON probe must retain metadata in shared cache.");
+                    Assert(probe.Succeeded && probe.Value.IsAvailable && cache.Get(date) == null, "Calendar availability probe must not populate preview metadata.");
                     var loaded = await controller.LoadDayAsync(date);
-                    Assert(loaded.Succeeded && loaded.Value.Entry.HasImage && calls == 1, "Workflow must reuse probe cache without second request.");
+                    Assert(loaded.Succeeded && loaded.Value.Entry.HasImage && calls == 2, "Preview must load independently after calendar availability probe.");
                     var picked = await controller.PickRandomApodDateAsync("global", false);
                     Assert(picked.Succeeded && cache.Get(date) != null, "Global Random must resolve through shared JSON probe.");
                     var before = calls;
@@ -1135,6 +1135,30 @@ namespace apod_wallpaper.SmokeTests
             result = await new apod_wallpaper.ApodPageAvailabilityProbe(source).ProbeAsync(date, TimeSpan.FromMilliseconds(100));
             Assert(!result.IsAvailable && !result.IsUnavailable, "Timeout is unknown, not missing.");
 
+            foreach (var media in new[] { "video", "text-only" })
+            {
+                source = new apod_wallpaper.ApodScienceSource(send: (uri, token) => Task.FromResult(ScienceResponse(json: ScienceFixture(media))));
+                var publicationDate = media == "video" ? new DateTime(2026, 8, 31) : new DateTime(2012, 3, 12);
+                result = await new apod_wallpaper.ApodPageAvailabilityProbe(source).ProbeAsync(publicationDate, TimeSpan.FromSeconds(1));
+                Assert(result.IsAvailable, "Published non-image content must unlock the calendar: " + media);
+            }
+
+            var attempts = 0;
+            source = new apod_wallpaper.ApodScienceSource(send: (uri, token) =>
+            {
+                if (++attempts == 1) throw new IOException("Simulated resume connection failure");
+                return Task.FromResult(ScienceResponse());
+            });
+            probe = new apod_wallpaper.ApodPageAvailabilityProbe(source);
+            var retryState = new apod_wallpaper.CalendarPublicationProbeState();
+            var probeTime = DateTime.UtcNow;
+            result = await probe.ProbeAsync(date, TimeSpan.FromSeconds(1));
+            retryState.Complete(date, probeTime, result);
+            Assert(!result.IsAvailable && retryState.ShouldProbe(date, probeTime.AddSeconds(15)), "Network failure must allow the short retry.");
+            result = await probe.ProbeAsync(date, TimeSpan.FromSeconds(1));
+            retryState.Complete(date, probeTime.AddSeconds(15), result);
+            Assert(result.IsAvailable && retryState.ConfirmedDate == date && attempts == 2, "Retry must unlock the published day after a transient failure.");
+
             var picks = 0;
             calls = 0;
             var cache = new InMemoryApodMetadataCache();
@@ -1376,6 +1400,8 @@ namespace apod_wallpaper.SmokeTests
                 Run("APOD availability probe retries forbidden HEAD with GET", ApodAvailabilityProbeRetriesForbiddenHeadWithGet);
                 Run("Calendar availability transient override unlocks today only", CalendarAvailabilityTransientOverrideUnlocksTodayOnly);
                 Run("Calendar availability throttle resets when today changes", CalendarAvailabilityThrottleResetsWhenTodayChanges);
+                Run("Calendar publication confirmation retries failures and survives day rollover", CalendarPublicationConfirmationRetries);
+                Run("Calendar snapshot expires on local day rollover", CalendarSnapshotExpiresOnDayRollover);
                 Run("APOD availability probe source avoids workflow side effects", ApodAvailabilityProbeSourceAvoidsWorkflowSideEffects);
                 Run("Calendar year state source is cache only", CalendarYearStateSourceIsCacheOnly);
                 Run("Favorite APOD store persists normalized dates", FavoriteApodStorePersistsNormalizedDates);
@@ -2105,6 +2131,46 @@ namespace apod_wallpaper.SmokeTests
                 "Expected same APOD date to remain throttled within the throttle window.");
             Assert(!apod_wallpaper.ApodCalendarAvailability.ShouldThrottleProbe(previousDay, null, lastProbeUtc, nowUtc, throttle),
                 "Expected missing last probe date to skip throttle.");
+        }
+
+        private static void CalendarPublicationConfirmationRetries()
+        {
+            var today = new DateTime(2026, 10, 1);
+            var now = new DateTime(2026, 10, 1, 7, 0, 0, DateTimeKind.Utc);
+            var state = new apod_wallpaper.CalendarPublicationProbeState();
+            Assert(state.ShouldProbe(today, now), "Initial calendar entry must check publication.");
+            var unknown = apod_wallpaper.ApodPageAvailabilityProbeResult.Unknown(today, "test");
+            state.Complete(today, now, unknown);
+            Assert(!state.ShouldProbe(today, now.AddSeconds(14)), "Activation and tray restore must not retry immediately.");
+            Assert(state.ShouldProbe(today, now.AddSeconds(15)), "Transient failure must not block for five minutes.");
+            state.Complete(today, now.AddSeconds(15), unknown);
+            Assert(!state.ShouldProbe(today, now.AddSeconds(74)) && state.ShouldProbe(today, now.AddSeconds(75)),
+                "Repeated failures must back off to one minute.");
+            state.Complete(today, now, apod_wallpaper.ApodPageAvailabilityProbeResult.Unavailable(today, "test", System.Net.HttpStatusCode.NotFound, "GET"));
+            Assert(!state.ShouldProbe(today, now.AddMinutes(4)) && state.ShouldProbe(today, now.AddMinutes(5)),
+                "Unpublished days must be rechecked without spamming NASA.");
+            state.Complete(today, now, apod_wallpaper.ApodPageAvailabilityProbeResult.Available(today, "test", System.Net.HttpStatusCode.OK, "GET"));
+            Assert(state.ConfirmedDate == today && !state.ShouldProbe(today, now.AddHours(6)), "Confirmed publication must remain unlocked.");
+            state.Complete(today, now, unknown);
+            Assert(state.ConfirmedDate == today && !state.ShouldProbe(today, now.AddHours(6)), "Network failure must not relock a confirmed day.");
+            Assert(state.ShouldProbe(today.AddDays(1), now), "Local date rollover must bypass all old-day throttles.");
+            Assert(state.ShouldProbe(today.AddDays(-1), now), "Local clock rollback must also allow checking the current date.");
+            var wrongDate = new apod_wallpaper.CalendarPublicationProbeState();
+            wrongDate.Complete(today, now, apod_wallpaper.ApodPageAvailabilityProbeResult.Available(today.AddDays(-1), "test", System.Net.HttpStatusCode.OK, "GET"));
+            Assert(!wrongDate.ConfirmedDate.HasValue, "An unrelated JSON date must never unlock today.");
+        }
+
+        private static void CalendarSnapshotExpiresOnDayRollover()
+        {
+            var day = new DateTime(2026, 9, 30);
+            var calendar = new apod_wallpaper.ApodCalendarStateService(new apod_wallpaper.ApodWorkflowService(), () => day);
+            var month = new DateTime(2026, 10, 1);
+            var before = calendar.GetMonthState(month, false);
+            Assert(ReferenceEquals(before, calendar.GetMonthState(month, false)), "Same-day cache should be reused.");
+            day = day.AddDays(1);
+            var after = calendar.GetMonthState(month, false);
+            Assert(!ReferenceEquals(before, after), "Returning from sleep on a new date must invalidate yesterday's calendar snapshot.");
+            Assert(ReferenceEquals(after, calendar.GetMonthState(month, false)), "New-day cache should remain reusable.");
         }
 
         private static void ApodAvailabilityProbeSourceAvoidsWorkflowSideEffects()

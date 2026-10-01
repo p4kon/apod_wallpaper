@@ -1,3 +1,64 @@
+# APOD Wallpaper 2.0.1
+
+This maintenance release includes all improvements from 2.0.0, with fixes for today's calendar availability and the Random source selector.
+
+## Fixes in 2.0.1
+
+- Improved detection of today's publication when restoring the app from the tray or returning to the calendar.
+- Calendar snapshots are refreshed when the local date changes, so yesterday's state does not keep a newly published day locked.
+- Temporary availability-check failures are retried while the calendar is active.
+- Confirmed publications unlock the date without loading the preview or downloading an image. Video and text-only publications remain accessible too.
+- Fixed the clipped Downloaded label in the Random source selector while preserving the centered layout.
+- Automatic wallpaper scheduling is unchanged.
+
+## Included from 2.0.0
+
+Support for NASA's new APOD website restores date-based browsing, image downloads, and wallpaper updates with the new source.
+
+## What's improved
+
+### Support for the new NASA APOD website
+
+- Calendar browsing and Random APOD now use the new NASA Science source.
+- Current publications and the historical archive remain accessible by date.
+- A NASA API key is no longer required for browsing or downloading APOD images.
+- The NASA button opens the page for the selected publication on the new website.
+
+### Images and downloads
+
+- Previews use smaller image versions when available, while downloads use the original image.
+- Improved handling of video, text-only publications, and supported static image frames.
+- Video posters are not treated as downloadable APOD images.
+- Improved recovery from unavailable previews and interrupted downloads.
+- Existing downloaded images and Favorites remain available locally.
+
+### Reliability and usability
+
+- Reduced repeated requests when checking the latest APOD publication fails.
+- Improved reuse of publication information between Random APOD and previews.
+- Favorites are saved only after a valid local image is available.
+- Manual wallpaper actions disable Auto only after a successful apply and use up-to-date settings.
+- Added missing Russian translations for download, wallpaper, and NASA page errors.
+
+## Downloads
+
+- `APODWallpaper-2.0.1.0-win-x64-setup.exe`
+  Recommended for most users. Installs APOD Wallpaper for the current Windows user and supports upgrading over previous versions.
+
+- `APODWallpaper-2.0.1.0-win-x64-portable.zip`
+  Portable version. Extract the whole archive first, then run `APODWallpaper.exe`.
+
+## Notes
+
+- Windows 10 version 2004 or newer, or Windows 11, x64.
+- Setup installer is recommended for clean installations and upgrades.
+- Portable builds keep app binaries, downloaded images, cache, logs, and settings inside the extracted folder.
+- Previously downloaded files are preserved. This update does not automatically replace incorrect images, such as a NASA logo, saved by older versions during the website transition.
+- The build is not code-signed yet, so Windows SmartScreen may show a warning.
+- APOD Wallpaper is an independent project and is not affiliated with, endorsed by, or sponsored by NASA.
+
+---
+
 # APOD Wallpaper 2.0.0
 
 This release updates APOD Wallpaper for NASA's new APOD website, restoring date-based browsing, image downloads, and wallpaper updates with the new source.

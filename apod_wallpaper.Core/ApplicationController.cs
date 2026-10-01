@@ -445,8 +445,10 @@ namespace apod_wallpaper
             return ExecuteOperationAsync(
                 async () =>
                 {
-                    var result = await _pageAvailabilityProbe.ProbeAsync(date.Date, TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-                    if (result.IsAvailable && result.Entry != null) _metadataCache.Upsert(result.Entry);
+                    var result = await _pageAvailabilityProbe.ProbeAsync(date.Date, TimeSpan.FromSeconds(4)).ConfigureAwait(false);
+                    AppLogger.Info("[CalendarAvailability] date=" + date.ToString("yyyy-MM-dd") +
+                        "; available=" + result.IsAvailable + "; unavailable=" + result.IsUnavailable +
+                        "; status=" + result.StatusCode + "; error=" + result.ErrorMessage);
                     return result;
                 },
                 OperationErrorCode.WorkflowFailed,

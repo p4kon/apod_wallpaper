@@ -8,11 +8,15 @@ namespace apod_wallpaper
     {
         private readonly object _syncRoot = new object();
         private readonly ApodWorkflowService _workflowService;
+        private readonly Func<DateTime> _localToday;
+        private DateTime _cacheDate;
         private readonly Dictionary<DateTime, ApodCalendarMonthState> _monthStates = new Dictionary<DateTime, ApodCalendarMonthState>();
 
-        public ApodCalendarStateService(ApodWorkflowService workflowService)
+        public ApodCalendarStateService(ApodWorkflowService workflowService, Func<DateTime> localToday = null)
         {
             _workflowService = workflowService ?? throw new ArgumentNullException(nameof(workflowService));
+            _localToday = localToday ?? (() => DateTime.Today);
+            _cacheDate = _localToday().Date;
         }
 
         public ApodCalendarMonthState GetMonthState(DateTime month, bool refreshMissingDates)
@@ -26,6 +30,12 @@ namespace apod_wallpaper
 
             lock (_syncRoot)
             {
+                var today = _localToday().Date;
+                if (_cacheDate != today)
+                {
+                    _monthStates.Clear();
+                    _cacheDate = today;
+                }
                 ApodCalendarMonthState cachedState;
                 if (!refreshMissingDates && _monthStates.TryGetValue(monthKey, out cachedState))
                     return cachedState;

@@ -120,7 +120,7 @@
                     ToolTipService.ToolTip="Pick a random APOD date" />
                 <ComboBox
                     x:Name="RandomApodSourceComboBox"
-                    Width="124"
+                    Width="156"
                     Height="32"
                     AutomationProperties.Name="Random source"
                     SelectionChanged="RandomApodSourceComboBox_SelectionChanged"

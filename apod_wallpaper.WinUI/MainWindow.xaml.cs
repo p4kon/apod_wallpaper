@@ -59,6 +59,8 @@ public sealed partial class MainWindow : Window
 
     internal void HideToTray()
     {
+        if (RootFrame.Content is ShellPage shellPage)
+            shellPage.NotifyWindowDeactivated();
         _trayIconController.HideToTray();
     }
 
@@ -92,7 +94,11 @@ public sealed partial class MainWindow : Window
     private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
     {
         if (args.WindowActivationState == WindowActivationState.Deactivated)
+        {
+            if (RootFrame.Content is ShellPage shellPage)
+                shellPage.NotifyWindowDeactivated();
             return;
+        }
 
         NotifyShellWindowActivated(restoredFromTray: false);
     }
